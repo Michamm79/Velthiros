@@ -97,6 +97,13 @@ html, body {
     return target;
   };
 
+  /* '#rrggbb' + alpha -> 'rgba(r,g,b,a)'. Short hex is not supported: every
+     colour in the game comes from the locked palette, which is all 6-digit. */
+  U.rgba = function (hex, alpha) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
+  };
+
   U.easeOut = function (t) { return 1 - (1 - t) * (1 - t); };
   U.easeIn = function (t) { return t * t; };
   U.easeInOut = function (t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; };
@@ -239,6 +246,17 @@ html, body {
   };
   D.WEAPON_ORDER = ['sword', 'battleaxe', 'bow', 'scythe'];
 
+  /* Empty hands, for the stretch of the tutorial before you pick. It is a real
+     entry rather than a null so the HUD and the attack code need no special
+     case; it is kept out of WEAPON_ORDER so it never reaches a shop. */
+  D.WEAPONS.none = {
+    id: 'none', name: 'Unarmed', kind: 'melee', owned: true, price: 0,
+    damage: 3, arc: 1.1, range: 56, windup: 0.08, recover: 0.26, stamina: 6,
+    moveScale: 0.9, knock: 60,
+    special: { name: '--', damage: 0, arc: 0.4, range: 40, windup: 0.1, recover: 0.2, stamina: 999, cooldown: 1 },
+    blurb: 'Nothing but your fists.'
+  };
+
   /* ----------------------------------------------------------------- gems
      GDD 8. One is granted at random during the first trial and levels up. */
   D.GEMS = {
@@ -263,8 +281,9 @@ html, body {
     wingshard: {
       id: 'wingshard', name: 'Wingshard', colour: '#f0e6ff', glow: '#ffffff',
       role: 'Jump / Glide',
-      desc: function (l) { return 'Dodge becomes a glide: +' + (30 * l) + ' distance, vaults bushes'; },
-      apply: function (s, l) { s.glide = true; s.dodgeDist += 30 * l; }
+      /* scaled with the shorter base dodge: 170 -> 260 at level V */
+      desc: function (l) { return 'Dodge becomes a glide: +' + (18 * l) + ' distance'; },
+      apply: function (s, l) { s.glide = true; s.dodgeDist += 18 * l; }
     },
     stormshard: {
       id: 'stormshard', name: 'Stormshard', colour: '#ffe45c', glow: '#fff7c2',
@@ -303,6 +322,21 @@ html, body {
       radius: 40, attackRange: 150, attackWindup: 0.52, attackRecover: 0.54,
       score: 1200, reward: 900, colour: '#e9e2ea', dark: '#2a2331', boss: true, finalBoss: true,
       teleport: true
+    },
+    /* --- tutorial only; never enters the trial rotation --- */
+    dummy: {
+      id: 'dummy', name: 'Straw Dummy', hp: 40, speed: 0, damage: 0, sight: 0,
+      radius: 16, attackRange: 0, attackWindup: 1, attackRecover: 1,
+      score: 0, reward: 0, colour: '#d8c188', dark: '#b09a5c', inert: true
+    },
+    warden: {
+      /* Slower and far more telegraphed than a Reaper, but it hits like one.
+         Beatable on the tutorial's terms - dodge the wind-up, punish the
+         recovery - which is exactly the lesson the preceding beats taught. */
+      id: 'warden', name: 'Warden', hp: 560, speed: 128, damage: 24, sight: 4000,
+      radius: 28, attackRange: 118, attackWindup: 0.62, attackRecover: 0.62,
+      score: 0, reward: 0, colour: '#5c2b4a', dark: '#3a1830', boss: true,
+      heavy: true, charge: true
     }
   };
 
@@ -324,6 +358,18 @@ html, body {
     { id: 'desert', name: 'Dunes', ground: '#d0ac68', ground2: '#bd9955', accent: '#9a7a3d',
       barrier: 'cactus', cover: 'shrub', sky: '#c98f52', litter: 'rock' }
   ];
+
+  /* The two plaza skins live OUTSIDE D.ENVIRONMENTS on purpose: makeSpec picks
+     a trial's environment with `hash % ENVIRONMENTS.length`, so appending here
+     would silently re-roll the environment of all 50 trials. */
+  D.TUTORIAL_ENVS = {
+    /* the living square: warm shopfront glow under a night sky */
+    square: { id: 'square', name: 'Aurelia Square', ground: '#6e747d', ground2: '#5f656d',
+      accent: '#464b52', barrier: 'wall', cover: 'crate', sky: '#2b3446', litter: 'rock' },
+    /* the same square after the fall - identical tiles, all the life drained out */
+    drained: { id: 'drained', name: 'Aurelia Square', ground: '#4c525b', ground2: '#40454d',
+      accent: '#2e3238', barrier: 'wall', cover: 'crate', sky: '#171b26', litter: 'rock' }
+  };
 
 
   /* -------------------------------------------------------------- trials
@@ -452,7 +498,8 @@ html, body {
       resets: 0,               /* how many full wipes this profile has seen */
       currency: 0,
       lifetimeEarned: 0,
-      gem: null,               /* { id, level } - granted in trial 1 */
+      gem: null,               /* { id } - granted during the tutorial. The level is
+                                  NOT stored: Save.gemLevel derives it from `cleared`. */
       weapon: 'sword',
       weapons: { sword: true },
       scytheUnlocked: false,
@@ -463,6 +510,8 @@ html, body {
       debuff: null,            /* { id } applied to the next attempt only */
       lastRank: null,
       seenIntro: false,
+      tutorialDone: false,     /* cleared the guided opening; resets with a New Game */
+      tutorialStage: null,     /* 'intro' | 'square' | 'trial' - where Continue resumes */
       endgame: false,          /* reached the wave gauntlet */
       endgameWave: 0,
       beatenGame: false,
@@ -477,9 +526,17 @@ html, body {
     try {
       var data = JSON.parse(raw);
       if (!data || data.version !== 1) return Save.blank();
+      /* A save written before the tutorial existed has no `tutorialDone` key.
+         Note this BEFORE the back-fill, or every existing player is dragged
+         back through the opening on Continue. */
+      var preTutorial = !('tutorialDone' in data);
+
       /* fill in anything a newer build added */
       var base = Save.blank();
       for (var k in base) if (!(k in data)) data[k] = base[k];
+
+      /* anyone who already saw the intro has effectively done the tutorial */
+      if (preTutorial) data.tutorialDone = !!data.seenIntro;
       /* an in-progress run keeps the combo it was created with, which is
          confusing while the combo is pinned for testing - apply the pin on load */
       if (D.FIXED_COMBO_INDEX != null) data.comboIndex = D.FIXED_COMBO_INDEX;
@@ -526,8 +583,11 @@ html, body {
     return fresh;
   };
 
-  Save.hasContinue = function () {
-    var s = Save.load();
+  /* Takes the live state rather than re-reading localStorage, because the
+     Start Screen asks this every frame. Beating the game ends the run, so
+     Continue must not offer to replay the final boss forever. */
+  Save.hasContinue = function (state) {
+    var s = state || Save.load();
     return !!s.started && !s.beatenGame;
   };
 
@@ -565,7 +625,10 @@ html, body {
       maxHp: 100, maxStamina: 100, staminaRegen: 20,
       speed: 190,                 /* ~13s to cross the 2500u arena - see arena.js */
       speedMul: 1, damageMul: 1, rangedMul: 1, defenceMul: 1,
-      dodgeCdMul: 1, dodgeDist: 310, evasion: 0, stealthMul: 1,
+      /* dodgeDist is a distance, not a speed. The player is ~108 world units
+         tall, so 170 is about 1.6 body-lengths - a sidestep past an enemy
+         rather than the 2.9-length leap it used to be. */
+      dodgeCdMul: 1, dodgeDist: 170, evasion: 0, stealthMul: 1,
       glide: false, pierce: false,
       weaponLevel: Save.weaponLevel(state),
       gemLevel: Save.gemLevel(state)
@@ -2123,6 +2186,63 @@ html, body {
     });
   };
 
+  /* The Warden: the tutorial's optional boss. Heavier and squarer than a
+     Reaper, in the same demon palette as Garatu so it reads as his creature. */
+  Spr.warden = function (dir, frame) {
+    return cached('wd:' + dir + frame, function () {
+      return Px.make(28, 40, function (g) {
+        var cx = 14;
+        var bob = frame ? 1 : 0;
+        var top = 4 + bob;
+
+        /* legs, planted wide */
+        g.rect('4', cx - 8, top + 26, 5, 9);
+        g.rect('4', cx + 3, top + 26, 5, 9);
+        g.rect('9', cx - 8, top + 33, 5, 2);
+        g.rect('9', cx + 3, top + 33, 5, 2);
+
+        /* slab torso with heavy plate */
+        g.rect('5', cx - 8, top + 12, 17, 15);
+        g.rect('6', cx - 7, top + 13, 6, 13);
+        g.rect('4', cx + 4, top + 13, 4, 13);
+        g.rect('A', cx - 8, top + 16, 17, 3);        /* chest band */
+        g.rect('a', cx - 8, top + 16, 17, 1);
+        g.rect('A', cx - 2, top + 12, 5, 15);        /* centre strap */
+
+        /* pauldrons */
+        g.oval('A', cx - 9, top + 13, 4, 3);
+        g.oval('A', cx + 9, top + 13, 4, 3);
+        g.oval('a', cx - 9, top + 12, 2, 1);
+        g.oval('a', cx + 9, top + 12, 2, 1);
+
+        /* arms */
+        g.rect('6', cx - 11, top + 16, 3, 9);
+        g.rect('6', cx + 9, top + 16, 3, 9);
+        g.rect('7', cx - 11, top + 24, 3, 3);
+        g.rect('7', cx + 9, top + 24, 3, 3);
+
+        /* horned helm */
+        g.oval('5', cx, top + 6, 5, 5);
+        g.rect('4', cx + 2, top + 3, 3, 7);
+        g.rect('A', cx - 6, top + 2, 13, 3);         /* brow */
+        g.line('A', cx - 6, top + 2, cx - 9, top - 2);
+        g.line('A', cx + 6, top + 2, cx + 9, top - 2);
+        if (dir !== 'up') {
+          g.set(cx - 3, top + 6, '8'); g.set(cx + 3, top + 6, '8');
+          g.set(cx - 3, top + 7, 'X'); g.set(cx + 3, top + 7, 'X');
+        }
+        if (dir === 'side') g.rect('4', cx - 6, top + 4, 4, 6);
+
+        g.outline('K');
+      });
+    });
+  };
+
+  /* the training dummy is an enemy so it can be hit, but it is scenery */
+  Spr.dummy = function (dir, frame) {
+    return cached('dm:' + dir + frame, function () { return Spr.prop('dummy', 0); });
+  };
+
   Spr.aurelith = function (frame) {
     return cached('au:' + frame, function () {
       return Px.make(56, 60, function (g) {
@@ -2416,10 +2536,111 @@ html, body {
     });
   }
 
+  /* ------------------------------------------------------- plaza furniture */
+
+  function pedestal() {
+    return Px.make(20, 26, function (g) {
+      g.rect('R', 2, 18, 16, 6);        /* base */
+      g.rect('r', 3, 19, 14, 3);
+      g.rect('R', 5, 8, 10, 11);        /* column */
+      g.rect('r', 6, 9, 4, 10);
+      g.rect('q', 4, 5, 12, 4);         /* cap */
+      g.rect('r', 5, 6, 10, 2);
+      g.rect('x', 8, 12, 4, 4);         /* inset socket */
+      g.outline('K');
+    });
+  }
+
+  function dummyProp() {
+    /* a straw torso lashed to a post - deliberately non-threatening */
+    return Px.make(18, 30, function (g) {
+      g.rect('W', 8, 18, 3, 11);        /* post */
+      g.rect('w', 8, 18, 1, 11);
+      g.rect('W', 3, 14, 13, 2);        /* crossbar */
+      g.oval('T', 9, 12, 5, 6);         /* body */
+      g.oval('t', 8, 11, 4, 5);
+      g.oval('u', 7, 9, 2, 2);
+      g.rect('W', 4, 12, 2, 5);         /* bound arms */
+      g.rect('W', 13, 12, 2, 5);
+      g.oval('t', 9, 4, 3, 3);          /* sack head */
+      g.set(8, 4, 'K'); g.set(11, 4, 'K');
+      g.rect('n', 6, 13, 7, 1);         /* target band */
+      g.outline('K');
+    });
+  }
+
+  function lamp() {
+    return Px.make(14, 40, function (g) {
+      g.rect('A', 5, 34, 5, 5);         /* footing */
+      g.rect('R', 6, 10, 3, 25);        /* pole */
+      g.rect('A', 6, 10, 1, 25);
+      g.rect('A', 4, 6, 7, 5);          /* housing */
+      g.rect('Y', 5, 7, 5, 3);          /* lit pane */
+      g.rect('Q', 6, 8, 3, 1);
+      g.rect('A', 4, 3, 7, 3);          /* cowl */
+      g.outline('K');
+    });
+  }
+
+  function bench() {
+    return Px.make(26, 18, function (g) {
+      g.rect('W', 3, 12, 3, 5);         /* legs */
+      g.rect('W', 20, 12, 3, 5);
+      g.rect('v', 2, 9, 22, 3);         /* seat */
+      g.rect('w', 2, 11, 22, 1);
+      g.rect('v', 2, 4, 22, 2);         /* back slats */
+      g.rect('v', 2, 7, 22, 2);
+      g.rect('W', 3, 4, 2, 6);
+      g.rect('W', 21, 4, 2, 6);
+      g.outline('K');
+    });
+  }
+
+  function kiosk() {
+    return Px.make(30, 32, function (g) {
+      g.rect('W', 2, 12, 26, 19);       /* body */
+      g.rect('w', 3, 13, 12, 17);
+      g.rect('v', 4, 16, 9, 10);        /* serving window */
+      g.rect('x', 5, 17, 7, 8);
+      g.rect('n', 1, 7, 28, 6);         /* awning */
+      g.rect('Q', 1, 7, 28, 2);
+      for (var i = 0; i < 5; i++) g.rect('N', 2 + i * 6, 9, 3, 4);
+      g.rect('W', 2, 29, 26, 2);
+      g.outline('K');
+    });
+  }
+
+  function gatePost() {
+    /* half of the exit arch: two of these flank the way out */
+    return Px.make(16, 40, function (g) {
+      g.rect('R', 3, 8, 10, 30);
+      g.rect('r', 4, 9, 4, 28);
+      g.rect('q', 2, 4, 12, 5);         /* capital */
+      g.rect('r', 3, 5, 10, 3);
+      g.rect('P', 5, 14, 6, 12);        /* portal glow inset */
+      g.rect('p', 6, 15, 4, 10);
+      g.speckle('x', 4, 10, 8, 26, 12, 5);
+      g.outline('K');
+    });
+  }
+
+  function gemProp() {
+    return Px.make(12, 16, function (g) {
+      g.oval('p', 6, 8, 3, 4);
+      g.rect('P', 3, 8, 6, 4);
+      g.set(5, 5, 'Q'); g.set(6, 6, 'Q');
+      g.rect('p', 4, 4, 4, 3);
+      g.set(6, 11, 'Q');
+      g.outline('K');
+    });
+  }
+
   var PROPS = {
     tree: tree, pine: pine, cactus: cactus, crate: crate, fence: fence,
     wall: wall, rock: rock, flower: flower, fern: fern, tuft: tuft,
-    stone: puzzleStone, relic: relic, hint: hintGlyph
+    stone: puzzleStone, relic: relic, hint: hintGlyph,
+    pedestal: pedestal, dummy: dummyProp, lamp: lamp, bench: bench,
+    kiosk: kiosk, gate: gatePost, gem: gemProp
   };
 
   Spr.prop = function (kind, seed) {
@@ -2442,7 +2663,10 @@ html, body {
     village: { base: 'd', dark: 'D', lite: 'e', pop: 'e', detail: 'D' },
     hq:      { base: 'V', dark: 'M', lite: 'x', pop: 'R', detail: 'M' },
     city:    { base: 'r', dark: 'R', lite: 'q', pop: 'q', detail: 'x' },
-    desert:  { base: 's', dark: 'S', lite: 'z', pop: 'z', detail: 'S' }
+    desert:  { base: 's', dark: 'S', lite: 'z', pop: 'z', detail: 'S' },
+    /* plaza paving, before and after the fall */
+    square:  { base: 'r', dark: 'R', lite: 'q', pop: 'q', detail: 'x' },
+    drained: { base: 'R', dark: 'E', lite: 'x', pop: 'x', detail: 'E' }
   };
 
   Spr.groundTile = function (envId) {
@@ -2480,6 +2704,9 @@ html, body {
   /* ============================================================== WEAPONS
      Small held sprites, drawn beside the character at its hand height. */
   function weaponSprite(id) {
+    /* empty hands: a blank sprite, so nothing is drawn and nothing branches.
+       Without this, an unrecognised id falls through to the scythe below. */
+    if (id === 'none') return Px.make(1, 1, function () { }, { ax: 0, ay: 0 });
     if (id === 'sword') {
       return Px.make(20, 9, function (g) {
         g.rect('b', 5, 3, 12, 3);          /* blade */
@@ -2546,6 +2773,12 @@ html, body {
 
   var U = V.U, D = V.D, Art = V.Art, Audio = V.Audio;
   var E = {};
+
+  /* how long a dodge takes; the distance travelled is Save.resolveStats.dodgeDist */
+  var DODGE_TIME = 0.2;
+  var DODGE_COOLDOWN = 0.58;
+  E.DODGE_TIME = DODGE_TIME;
+  E.DODGE_COOLDOWN = DODGE_COOLDOWN;
 
   /* facing angle -> which of the three authored views to use */
   function viewOf(facing) {
@@ -2625,11 +2858,16 @@ html, body {
 
     /* ------- dodge / glide ------- */
     if (this.dodgeTime > 0) {
+      /* Only integrate the time actually left in the dodge. Stepping a full dt
+         on the last frame overshot the distance by ~8% at 60fps and up to 25%
+         on a stutter, so the same input travelled different distances. */
+      var step = Math.min(dt, this.dodgeTime);
       this.dodgeTime -= dt;
-      var dodgeSpeed = this.stats.dodgeDist / 0.2;
-      this.x += Math.cos(this.dodgeAngle) * dodgeSpeed * dt;
-      this.y += Math.sin(this.dodgeAngle) * dodgeSpeed * dt;
-      this.z = this.stats.glide ? Math.sin((1 - this.dodgeTime / 0.2) * Math.PI) * 18 : 0;
+      var dodgeSpeed = this.stats.dodgeDist / DODGE_TIME;
+      this.x += Math.cos(this.dodgeAngle) * dodgeSpeed * step;
+      this.y += Math.sin(this.dodgeAngle) * dodgeSpeed * step;
+      this.z = this.stats.glide
+        ? Math.sin(U.clamp(1 - this.dodgeTime / DODGE_TIME, 0, 1) * Math.PI) * 18 : 0;
       this.moving = true;
       this.animPhase += dt * 18;
       w.confine(this);
@@ -2773,11 +3011,12 @@ html, body {
     var mv = this.world.input.move;
     this.dodgeAngle = mv.mag > 0.15 ? Math.atan2(mv.y, mv.x) : this.facing;
     this.facing = this.dodgeAngle;
-    this.dodgeTime = 0.2;
-    this.dodgeCd = 0.58 * this.stats.dodgeCdMul;
+    this.dodgeTime = DODGE_TIME;
+    this.dodgeCd = DODGE_COOLDOWN * this.stats.dodgeCdMul;
     this.invuln = Math.max(this.invuln, 0.3);
     Audio.play('dodge');
     this.world.dust(this.x, this.y, 6);
+    this.world.onPlayerDodge && this.world.onPlayerDodge();
     return true;
   };
 
@@ -2938,6 +3177,15 @@ html, body {
       return;
     }
 
+    /* a bolted-down training dummy: it takes hits and turns to face you,
+       but it never chases, wanders or swings back */
+    if (this.def.inert) {
+      this.moving = false;
+      this.facing = Math.atan2(p.y - this.y, p.x - this.x);
+      this.vx = 0; this.vy = 0;
+      return;
+    }
+
     var d = U.dist(this.x, this.y, p.x, p.y);
     var toP = Math.atan2(p.y - this.y, p.x - this.x);
 
@@ -3080,13 +3328,16 @@ html, body {
     this.hp -= dmg;
     this.hurtFlash = 0.18;
     this.aggro = true;
-    var resist = this.def.boss ? 0.25 : (this.def.heavy ? 0.5 : 1);
+    var resist = this.def.inert ? 0 : (this.def.boss ? 0.25 : (this.def.heavy ? 0.5 : 1));
     this.vx += Math.cos(fromAngle) * knock * resist;
     this.vy += Math.sin(fromAngle) * knock * resist;
     this.world.floater(this.x, this.y - 36 - this.radius, String(Math.round(dmg)), '#fff0a8');
     this.world.burst(this.x, this.y - 18, 5, '#ffd66b');
     if (!this.def.boss && knock > 200) { this.state = 'stagger'; this.stateTime = 0; }
     if (this.state === 'idle') { this.state = 'chase'; this.stateTime = 0; }
+    /* every source of enemy damage in the game is the player, arrows included,
+       so this is the one place a scripted beat can watch for "you landed a hit" */
+    this.world.onEnemyHurt && this.world.onEnemyHurt(this, dmg);
     if (this.hp <= 0) this.die(src);
   };
 
@@ -3100,7 +3351,10 @@ html, body {
     w.onEnemyKilled && w.onEnemyKilled(this);
   };
 
-  var ENEMY_SPRITE = { goblin: 'goblin', minotaur: 'minotaur', reaper: 'reaper', aurelith: 'aurelith' };
+  var ENEMY_SPRITE = {
+    goblin: 'goblin', minotaur: 'minotaur', reaper: 'reaper', aurelith: 'aurelith',
+    warden: 'warden', dummy: 'dummy'
+  };
 
   Enemy.prototype.draw = function (ctx, t) {
     if (this.dead) return;
@@ -3226,11 +3480,17 @@ html, body {
      so the arena grew and the player got much faster: 2500u across at 140u/s
      is ~18s edge to edge, with everything else scaled to match. */
   var ARENA_R = 1250;
-  var BARRIER_R = ARENA_R + 40;
 
   function Trial(game, spec) {
     this.game = game;
-    this.spec = spec;                       /* {index,type,env,seed,boss,wave,label} */
+    /* spec: { index, type, env, seed, label, boss?, finalBoss?, endgame?,
+               tutorial?, radius?, decor?, untimed?, music? } */
+    this.spec = spec;
+    /* Trials are round. The tutorial wants a smaller, less lonely plaza, so the
+       radius is per-trial - everything downstream (spawns, camera clamp, the
+       barrier ring) reads these rather than the module constants. */
+    this.radius = spec.radius || ARENA_R;
+    this.barrierR = this.radius + 40;
     this.env = spec.env;
     this.rng = U.rng(spec.seed);
     this.input = game.input;
@@ -3261,6 +3521,15 @@ html, body {
     this.push = null;              /* the stone currently being pushed, if any */
     this.message = null; this.messageTime = 0;
 
+    /* --- scripted-sequence support (the tutorial; inert everywhere else) --- */
+    this.untimed = !!spec.untimed;   /* no clock, and no timeout loss */
+    this.persistentPrompt = null;    /* banner text that stays until cleared */
+    this.lockedActions = null;       /* { attack: true, ... } - HUD greys these out */
+    this.decor = [];                 /* hand-placed props, depth-sorted with bodies */
+    this.markers = [];               /* ground rings: pedestals, the exit gate */
+    this.worldLabels = [];           /* { x, y, text, colour } drawn by the HUD */
+    this.screenLabels = [];          /* the above, projected - filled each frame */
+
     this.stats = V.Save.resolveStats(game.save);
     this.player = new E.Player(this.stats, game.save.weapon, this);
     this.player.drawScale = 1.8;
@@ -3283,8 +3552,8 @@ html, body {
       a = (i / ringCount) * U.TAU;
       var jitter = r.range(-14, 14);
       this.props.push({
-        x: Math.cos(a) * (BARRIER_R + jitter),
-        y: Math.sin(a) * (BARRIER_R + jitter),
+        x: Math.cos(a) * (this.barrierR + jitter),
+        y: Math.sin(a) * (this.barrierR + jitter),
         kind: this.env.barrier, s: r.range(1.0, 1.35), seed: r.int(0, 9999), solid: true
       });
     }
@@ -3292,15 +3561,18 @@ html, body {
     for (i = 0; i < ringCount; i += 2) {
       a = (i / ringCount) * U.TAU + 0.04;
       this.props.push({
-        x: Math.cos(a) * (BARRIER_R + 62), y: Math.sin(a) * (BARRIER_R + 62),
+        x: Math.cos(a) * (this.barrierR + 62), y: Math.sin(a) * (this.barrierR + 62),
         kind: this.env.barrier, s: r.range(0.9, 1.2), seed: r.int(0, 9999)
       });
     }
 
-    /* cover (GDD 5 + 7.3) */
-    var bushes = 44 + r.int(0, 16);
+    /* cover (GDD 5 + 7.3), thinned in step with the floor area so a small
+       arena is dotted rather than carpeted. area === 1 at the default radius,
+       so the standard trials generate exactly what they always did. */
+    var area = (this.radius / ARENA_R) * (this.radius / ARENA_R);
+    var bushes = Math.max(8, Math.round((44 + r.int(0, 16)) * area));
     for (i = 0; i < bushes; i++) {
-      a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 120);
+      a = r() * U.TAU; d = Math.sqrt(r()) * (this.radius - 120);
       this.cover.push({
         x: Math.cos(a) * d, y: Math.sin(a) * d,
         kind: this.env.cover, s: r.range(0.9, 1.3), seed: r.int(0, 9999), r: 46
@@ -3308,8 +3580,9 @@ html, body {
     }
 
     /* ground litter */
-    for (i = 0; i < 150; i++) {
-      a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 40);
+    var litter = Math.max(30, Math.round(150 * area));
+    for (i = 0; i < litter; i++) {
+      a = r() * U.TAU; d = Math.sqrt(r()) * (this.radius - 40);
       this.props.push({
         x: Math.cos(a) * d, y: Math.sin(a) * d,
         kind: r.chance(0.55) ? 'tuft' : this.env.litter,
@@ -3319,7 +3592,7 @@ html, body {
 
     /* player start: near the south edge, looking in */
     this.player.x = 0;
-    this.player.y = ARENA_R * 0.62;
+    this.player.y = this.radius * 0.62;
     this.player.facing = -Math.PI / 2;
 
     this.setupObjective();
@@ -3354,12 +3627,12 @@ html, body {
       this.objective = { text: 'Defeat the ' + (this.spec.finalBoss ? 'Aurelith' : 'Reaper') };
       this.timeLimit = this.spec.finalBoss ? 300 : 180;
       var bossId = this.spec.finalBoss ? 'aurelith' : 'reaper';
-      var boss = this.spawnEnemy(bossId, 0, -ARENA_R * 0.35, {
+      var boss = this.spawnEnemy(bossId, 0, -this.radius * 0.35, {
         hpScale: 0.7 + tier * 0.5, dmgScale: 0.8 + tier * 0.22, speedScale: 1
       });
       this.boss = boss;
       for (i = 0; i < 2 + Math.floor(tier); i++) {
-        p = this.randomPoint(200, ARENA_R - 150, 340);
+        p = this.randomPoint(200, this.radius - 150, 340);
         this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
       }
       this.par = boss.maxHp * 1.35 + 180;
@@ -3370,6 +3643,7 @@ html, body {
     this.type = this.spec.type;
 
     switch (this.type) {
+      case 'tutorial': { V.Tutorial.setup(this); break; }
       case 'defeat': {
         var target = 6 + Math.round(tier * 5);
         this.target = target;
@@ -3377,7 +3651,7 @@ html, body {
         this.objective = { text: 'Defeat ' + target + ' enemies' };
         var inField = Math.min(target, 5 + Math.floor(tier * 2));
         for (i = 0; i < inField; i++) {
-          p = this.randomPoint(160, ARENA_R - 120, 320);
+          p = this.randomPoint(160, this.radius - 120, 320);
           this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.remainingToSpawn = target - inField;
@@ -3395,14 +3669,14 @@ html, body {
       }
       case 'deliver': {
         this.timeLimit = 100 + Math.round(tier * 12);
-        var rp = this.randomPoint(ARENA_R * 0.5, ARENA_R - 130, 500);
+        var rp = this.randomPoint(this.radius * 0.5, this.radius - 130, 500);
         this.relic = { x: rp.x, y: rp.y, taken: false };
         /* delivery point roughly opposite the relic */
         var ra = Math.atan2(rp.y, rp.x) + Math.PI;
-        this.delivery = { x: Math.cos(ra) * ARENA_R * 0.6, y: Math.sin(ra) * ARENA_R * 0.6, r: 95 };
+        this.delivery = { x: Math.cos(ra) * this.radius * 0.6, y: Math.sin(ra) * this.radius * 0.6, r: 95 };
         this.objective = { text: 'Collect the relic, deliver it' };
         for (i = 0; i < 4 + Math.floor(tier * 3); i++) {
-          p = this.randomPoint(220, ARENA_R - 120, 300);
+          p = this.randomPoint(220, this.radius - 120, 300);
           this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.par = 380 + this.timeLimit * 1.6;
@@ -3418,7 +3692,7 @@ html, body {
           this.plates.push({ x: Math.cos(ang + 0.9) * 720, y: Math.sin(ang + 0.9) * 720, r: 56, filled: false });
         }
         for (i = 0; i < 2 + Math.floor(tier); i++) {
-          p = this.randomPoint(300, ARENA_R - 150, 420);
+          p = this.randomPoint(300, this.radius - 150, 420);
           this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
         }
         this.par = 430 + this.timeLimit * 1.5;
@@ -3432,11 +3706,11 @@ html, body {
         this.riddle = { q: q.q, answer: q.a, options: opts, revealed: 0, answered: false, correct: false };
         this.objective = { text: 'Answer the riddle - hints are hidden in the arena' };
         for (i = 0; i < 3; i++) {
-          p = this.randomPoint(300, ARENA_R - 150, 300);
+          p = this.randomPoint(300, this.radius - 150, 300);
           this.hints.push({ x: p.x, y: p.y, found: false });
         }
         for (i = 0; i < 2 + Math.floor(tier * 1.5); i++) {
-          p = this.randomPoint(300, ARENA_R - 150, 420);
+          p = this.randomPoint(300, this.radius - 150, 420);
           this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
         }
         this.par = 420 + this.timeLimit * 1.4;
@@ -3448,7 +3722,7 @@ html, body {
         this.spottedTime = 0;
         var hunters = 4 + Math.floor(tier * 2.5);
         for (i = 0; i < hunters; i++) {
-          p = this.randomPoint(340, ARENA_R - 120, 420);
+          p = this.randomPoint(340, this.radius - 120, 420);
           var h = this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
           h.def = Object.create(h.def);
           h.def.sight = h.def.sight * 1.3;
@@ -3497,11 +3771,11 @@ html, body {
   };
 
   Trial.prototype.confine = function (ent) {
-    U.confineToCircle(ent, 0, 0, ARENA_R - (ent.radius || 12));
+    U.confineToCircle(ent, 0, 0, this.radius - (ent.radius || 12));
   };
 
   Trial.prototype.insideArena = function (x, y, pad) {
-    return U.dist2(x, y, 0, 0) < (ARENA_R - (pad || 0)) * (ARENA_R - (pad || 0));
+    return U.dist2(x, y, 0, 0) < (this.radius - (pad || 0)) * (this.radius - (pad || 0));
   };
 
   Trial.prototype.inCover = function (x, y) {
@@ -3548,6 +3822,17 @@ html, body {
   Trial.prototype.onEnemyKilled = function (e) {
     this.kills++;
     if (this.type === 'seek') this.foundCount = (this.foundCount || 0) + 1;
+    if (this.type === 'tutorial') V.Tutorial.onEnemyKilled(this, e);
+  };
+
+  /* Two observation hooks the scripted beats need. Both are no-ops in a
+     normal trial, and both are called unconditionally from entities.js. */
+  Trial.prototype.onEnemyHurt = function (e, dmg) {
+    if (this.type === 'tutorial') V.Tutorial.onEnemyHurt(this, e, dmg);
+  };
+
+  Trial.prototype.onPlayerDodge = function () {
+    if (this.type === 'tutorial') V.Tutorial.onPlayerDodge(this);
   };
 
   /* ================================================================ update */
@@ -3566,13 +3851,15 @@ html, body {
 
     /* ---- input ---- */
     var In = this.input;
-    if (In.wasPressed('attack')) {
+    /* a scripted beat can hold back an action until it has been taught */
+    var locked = this.lockedActions || {};
+    if (In.wasPressed('attack') && !locked.attack) {
       if (this.riddle && !this.riddle.answered && this.nearAnswerPad()) { /* handled in HUD taps */ }
       else p.tryAttack(false);
     }
-    if (In.wasPressed('special')) p.tryAttack(true);
-    if (In.wasPressed('dodge')) p.tryDodge();
-    if (In.wasPressed('item')) this.useConsumable();
+    if (In.wasPressed('special') && !locked.special) p.tryAttack(true);
+    if (In.wasPressed('dodge') && !locked.dodge) p.tryDodge();
+    if (In.wasPressed('item') && !locked.item) this.useConsumable();
 
     p.update(dt, In);
     this.updatePush(dt);
@@ -3598,13 +3885,17 @@ html, body {
     }
 
     /* ---- timer & objective ---- */
-    this.timeLeft -= dt;
+    if (!this.untimed) this.timeLeft -= dt;
     this.updateObjective(dt);
 
+    /* updateObjective runs first on purpose: an untimed trial gets the chance
+       to revive the player before the death check below can end the run. */
     if (p.dead) return this.finish('death');
     if (this.objectiveDone) return this.finish('complete');
     if (this.objectiveFailed) return this.finish('objective');
-    if (this.timeLeft <= 0) return this.finish(this.type === 'hide' || this.type === 'defend' ? 'complete' : 'timeout');
+    if (!this.untimed && this.timeLeft <= 0) {
+      return this.finish(this.type === 'hide' || this.type === 'defend' ? 'complete' : 'timeout');
+    }
   };
 
   Trial.prototype.updateFx = function (dt) {
@@ -3710,7 +4001,7 @@ html, body {
 
     if (ax === 'x') blk.x += dr * PUSH_SPEED * dt;
     else blk.y += dr * PUSH_SPEED * dt;
-    U.confineToCircle(blk, 0, 0, ARENA_R - 60);
+    U.confineToCircle(blk, 0, 0, this.radius - 60);
 
     /* pin the player square behind the stone and slide them onto its centre line */
     if (ax === 'x') {
@@ -3735,6 +4026,7 @@ html, body {
     var p = this.player, i;
 
     switch (this.type) {
+      case 'tutorial': { V.Tutorial.update(this, dt); break; }
       case 'boss': {
         if (this.boss.dead || this.enemies.indexOf(this.boss) < 0) this.objectiveDone = true;
         break;
@@ -3742,7 +4034,7 @@ html, body {
       case 'defeat': {
         /* trickle in the remainder */
         if (this.remainingToSpawn > 0 && this.enemies.length < 6) {
-          var sp = this.randomPoint(ARENA_R * 0.5, ARENA_R - 120, 380);
+          var sp = this.randomPoint(this.radius * 0.5, this.radius - 120, 380);
           this.spawnEnemy(this.pickEnemy(this.tier(), this.rng), sp.x, sp.y, this.scaleOpts);
           this.remainingToSpawn--;
         }
@@ -3757,7 +4049,7 @@ html, body {
           for (i = 0; i < n; i++) {
             var a = Math.random() * U.TAU;
             this.spawnEnemy(this.pickEnemy(this.tier(), this.rng),
-              Math.cos(a) * (ARENA_R - 60), Math.sin(a) * (ARENA_R - 60), this.scaleOpts);
+              Math.cos(a) * (this.radius - 60), Math.sin(a) * (this.radius - 60), this.scaleOpts);
           }
         }
         /* enemies inside the zone chew on it */
@@ -4003,6 +4295,7 @@ html, body {
     }
     this.project = P;
     this.screenFloaters = [];
+    this.screenLabels = [];
 
     this.drawGround(ctx, P, cw, ch);
 
@@ -4030,6 +4323,14 @@ html, body {
       var sb = P(bl.x, bl.y);
       if (!visible(sb)) continue;
       list.push({ y: bl.y, spr: Spr.prop('stone', i), x: sb.x, sy: sb.y });
+    }
+    /* hand-placed scenery: already baked sprites, so they just join the sort */
+    for (i = 0; i < this.decor.length; i++) {
+      var dc = this.decor[i];
+      if (dc.hidden) continue;
+      var sd = P(dc.x, dc.y);
+      if (!visible(sd)) continue;
+      list.push({ y: dc.y, spr: dc.spr, x: sd.x, sy: sd.y + (dc.lift || 0) });
     }
 
     for (i = 0; i < this.enemies.length; i++) {
@@ -4075,7 +4376,7 @@ html, body {
 
   Trial.prototype.drawGround = function (ctx, P, cw, ch) {
     var c = P(0, 0);
-    var r = ARENA_R * ZOOM;
+    var r = this.radius * ZOOM;
 
     ctx.save();
     ctx.beginPath();
@@ -4143,6 +4444,21 @@ html, body {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
+    /* scripted rings - weapon pedestals, the exit gate */
+    for (i = 0; i < this.markers.length; i++) {
+      var mk = this.markers[i];
+      if (mk.hidden) continue;
+      sp = P(mk.x, mk.y);
+      var mr = mk.r * ZOOM;
+      var puls = 0.16 + 0.08 * Math.sin(t * 3 + i);
+      ctx.fillStyle = U.rgba(mk.colour || '#ffe45c', mk.active === false ? 0.06 : puls);
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y, mr, mr * Art.SQUASH, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.strokeStyle = U.rgba(mk.colour || '#ffe45c', mk.active === false ? 0.25 : 0.9);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   };
 
   Trial.prototype.drawObjectiveOverlay = function (ctx, P) {
@@ -4163,10 +4479,20 @@ html, body {
       Px.draw(ctx, Spr.prop('hint', 0), sp.x, sp.y - 2 + bob);
     }
 
+    /* Labels are projected here but drawn by the HUD at full resolution: the
+       world buffer is ~240px tall, and text baked into it is unreadable. */
+    for (i = 0; i < this.worldLabels.length; i++) {
+      var wl = this.worldLabels[i];
+      if (wl.hidden) continue;
+      sp = P(wl.x, wl.y);
+      this.screenLabels.push({ x: sp.x, y: sp.y + (wl.lift || -34), text: wl.text, colour: wl.colour || '#ffe45c' });
+    }
+
     var target = null;
     if (this.relic && !this.relic.taken) target = this.relic;
     else if (this.delivery && this.relic && this.relic.taken) target = this.delivery;
     else if (this.zone) target = this.zone;
+    else if (this.guideTarget) target = this.guideTarget;
     if (target) this.drawGuide(ctx, P, target);
   };
 
@@ -4225,6 +4551,450 @@ html, body {
   Trial.ZOOM = ZOOM;
   Trial.ARENA_R = ARENA_R;
   V.Trial = Trial;
+})(window.V = window.V || {});
+
+/* ===== src/js/tutorial.js ===== */
+/* Velthiros - the guided opening.
+
+   This runs as a normal Trial (type 'tutorial') so it inherits combat, the
+   HUD, enemies, cover, pause and the pixel renderer for free. All that lives
+   here is the script: an ordered list of beats, each teaching exactly one
+   thing, each with its own setup and its own completion test.
+
+   The trial is `untimed` and cannot be failed. Dying revives you on the spot,
+   because a tutorial that can end in a loss teaches the wrong lesson - the one
+   exception is the Warden, which you only get one attempt at. */
+(function (V) {
+  'use strict';
+
+  var U = V.U, D = V.D, Audio = V.Audio;
+
+  var T = {};
+
+  T.RADIUS = 700;          /* a plaza, not the 1250u arena */
+  T.ENV = 'drained';
+
+  /* Where the script places things. Y grows toward the camera, so negative Y
+     is "further in" - the player walks north through the beats and comes back
+     south to the gate. */
+  var GATE = { x: 0, y: 560 };
+  var START = { x: 0, y: 470 };
+  /* Well clear of the gate's 110u ring: reviving inside it would walk you out
+     of the tutorial the instant the Warden killed you. */
+  var REVIVE = { x: 0, y: 340 };
+  var PEDESTALS = [
+    { id: 'sword', x: -250, y: -70, label: 'SWORD' },
+    { id: 'battleaxe', x: 0, y: -170, label: 'BATTLEAXE' },
+    { id: 'bow', x: 250, y: -70, label: 'BOW' }
+  ];
+
+  /* ------------------------------------------------------------- helpers */
+
+  /* Randomly-scattered cover would otherwise land on top of a pedestal or in
+     the middle of the duel ground. */
+  function clearArea(trial, x, y, r) {
+    var r2 = r * r, i;
+    for (i = trial.cover.length - 1; i >= 0; i--) {
+      if (U.dist2(trial.cover[i].x, trial.cover[i].y, x, y) < r2) trial.cover.splice(i, 1);
+    }
+    for (i = trial.props.length - 1; i >= 0; i--) {
+      var p = trial.props[i];
+      if (p.solid) continue;                            /* never thin the barrier ring */
+      if (U.dist2(p.x, p.y, x, y) < r2) trial.props.splice(i, 1);
+    }
+  }
+
+  function decor(trial, kind, x, y, seed) {
+    var d = { x: x, y: y, spr: V.Spr.prop(kind, seed || 0), kind: kind };
+    trial.decor.push(d);
+    return d;
+  }
+
+  function marker(trial, x, y, r, colour, active) {
+    var m = { x: x, y: y, r: r, colour: colour || '#ffe45c', active: active !== false };
+    trial.markers.push(m);
+    return m;
+  }
+
+  function label(trial, x, y, text, colour, lift) {
+    var l = { x: x, y: y, text: text, colour: colour || '#ffe45c', lift: lift };
+    trial.worldLabels.push(l);
+    return l;
+  }
+
+  function inMarker(trial, m) {
+    var p = trial.player;
+    return U.dist2(p.x, p.y, m.x, m.y) < m.r * m.r;
+  }
+
+  function say(trial, text) {
+    trial.persistentPrompt = text;
+  }
+
+  /* Buttons the HUD should grey out until their beat arrives. */
+  function lock(trial, list) {
+    var map = { attack: true, special: true, dodge: true, item: true };
+    for (var i = 0; i < list.length; i++) delete map[list[i]];
+    trial.lockedActions = map;
+  }
+
+  /* ---------------------------------------------------------------- beats */
+
+  var BEATS = [
+    {
+      id: 'move',
+      enter: function (tr) {
+        lock(tr, []);
+        say(tr, 'Drag anywhere on the left of the screen to walk. Head for the light.');
+        tr.tut.waypoint = marker(tr, 0, 120, 100, '#7fe08a');
+        tr.guideTarget = tr.tut.waypoint;
+      },
+      done: function (tr) { return inMarker(tr, tr.tut.waypoint); },
+      exit: function (tr) {
+        tr.tut.waypoint.hidden = true;
+        tr.guideTarget = null;
+      }
+    },
+
+    {
+      id: 'weapon',
+      enter: function (tr) {
+        lock(tr, []);
+        say(tr, 'Three of them left something behind. Stand on one to take it - the other two stay for sale.');
+        tr.tut.picks = [];
+        for (var i = 0; i < PEDESTALS.length; i++) {
+          var pd = PEDESTALS[i];
+          var m = marker(tr, pd.x, pd.y, 80, '#ffe45c');
+          m.weapon = pd.id;
+          tr.tut.picks.push(m);
+          label(tr, pd.x, pd.y, pd.label, '#ffe45c', -46);
+        }
+      },
+      done: function (tr) {
+        for (var i = 0; i < tr.tut.picks.length; i++) {
+          var m = tr.tut.picks[i];
+          if (!inMarker(tr, m)) continue;
+          T.takeWeapon(tr, m.weapon);
+          return true;
+        }
+        return false;
+      },
+      exit: function (tr) {
+        for (var i = 0; i < tr.tut.picks.length; i++) tr.tut.picks[i].active = false;
+      }
+    },
+
+    {
+      id: 'strike',
+      enter: function (tr) {
+        lock(tr, ['attack']);
+        say(tr, 'Tap ATK to swing. You strike where you are facing - break the dummy.');
+        tr.tut.dummy = tr.spawnEnemy('dummy', 0, -330, { hpScale: 1 });
+        tr.guideTarget = tr.tut.dummy;
+      },
+      done: function (tr) { return tr.tut.dummy.dead; },
+      exit: function (tr) {
+        tr.guideTarget = null;
+        tr.setMessage('Good. Now something that hits back.', 2.4);
+      }
+    },
+
+    {
+      id: 'fight',
+      enter: function (tr) {
+        lock(tr, ['attack', 'special']);
+        say(tr, 'Two of them. SPECIAL is slower and costs stamina, but it clears a crowd. Put both down.');
+        tr.tut.foes = [
+          tr.spawnEnemy('goblin', -190, -340, { hpScale: 0.8, dmgScale: 0.6 }),
+          tr.spawnEnemy('goblin', 190, -340, { hpScale: 0.8, dmgScale: 0.6 })
+        ];
+      },
+      done: function (tr) {
+        for (var i = 0; i < tr.tut.foes.length; i++) if (!tr.tut.foes[i].dead) return false;
+        return true;
+      }
+    },
+
+    {
+      id: 'dodge',
+      enter: function (tr) {
+        lock(tr, ['attack', 'special', 'dodge']);
+        say(tr, 'This one charges. Tap DODGE to slip past it - you are untouchable for the roll. Dodge twice.');
+        tr.tut.dodges = 0;
+        tr.tut.brute = tr.spawnEnemy('minotaur', 0, -360, { hpScale: 1.4, dmgScale: 0.45, speedScale: 0.9 });
+        tr.guideTarget = tr.tut.brute;
+      },
+      done: function (tr) { return tr.tut.dodges >= 2; },
+      exit: function (tr) {
+        tr.guideTarget = null;
+        var b = tr.tut.brute;
+        if (b && !b.dead) {
+          /* it withdraws rather than dying: the lesson was the roll, not the kill */
+          tr.burst(b.x, b.y - 20, 22, '#9b6bff');
+          tr.dust(b.x, b.y, 10);
+          b.dead = true;
+          Audio.play('warp');
+        }
+      }
+    },
+
+    {
+      id: 'hide',
+      enter: function (tr) {
+        lock(tr, ['attack', 'special', 'dodge']);
+        say(tr, 'Stand still in cover and they lose you. Stay hidden for a moment.');
+        tr.tut.hideTime = 0;
+        /* Cover is scattered at random everywhere else, which is fine when the
+           whole arena is 1250u across and useless when a beat depends on there
+           being some right here. This beat plants its own. */
+        var spot = { x: -120, y: 60 };
+        tr.tut.hideSpot = spot;
+        for (var i = 0; i < 5; i++) {
+          var a = (i / 5) * U.TAU;
+          tr.cover.push({
+            x: spot.x + Math.cos(a) * 40, y: spot.y + Math.sin(a) * 26,
+            kind: tr.env.cover, s: 1.15, seed: 40 + i, r: 52
+          });
+        }
+        tr.tut.hideRing = marker(tr, spot.x, spot.y, 70, '#7fe08a');
+        tr.guideTarget = spot;
+        tr.tut.hunter = tr.spawnEnemy('goblin', 0, -420, { hpScale: 0.8, dmgScale: 0.5 });
+      },
+      done: function (tr) { return tr.tut.hideTime >= 1.5; },
+      exit: function (tr) {
+        tr.guideTarget = null;
+        tr.tut.hideRing.hidden = true;
+        var h = tr.tut.hunter;
+        if (h && !h.dead) { tr.burst(h.x, h.y - 18, 14, '#9b6bff'); h.dead = true; }
+      }
+    },
+
+    {
+      id: 'gem',
+      enter: function (tr) {
+        lock(tr, ['attack', 'special', 'dodge', 'item']);
+        var sv = tr.game.save;
+        if (!sv.gem) sv.gem = { id: D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)] };
+        tr.tut.gemDef = D.GEMS[sv.gem.id];
+        say(tr, 'Something of theirs is still burning up ahead. Take it.');
+        tr.tut.gemSpot = marker(tr, 0, -470, 70, tr.tut.gemDef.colour);
+        tr.tut.gemProp = decor(tr, 'gem', 0, -470, 0);
+        tr.tut.gemProp.lift = -18;
+        tr.guideTarget = tr.tut.gemSpot;
+      },
+      done: function (tr) { return inMarker(tr, tr.tut.gemSpot); },
+      exit: function (tr) {
+        var g = tr.tut.gemDef;
+        tr.tut.gemProp.hidden = true;
+        tr.tut.gemSpot.hidden = true;
+        tr.guideTarget = null;
+        tr.burst(tr.player.x, tr.player.y - 24, 26, g.colour);
+        tr.floater(tr.player.x, tr.player.y - 50, g.name, g.glow);
+        Audio.play('pickup');
+        /* the gem changes the stats this attempt is already running on */
+        tr.stats = V.Save.resolveStats(tr.game.save);
+        tr.player.stats = tr.stats;
+        tr.player.hp = tr.stats.maxHp;
+        tr.setMessage(g.name + ' - ' + g.desc(V.Save.gemLevel(tr.game.save)), 4.5);
+      }
+    },
+
+    {
+      id: 'warden',
+      enter: function (tr) {
+        lock(tr, ['attack', 'special', 'dodge', 'item']);
+        tr.tut.gate = marker(tr, GATE.x, GATE.y, 110, '#7fe08a');
+        label(tr, GATE.x, GATE.y, 'HOME', '#7fe08a', -52);
+        decor(tr, 'gate', GATE.x - 88, GATE.y, 1);
+        decor(tr, 'gate', GATE.x + 88, GATE.y, 2);
+        tr.tut.warden = tr.spawnEnemy('warden', 0, -520, { hpScale: 1, dmgScale: 1, speedScale: 1 });
+        tr.boss = tr.tut.warden;
+        say(tr, 'The Warden carries a scythe. Take it, or walk to the gate and go home - the gate is open either way.');
+        Audio.music('boss');
+      },
+      done: function (tr) { return inMarker(tr, tr.tut.gate); }
+    }
+  ];
+
+  /* -------------------------------------------------------------- lifecycle */
+
+  T.setup = function (trial) {
+    var i;
+    trial.objective = { text: 'Learn the ground rules' };
+    trial.timeLimit = 0;
+    trial.timeLeft = 0;
+    trial.untimed = true;
+    trial.par = 1;                  /* finish() divides by par; never scored */
+    trial.tut = { index: -1, revives: 0, dodges: 0, hideTime: 0 };
+
+    /* keep the scripted ground clear of random scatter */
+    clearArea(trial, 0, 120, 150);
+    for (i = 0; i < PEDESTALS.length; i++) {
+      clearArea(trial, PEDESTALS[i].x, PEDESTALS[i].y, 130);
+      decor(trial, 'pedestal', PEDESTALS[i].x, PEDESTALS[i].y, i);
+    }
+    clearArea(trial, 0, -350, 260);          /* the duelling ground */
+    clearArea(trial, 0, -470, 130);          /* the gem */
+    clearArea(trial, GATE.x, GATE.y, 190);   /* the way home */
+    clearArea(trial, REVIVE.x, REVIVE.y, 90);
+
+    /* plaza dressing: the furniture the crowd was using before the fall */
+    decor(trial, 'kiosk', -420, 210, 1);
+    decor(trial, 'kiosk', 430, -240, 2);
+    decor(trial, 'bench', -300, 330, 1);
+    decor(trial, 'bench', 300, 330, 2);
+    decor(trial, 'bench', -470, -60, 3);
+    decor(trial, 'bench', 470, -60, 4);
+    var lamps = [[-360, 60], [360, 60], [-360, -300], [360, -300], [-160, 420], [160, 420]];
+    for (i = 0; i < lamps.length; i++) {
+      clearArea(trial, lamps[i][0], lamps[i][1], 60);
+      decor(trial, 'lamp', lamps[i][0], lamps[i][1], i);
+    }
+
+    /* start further back than a normal trial so the first walk has room */
+    trial.player.x = START.x;
+    trial.player.y = START.y;
+    trial.player.facing = -Math.PI / 2;
+    trial.player.weaponId = 'none';
+
+    advance(trial);
+  };
+
+  function advance(trial) {
+    var tut = trial.tut;
+    var prev = BEATS[tut.index];
+    if (prev && prev.exit) prev.exit(trial);
+
+    tut.index++;
+    var beat = BEATS[tut.index];
+    if (!beat) { trial.objectiveDone = true; return; }
+    tut.beatId = beat.id;
+    tut.beatTime = 0;
+    beat.enter(trial);
+    Audio.play('confirm');
+  }
+  T.advance = advance;
+
+  T.update = function (trial, dt) {
+    var tut = trial.tut;
+    if (!tut) return;
+    tut.beatTime += dt;
+
+    /* dying is never the end of a tutorial */
+    if (trial.player.dead) { revive(trial); return; }
+
+    /* the hide beat needs a running total, not a single frame */
+    if (tut.beatId === 'hide') {
+      if (trial.player.hidden) tut.hideTime += dt;
+      else tut.hideTime = Math.max(0, tut.hideTime - dt * 0.5);
+    }
+
+    var beat = BEATS[tut.index];
+    if (beat && beat.done(trial)) advance(trial);
+  };
+
+  /* Called from Enemy.hurt, so it fires for arrows as well as melee. */
+  T.onEnemyHurt = function (trial, enemy) {
+    if (trial.tut && trial.tut.beatId === 'strike' && enemy === trial.tut.dummy) {
+      trial.setMessage('That is a hit. Keep going.', 1.4);
+    }
+  };
+
+  T.onPlayerDodge = function (trial) {
+    var tut = trial.tut;
+    if (!tut || tut.beatId !== 'dodge') return;
+    tut.dodges++;
+    trial.floater(trial.player.x, trial.player.y - 56, tut.dodges + ' / 2', '#cfe8ff');
+  };
+
+  T.onEnemyKilled = function (trial, enemy) {
+    var tut = trial.tut;
+    if (!tut) return;
+    if (enemy === tut.warden) {
+      /* Same rules as the idle-unlock secret: Save.blank() clears
+         scytheUnlocked, weapons.scythe and weapon, so a New Game or a full
+         reset strips it with no extra bookkeeping here. */
+      trial.game.unlockScythe();
+      trial.player.weaponId = 'scythe';
+      trial.floater(enemy.x, enemy.y - 70, 'SCYTHE', '#d8e0e8');
+      trial.setMessage('Its scythe is yours. Walk into the gate to go home.', 5);
+      say(trial, 'You took the Warden\'s scythe. Walk into the gate to go home.');
+      Audio.music(null);
+    }
+  };
+
+  function revive(trial) {
+    var tut = trial.tut;
+    var p = trial.player;
+    tut.revives++;
+    p.dead = false;
+    p.hp = p.stats.maxHp;
+    p.stamina = p.stats.maxStamina;
+    p.invuln = 2;
+    p.x = REVIVE.x; p.y = REVIVE.y;
+    p.facing = -Math.PI / 2;
+    trial.burst(p.x, p.y - 20, 24, '#9b6bff');
+    Audio.play('warp');
+
+    /* The Warden is the one thing you get a single attempt at, so the scythe
+       stays worth having. Everything else you simply try again. */
+    if (tut.beatId === 'warden' && tut.warden && !tut.warden.dead) {
+      tut.warden.dead = true;
+      trial.boss = null;
+      for (var i = trial.enemies.length - 1; i >= 0; i--) trial.enemies[i].dead = true;
+      Audio.music(null);
+      trial.setMessage('The Warden lets you go. The scythe stays with it.', 4);
+      say(trial, 'You lost the Warden. Walk into the gate to go home.');
+    } else {
+      trial.setMessage('Down, but not out. Try that again.', 2.6);
+    }
+  }
+
+  /* ------------------------------------------------------------- rewards */
+
+  T.takeWeapon = function (trial, id) {
+    var sv = trial.game.save;
+    sv.weapons[id] = true;
+    sv.weapon = id;
+    trial.player.weaponId = id;
+    V.Save.write(sv);
+    trial.burst(trial.player.x, trial.player.y - 20, 20, '#ffe45c');
+    trial.floater(trial.player.x, trial.player.y - 54, D.WEAPONS[id].name, '#ffe45c');
+    Audio.play('confirm');
+    trial.setMessage(D.WEAPONS[id].name + ' - ' + D.WEAPONS[id].blurb, 4);
+  };
+
+  /* Pause-menu escape hatch. Hands over everything the beats would have given
+     you except the Warden's scythe, so skipping is a shortcut and not a
+     penalty - and never leaves you standing in trial 1 empty-handed. */
+  T.skip = function (trial) {
+    var sv = trial.game.save;
+    if (!sv.weapons.sword) sv.weapons.sword = true;
+    if (!sv.weapon || sv.weapon === 'none') sv.weapon = 'sword';
+    if (!sv.gem) sv.gem = { id: D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)] };
+    V.Save.write(sv);
+    trial.player.weaponId = sv.weapon;
+    trial.persistentPrompt = null;
+    trial.lockedActions = null;
+    Audio.music(null);
+    trial.objectiveDone = true;
+  };
+
+  /* the HUD's top-right progress readout */
+  T.progressText = function (trial) {
+    var tut = trial.tut;
+    if (!tut) return '';
+    return 'Step ' + (tut.index + 1) + ' / ' + BEATS.length;
+  };
+
+  T.BEATS = BEATS;
+  T.beatIds = function () {
+    var ids = [];
+    for (var i = 0; i < BEATS.length; i++) ids.push(BEATS[i].id);
+    return ids;
+  };
+
+  V.Tutorial = T;
 })(window.V = window.V || {});
 
 /* ===== src/js/ui.js ===== */
@@ -4380,6 +5150,23 @@ html, body {
   /* ==================================================================== HUD */
   var HUD = {};
 
+  /* A centred, wrapping caption bar. Tutorial prompts are full sentences, so
+     it has to wrap rather than run off the side of a phone. */
+  HUD.banner = function (ctx, txt, cw, y, s, size, colour) {
+    var maxW = Math.min(cw * 0.78, 420 * s);
+    var lines = UI.wrap(ctx, txt, maxW, size);
+    var lineH = (size + 4) * s;
+    var wide = 0;
+    for (var i = 0; i < lines.length; i++) wide = Math.max(wide, ctx.measureText(lines[i]).width);
+    var bw = wide + 26 * s, bh = lines.length * lineH + 10 * s;
+    UI.panel(ctx, cw / 2 - bw / 2, y, bw, bh, { fill: 'rgba(20,16,28,0.74)' });
+    for (var j = 0; j < lines.length; j++) {
+      UI.text(ctx, lines[j], cw / 2, y + 5 * s + lineH * (j + 0.5),
+        { size: size, align: 'center', colour: colour });
+    }
+    return bh;
+  };
+
   HUD.draw = function (ctx, trial, cw, ch) {
     var s = UI.setScale(cw, ch);
     var p = trial.player;
@@ -4397,6 +5184,13 @@ html, body {
       ctx.globalAlpha = f.alpha;
       UI.text(ctx, f.text, fx, fy, { size: 13, align: 'center', weight: '800', colour: f.colour });
     }
+    /* ---- world labels (pedestal names, the gate) - same treatment ---- */
+    var wls = trial.screenLabels || [];
+    for (var li = 0; li < wls.length; li++) {
+      var wl = wls[li];
+      UI.text(ctx, wl.text, (trial._originX + wl.x) * ps, (trial._originY + wl.y) * ps,
+        { size: 12, align: 'center', weight: '800', colour: wl.colour });
+    }
     ctx.globalAlpha = 1;
 
     /* ---- top-left: health + stamina (GDD 12) ---- */
@@ -4405,10 +5199,11 @@ html, body {
     UI.bar(ctx, pad, pad + 22 * s, barW * 0.86, 8 * s, p.stamina / p.stats.maxStamina, '#7fe08a');
     UI.text(ctx, Math.ceil(p.hp) + '/' + p.stats.maxHp, pad + barW + 8, pad + 9 * s, { size: 11, colour: 'rgba(255,255,255,0.9)' });
 
-    /* ---- top-middle: timer ---- */
-    var warn = trial.timeLeft < 15;
-    UI.text(ctx, U.fmtTime(trial.timeLeft), cw / 2, pad + 12 * s, {
-      size: 26, align: 'center', weight: '800', colour: warn ? '#ff8a8a' : '#fff'
+    /* ---- top-middle: timer (a dash when the trial has no clock) ---- */
+    var warn = !trial.untimed && trial.timeLeft < 15;
+    UI.text(ctx, trial.untimed ? '--:--' : U.fmtTime(trial.timeLeft), cw / 2, pad + 12 * s, {
+      size: 26, align: 'center', weight: '800',
+      colour: trial.untimed ? 'rgba(255,255,255,0.45)' : (warn ? '#ff8a8a' : '#fff')
     });
 
     /* ---- top-right: trial label + objective progress ---- */
@@ -4420,14 +5215,16 @@ html, body {
       trial.paused = !trial.paused;
     }
 
-    /* ---- objective banner ---- */
+    /* ---- objective banner ----
+       Instruction has to stay put: trial.message auto-clears after a couple of
+       seconds, which is right for a combat nudge and useless for "here is how
+       to move". persistentPrompt sits underneath and only the beat clears it. */
     if (trial.t < 6 || trial.message) {
-      var txt = trial.message || trial.objective.text;
-      UI.font(ctx, 14);
-      var tw = ctx.measureText(txt).width + 26 * s;
-      var bx = cw / 2 - tw / 2, by = pad + 34 * s;
-      UI.panel(ctx, bx, by, tw, 26 * s, { fill: 'rgba(20,16,28,0.7)' });
-      UI.text(ctx, txt, cw / 2, by + 13 * s, { size: 14, align: 'center' });
+      HUD.banner(ctx, trial.message || trial.objective.text, cw, pad + 34 * s, s, 14, '#fff');
+    }
+    if (trial.persistentPrompt) {
+      var py = pad + (trial.message || trial.t < 6 ? 64 : 34) * s;
+      HUD.banner(ctx, trial.persistentPrompt, cw, py, s, 13, '#ffe45c');
     }
 
     /* ---- hide-trial spotted warning ---- */
@@ -4444,26 +5241,29 @@ html, body {
 
     /* ---- bottom-right: action buttons ---- */
     var live = trial.state === 'play' && !trial.paused && !p.dead;
+    var lk = trial.lockedActions || {};
     var aR = 44 * s, sR = 31 * s, dR = 26 * s;
     var ax = cw - pad - aR - 6 * s, ay = ch - pad - aR - 6 * s;
-    if (UI.roundButton(ctx, 'attack', ax, ay, aR, 'ATK', { disabled: !live, size: 16 }) && live) p.tryAttack(false);
+    if (UI.roundButton(ctx, 'attack', ax, ay, aR, 'ATK', { disabled: !live || lk.attack, size: 16 })
+      && live && !lk.attack) p.tryAttack(false);
 
     var sx = ax - aR - sR + 6 * s, sy = ay - 12 * s;
     var wpn = D.WEAPONS[p.weaponId];
     if (UI.roundButton(ctx, 'special', sx, sy, sR, wpn.special.name, {
-      disabled: !live, size: 11, cooldown: p.specialCd, cooldownMax: wpn.special.cooldown
-    }) && live) p.tryAttack(true);
+      disabled: !live || lk.special, size: 11, cooldown: p.specialCd, cooldownMax: wpn.special.cooldown
+    }) && live && !lk.special) p.tryAttack(true);
 
     var dx = ax - 6 * s, dy = ay - aR - dR - 4 * s;
     if (UI.roundButton(ctx, 'dodge', dx, dy, dR, 'DODGE', {
-      disabled: !live, size: 9, cooldown: p.dodgeCd, cooldownMax: 0.85 * p.stats.dodgeCdMul
-    }) && live) p.tryDodge();
+      disabled: !live || lk.dodge, size: 9, cooldown: p.dodgeCd,
+      cooldownMax: V.E.DODGE_COOLDOWN * p.stats.dodgeCdMul
+    }) && live && !lk.dodge) p.tryDodge();
 
     var items = trial.consumables.potion + trial.consumables.tonic + trial.consumables.smoke;
     var ix = sx - sR - dR + 2 * s, iy = sy - 6 * s;
     if (UI.roundButton(ctx, 'item', ix, iy, dR, 'ITEM ' + items, {
-      disabled: !live || items <= 0, size: 9
-    }) && live) trial.useConsumable();
+      disabled: !live || lk.item || items <= 0, size: 9
+    }) && live && !lk.item) trial.useConsumable();
 
     /* ---- riddle panel ---- */
     if (trial.riddle && !trial.riddle.answered) HUD.drawRiddle(ctx, trial, cw, ch, s);
@@ -4477,6 +5277,7 @@ html, body {
 
   HUD.progressText = function (trial) {
     switch (trial.type) {
+      case 'tutorial': return V.Tutorial.progressText(trial);
       case 'defeat': return trial.kills + ' / ' + trial.target + ' slain';
       case 'seek': return (trial.target - (trial.enemiesLeft || trial.target)) + ' / ' + trial.target + ' found';
       case 'defend': return 'Ground ' + Math.ceil(trial.zone.hp) + '%';
@@ -4565,7 +5366,15 @@ html, body {
     if (UI.button(ctx, 'resume', x + 20 * s, y + 76 * s, w - 40 * s, 38 * s, 'Resume')) trial.paused = false;
     if (UI.button(ctx, 'sound', x + 20 * s, y + 122 * s, w - 40 * s, 34 * s,
       'Sound: ' + (Audio.enabled ? 'on' : 'off'))) Audio.setEnabled(!Audio.enabled);
-    if (UI.button(ctx, 'giveup', x + 20 * s, y + 164 * s, w - 40 * s, 34 * s, 'Abandon trial',
+    /* The tutorial cannot be abandoned - dying there just revives you - so the
+       same slot becomes a way out for anyone who already knows the game. */
+    if (trial.type === 'tutorial') {
+      if (UI.button(ctx, 'giveup', x + 20 * s, y + 164 * s, w - 40 * s, 34 * s, 'Skip the tutorial',
+        { fill: 'rgba(70,66,96,0.9)' })) {
+        trial.paused = false;
+        V.Tutorial.skip(trial);
+      }
+    } else if (UI.button(ctx, 'giveup', x + 20 * s, y + 164 * s, w - 40 * s, 34 * s, 'Abandon trial',
       { fill: 'rgba(120,40,52,0.9)' })) {
       trial.paused = false;
       trial.player.hp = 0;
@@ -4692,9 +5501,12 @@ html, body {
     var bh = 46 * s;
 
     if (UI.button(ctx, 'newgame', bx, by, bwid, bh, 'New Game')) this.game.newGame();
-    var canContinue = this.game.save.started;
+    var canContinue = Save.hasContinue(this.game.save);
+    var resumeAt = !this.game.save.tutorialDone ? 'the opening'
+      : 'Trial ' + this.game.save.trial;
     if (UI.button(ctx, 'continue', bx, by + bh + 14 * s, bwid, bh, 'Continue',
-      { disabled: !canContinue, sub: canContinue ? 'Trial ' + this.game.save.trial : 'no run yet' })) {
+      { disabled: !canContinue,
+        sub: canContinue ? resumeAt : (this.game.save.beatenGame ? 'run finished' : 'no run yet') })) {
       this.game.continueRun();
     }
 
@@ -4808,7 +5620,10 @@ html, body {
     this.game = game;
     this.mode = mode;                 /* 'intro' | 'hub' */
     this.t = 0;
-    this.introTimer = mode === 'intro' ? 11 : 0;
+    /* The bedroom is a mood beat, not a level. It used to run 11s, which is a
+       long time to look at a room you cannot leave; the square that follows it
+       is where the player actually gets to walk around. */
+    this.introTimer = mode === 'intro' ? 8 : 0;
     this.px = 0; this.py = 60;
     this.pfacing = -Math.PI / 2;
     this.animPhase = 0;
@@ -4862,12 +5677,12 @@ html, body {
 
     if (this.mode === 'intro') {
       this.introTimer -= dt;
-      if (this.introTimer < 7 && !this.saidTwo) {
+      if (this.introTimer < 4.5 && !this.saidTwo) {
         this.saidTwo = true;
-        this.dialog = 'Nothing in here is worth touching.';
+        this.dialog = 'Nothing in here is worth staying for. Go out.';
         this.dialogTime = 4;
       }
-      if (this.introTimer <= 0) this.game.startAbduction();
+      if (this.introTimer <= 0) this.game.enterSquare();
     }
   };
 
@@ -5095,6 +5910,333 @@ html, body {
     this._labels.push({ x: x, y: yy - 82, text: 'THE GATE', size: 12, colour: '#e0ccff' });
   };
 
+  /* ================================================================== SQUARE
+     The crowded plaza the player is taken from. It is deliberately the only
+     place in the game with people in it: everything after this is empty, and
+     the tutorial replays this exact square with the life drained out.
+
+     No combat, no entity classes - the crowd is plain data on a random walk,
+     drawn with the existing player sprite at assorted tints. */
+  var CROWD_TINTS = [
+    '#3d6fa8', '#a8563d', '#4f8a5e', '#8a4f7e', '#c2a061', '#5f6670',
+    '#b06a40', '#446b8a', '#7a5ea8', '#8c8f3f', '#a83d4f', '#3f8a8a'
+  ];
+
+  function SquareScene(game) {
+    this.game = game;
+    this.t = 0;
+    this.W = 900; this.H = 460;
+    this.px = 0; this.py = 170;
+    this.pfacing = -Math.PI / 2;
+    this.animPhase = 0;
+    this.moving = false;
+    this.fade = 1;
+    this.phase = 'walk';          /* walk -> arrival -> fall */
+    this.phaseTime = 0;
+    this.shake = 0;
+    this.dialog = 'Friday night. The square is packed.';
+    this.dialogTime = 4;
+    this.meet = { x: 0, y: -60, r: 78 };
+
+    /* the crowd: a fixed seed so the square looks the same every time */
+    var r = U.rng(U.hash('velthiros:square'));
+    this.crowd = [];
+    for (var i = 0; i < 26; i++) {
+      var a = r() * U.TAU, d = Math.sqrt(r()) * 0.5;
+      this.crowd.push({
+        x: Math.cos(a) * d * this.W, y: Math.sin(a) * d * this.H,
+        angle: r() * U.TAU, speed: 22 + r() * 26,
+        pauseFor: r() * 2.5, walkFor: 0,
+        tint: CROWD_TINTS[i % CROWD_TINTS.length],
+        phase: r() * 6, scatter: 0
+      });
+    }
+    Audio.music('calm');
+  }
+
+  SquareScene.prototype.update = function (dt) {
+    this.t += dt;
+    this.phaseTime += dt;
+    this.fade = Math.max(0, this.fade - dt * 0.8);
+    if (this.dialogTime > 0) {
+      this.dialogTime -= dt;
+      if (this.dialogTime <= 0) this.dialog = null;
+    }
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 1.4);
+
+    if (this.phase === 'walk') {
+      var mv = Input.move;
+      var speed = 150;
+      if (mv.mag > 0.08) {
+        this.px += mv.x * speed * mv.mag * dt;
+        this.py += mv.y * speed * mv.mag * dt;
+        this.pfacing = Math.atan2(mv.y, mv.x);
+        this.moving = true;
+        this.animPhase += dt * 12;
+      } else { this.moving = false; this.animPhase += dt * 2; }
+      this.px = U.clamp(this.px, -this.W / 2 + 30, this.W / 2 - 30);
+      this.py = U.clamp(this.py, -this.H / 2 + 30, this.H / 2 - 30);
+
+      if (this.t > 3 && !this.saidTwo) {
+        this.saidTwo = true;
+        this.dialog = 'Something under the paving is humming.';
+        this.dialogTime = 4;
+      }
+      /* reaching the middle triggers it; so does standing around long enough,
+         so the opening can never stall on a player who will not move */
+      var atMeet = U.dist2(this.px, this.py, this.meet.x, this.meet.y) < this.meet.r * this.meet.r;
+      if ((atMeet && this.t > 2) || this.t > 22) this.beginArrival();
+    } else {
+      this.moving = false;
+      this.animPhase += dt * 2;
+      /* the crowd runs for the edges */
+      for (var i = 0; i < this.crowd.length; i++) {
+        var n = this.crowd[i];
+        n.scatter = Math.min(1, n.scatter + dt * 0.9);
+        var away = Math.atan2(n.y - this.meet.y, n.x - this.meet.x);
+        n.angle = away;
+        n.x += Math.cos(away) * 210 * n.scatter * dt;
+        n.y += Math.sin(away) * 210 * n.scatter * dt;
+        n.phase += dt * 16;
+      }
+      if (this.phaseTime > 4.2) this.game.startAbduction();
+    }
+
+    if (this.phase === 'walk') this.updateCrowd(dt);
+    if (Input.wasPressed('skip')) this.game.startAbduction();
+  };
+
+  SquareScene.prototype.updateCrowd = function (dt) {
+    for (var i = 0; i < this.crowd.length; i++) {
+      var n = this.crowd[i];
+      if (n.pauseFor > 0) {
+        n.pauseFor -= dt;
+        if (n.pauseFor <= 0) { n.walkFor = 1 + Math.random() * 2.5; n.angle = Math.random() * U.TAU; }
+        continue;
+      }
+      n.walkFor -= dt;
+      if (n.walkFor <= 0) { n.pauseFor = 0.6 + Math.random() * 2.2; continue; }
+      n.x += Math.cos(n.angle) * n.speed * dt;
+      n.y += Math.sin(n.angle) * n.speed * dt;
+      n.phase += dt * 10;
+      /* turn back at the edges rather than piling up against them */
+      if (Math.abs(n.x) > this.W / 2 - 30 || Math.abs(n.y) > this.H / 2 - 30) {
+        n.x = U.clamp(n.x, -this.W / 2 + 30, this.W / 2 - 30);
+        n.y = U.clamp(n.y, -this.H / 2 + 30, this.H / 2 - 30);
+        n.angle += Math.PI;
+      }
+    }
+  };
+
+  SquareScene.prototype.beginArrival = function () {
+    this.phase = 'arrival';
+    this.phaseTime = 0;
+    this.shake = 1;
+    this.dialog = '"There you are."';
+    this.dialogTime = 4;
+    Audio.music(null);
+    Audio.play('warp');
+  };
+
+  SquareScene.prototype.render = function (ctx, cw, ch) {
+    var target = this.game.worldTarget();
+    this.renderWorld(target.ctx, target.w, target.h);
+    this.game.flushWorld(target);
+    this.renderUI(ctx, cw, ch);
+  };
+
+  SquareScene.prototype.renderWorld = function (ctx, cw, ch) {
+    var t = this.t, i;
+    var W = this.W, H = this.H, SQ = Art.SQUASH;
+    this._labels = [];
+    var zoom = U.clamp(Math.min(cw / (W + 80), (ch - 40) / (H * SQ + 220)), 0.3, 1.2);
+
+    /* night sky over the rooftops */
+    var sky = ctx.createLinearGradient(0, 0, 0, ch);
+    sky.addColorStop(0, '#0e1220');
+    sky.addColorStop(1, '#2b3446');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, cw, ch);
+
+    var sx = 0, sy = 0;
+    if (this.shake > 0) {
+      sx = Math.round((Math.random() - 0.5) * 10 * this.shake);
+      sy = Math.round((Math.random() - 0.5) * 10 * this.shake);
+    }
+    this._originX = Math.round(cw / 2) + sx;
+    this._originY = Math.round(ch / 2 + 40 * zoom) + sy;
+    this._zoom = zoom;
+
+    ctx.save();
+    ctx.translate(this._originX, this._originY);
+    ctx.scale(zoom, zoom);
+
+    var top = -H / 2 * SQ;
+
+    /* the block: towers and lit signage behind the plaza */
+    var towers = [
+      [-470, 250, 210, '#1b2130'], [-240, 190, 260, '#232a3c'], [-40, 150, 300, '#1b2130'],
+      [120, 210, 240, '#232a3c'], [340, 170, 250, '#1b2130']
+    ];
+    for (i = 0; i < towers.length; i++) {
+      var tw = towers[i];
+      ctx.fillStyle = tw[3];
+      ctx.fillRect(tw[0], top - tw[2], tw[1], tw[2] + 10);
+      /* lit windows */
+      var rw = U.rng(U.hash('tower' + i));
+      for (var wy = top - tw[2] + 14; wy < top - 16; wy += 22) {
+        for (var wx = tw[0] + 12; wx < tw[0] + tw[1] - 14; wx += 20) {
+          if (!rw.chance(0.55)) continue;
+          ctx.fillStyle = rw.chance(0.25) ? 'rgba(255,225,160,0.9)' : 'rgba(150,190,240,0.55)';
+          ctx.fillRect(wx, wy, 9, 11);
+        }
+      }
+    }
+    /* the big sign - the one thing that says "square" rather than "street" */
+    var signPulse = 0.65 + 0.35 * Math.sin(t * 2.4);
+    ctx.fillStyle = 'rgba(200,60,80,' + signPulse + ')';
+    ctx.fillRect(-120, top - 176, 250, 58);
+    ctx.fillStyle = 'rgba(255,225,160,' + (0.5 + 0.4 * Math.sin(t * 3.1)) + ')';
+    ctx.fillRect(-108, top - 164, 226, 12);
+    ctx.fillRect(-108, top - 142, 150, 12);
+    this._labels.push({ x: 5, y: top - 200, text: 'AURELIA SQUARE', size: 12, colour: '#ffd9a0' });
+
+    /* pavement and kerb, so the back of the square meets the buildings
+       instead of the slab ending in mid-air */
+    ctx.fillStyle = '#3a3f48';
+    ctx.fillRect(-W / 2 - 40, top - 26, W + 80, 30);
+    ctx.fillStyle = '#606770';
+    ctx.fillRect(-W / 2 - 40, top - 5, W + 80, 5);
+
+    /* the paving */
+    ctx.fillStyle = '#4f555f';
+    ctx.fillRect(-W / 2, top, W, H * SQ);
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    for (var gx = -W / 2; gx < W / 2; gx += 60) ctx.fillRect(gx, top, 2, H * SQ);
+    for (var gy = top; gy < top + H * SQ; gy += 38) ctx.fillRect(-W / 2, gy, W, 2);
+    /* warm spill from the signage */
+    var spill = ctx.createRadialGradient(0, top + 30, 20, 0, top + 30, 460);
+    spill.addColorStop(0, 'rgba(255,190,120,0.20)');
+    spill.addColorStop(1, 'rgba(255,190,120,0)');
+    ctx.fillStyle = spill;
+    ctx.fillRect(-W / 2, top, W, H * SQ);
+
+    /* the rift, once it opens */
+    if (this.phase !== 'walk') {
+      var open = U.clamp(this.phaseTime / 1.4, 0, 1);
+      var rr = 30 + open * 190;
+      var rg = ctx.createRadialGradient(this.meet.x, this.meet.y * SQ, 4, this.meet.x, this.meet.y * SQ, rr);
+      rg.addColorStop(0, 'rgba(255,220,255,0.95)');
+      rg.addColorStop(0.45, 'rgba(170,90,255,0.5)');
+      rg.addColorStop(1, 'rgba(60,20,90,0)');
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.ellipse(this.meet.x, this.meet.y * SQ, rr, rr * SQ, 0, 0, U.TAU);
+      ctx.fill();
+    } else {
+      /* before that it is only a hum in the stone */
+      var hum = 0.10 + 0.06 * Math.sin(t * 2.6);
+      ctx.strokeStyle = 'rgba(180,120,255,' + hum + ')';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(this.meet.x, this.meet.y * SQ, this.meet.r, this.meet.r * SQ, 0, 0, U.TAU);
+      ctx.stroke();
+    }
+
+    /* collect everyone, then draw after the restore so sprites land on the
+       pixel grid at an exact integer scale (same trick as RoomScene) */
+    var bodies = [];
+    var self = this;
+    function place(wx2, wy2) {
+      return { x: self._originX + wx2 * zoom + sx * 0, y: self._originY + wy2 * SQ * zoom };
+    }
+    for (i = 0; i < this.crowd.length; i++) {
+      var n = this.crowd[i];
+      var moving = this.phase !== 'walk' ? true : (n.pauseFor <= 0 && n.walkFor > 0);
+      /* once they scatter they run off the paving, so fade them as they go
+         rather than letting them jog away across the skyline */
+      var out = Math.max(Math.abs(n.x) / (W / 2), Math.abs(n.y) / (H / 2));
+      var fade = U.clamp(1 - (out - 1) * 3, 0, 1);
+      if (fade <= 0) continue;
+      ctx.globalAlpha = fade;
+      Art.shadow(ctx, n.x, n.y * SQ, 8);
+      ctx.globalAlpha = 1;
+      bodies.push({ y: n.y, at: place(n.x, n.y), facing: n.angle, phase: n.phase,
+                    moving: moving, tint: n.tint, alpha: fade });
+    }
+    Art.shadow(ctx, this.px, this.py * SQ, 9);
+    bodies.push({
+      y: this.py + 0.1, at: place(this.px, this.py), facing: this.pfacing,
+      phase: this.animPhase, moving: this.moving, tint: this.game.playerTint(), isPlayer: true
+    });
+
+    ctx.restore();
+
+    bodies.sort(function (a, b) { return a.y - b.y; });
+    for (i = 0; i < bodies.length; i++) {
+      var bd = bodies[i];
+      var view = V.E.viewOf(bd.facing);
+      var frame = V.E.walkFrame(bd.phase, bd.moving);
+      var opts = { flip: view.flip };
+      if (bd.alpha != null && bd.alpha < 1) opts.alpha = bd.alpha;
+      /* the player drops through the floor once the rift is fully open */
+      if (bd.isPlayer && this.phase !== 'walk' && this.phaseTime > 2.2) {
+        var f = U.clamp((this.phaseTime - 2.2) / 2, 0, 1);
+        opts.alpha = 1 - f;
+        opts.rot = f * 0.6;
+        bd.at.y += f * 34;
+      }
+      V.Px.draw(ctx, V.Spr.player(view.dir, frame, bd.tint), bd.at.x, bd.at.y, opts);
+    }
+
+    /* Garatu comes through the rift above the square */
+    if (this.phase !== 'walk' && this.phaseTime > 0.6) {
+      var em = U.clamp((this.phaseTime - 0.6) / 1.2, 0, 1);
+      var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
+      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2),
+        this._originX + this.meet.x * zoom,
+        this._originY + (this.meet.y * SQ - 40) * zoom,
+        { scale: gScale, alpha: em });
+    }
+  };
+
+  SquareScene.prototype.renderUI = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch);
+    var ps = this.game.pixScale || 1;
+    for (var li = 0; li < (this._labels || []).length; li++) {
+      var lb = this._labels[li];
+      UI.text(ctx, lb.text,
+        (this._originX + lb.x * this._zoom) * ps,
+        (this._originY + lb.y * this._zoom) * ps,
+        { size: lb.size, align: 'center', weight: '800', colour: lb.colour });
+    }
+
+    Input.stickEnabled = this.phase === 'walk';
+    if (this.phase === 'walk') {
+      V.HUD.drawStick(ctx, cw, ch, s);
+      UI.text(ctx, 'walk toward the middle of the square', cw / 2, ch - 22 * s,
+        { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+    }
+
+    if (this.dialog) {
+      var dw = Math.min(440 * s, cw - 40);
+      UI.panel(ctx, cw / 2 - dw / 2, ch - 74 * s, dw, 44 * s, { fill: 'rgba(14,10,22,0.85)' });
+      UI.text(ctx, this.dialog, cw / 2, ch - 52 * s, { size: 14, align: 'center', colour: 'rgba(255,240,220,0.92)' });
+    }
+
+    if (this.phase !== 'walk' && this.phaseTime > 2.6) {
+      ctx.fillStyle = 'rgba(0,0,0,' + U.clamp((this.phaseTime - 2.6) / 1.6, 0, 1) + ')';
+      ctx.fillRect(0, 0, cw, ch);
+    }
+    if (this.fade > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,' + this.fade + ')';
+      ctx.fillRect(0, 0, cw, ch);
+    }
+
+    Input.zone('skip', cw - 90 * s, 14 * s, 76 * s, 30 * s);
+    UI.button(ctx, 'skip', cw - 90 * s, 14 * s, 76 * s, 30 * s, 'Skip', { size: 12 });
+  };
+
   /* ================================================================ CUTSCENE
      GDD 2: Garatu arrives through a gate and takes the player. */
   function CutsceneScene(game, kind) {
@@ -5104,17 +6246,17 @@ html, body {
     this.beat = 0;
     this.lines = this.kind === 'abduction' ? [
       { at: 0.0, text: null },
-      { at: 1.6, text: 'The air splits open.' },
-      { at: 4.2, text: '"This is the first of many trials."' },
-      { at: 7.0, text: '"We hope you can entertain us more."' },
-      { at: 10.0, text: null }
+      { at: 1.2, text: 'The paving is gone. You are still falling.' },
+      { at: 4.0, text: '"This is the first of many trials."' },
+      { at: 6.8, text: '"We hope you can entertain us more."' },
+      { at: 9.4, text: null }
     ] : [
       { at: 0.0, text: null },
       { at: 1.4, text: '"Fifty trials. You are still standing."' },
       { at: 4.4, text: '"Then meet what waits underneath."' },
       { at: 7.4, text: null }
     ];
-    this.duration = this.kind === 'abduction' ? 12 : 9;
+    this.duration = this.kind === 'abduction' ? 11 : 9;
     Audio.music(null);
     Audio.play('warp');
   }
@@ -5159,14 +6301,33 @@ html, body {
         { scale: demonScale, alpha: em });
     }
 
-    /* the player, small, being lifted */
-    var lift = U.clamp((t - 6.5) / 3, 0, 1);
-    var pxx = U.lerp(cw * 0.28, gx - 40 * s, lift);
-    var pyy = U.lerp(ch * 0.62, gy + 10 * s, lift) - lift * 20 * s;
-    if (t < 10.5 || this.kind !== 'abduction') {
-      var pScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
-      Art.shadow(ctx, pxx, ch * 0.62, 16 * (1 - lift * 0.7), 0.2 * (1 - lift));
+    /* The player is falling past Garatu, not being carried off: the square
+       opened underneath and this is the drop. He holds roughly still on screen
+       and the shaft streaks upward behind him, which reads as a continuous
+       fall - moving the sprite down the screen instead just ends the shot. */
+    var pScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
+    if (this.kind === 'abduction') {
+      var pxx = cw * 0.3 + Math.sin(t * 0.9) * 30 * s;
+      var pyy = ch * 0.44 + Math.sin(t * 1.7) * 16 * s;
+      var rs = U.rng(1337);
+      var span = ch + 120 * s;
+      for (var st = 0; st < 26; st++) {
+        var lx = rs.range(0, cw);
+        var len = rs.range(30, 90) * s;
+        var speed = rs.range(380, 720) * s;
+        var ly = (rs.range(0, span) - t * speed) % span;
+        if (ly < 0) ly += span;
+        ctx.fillStyle = 'rgba(190,150,255,' + rs.range(0.06, 0.2).toFixed(3) + ')';
+        ctx.fillRect(lx, ly - 60 * s, 2 * s, len);
+      }
       V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), pxx, pyy,
+        { scale: pScale, rot: t * 1.1 });
+    } else {
+      var lift = U.clamp((t - 4.5) / 3, 0, 1);
+      var lxx = U.lerp(cw * 0.28, gx - 40 * s, lift);
+      var lyy = U.lerp(ch * 0.62, gy + 10 * s, lift) - lift * 20 * s;
+      Art.shadow(ctx, lxx, ch * 0.62, 16 * (1 - lift * 0.7), 0.2 * (1 - lift));
+      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), lxx, lyy,
         { scale: pScale, rot: lift * 0.5 });
     }
 
@@ -5436,6 +6597,7 @@ html, body {
   S.StartScene = StartScene;
   S.HelpScene = HelpScene;
   S.RoomScene = RoomScene;
+  S.SquareScene = SquareScene;
   S.CutsceneScene = CutsceneScene;
   S.ShopScene = ShopScene;
   S.RankingScene = RankingScene;
@@ -5581,21 +6743,33 @@ html, body {
   /* ============================================================== run flow */
   Game.prototype.newGame = function () {
     this.save = Save.newGame(this.save);
+    this.pendingResult = null;      /* never carry a finished trial into a fresh run */
     this.persist();
     if (this.forceTrial) {
       this.save.trial = this.forceTrial;
       this.save.gem = { id: D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)] };
       this.save.seenIntro = true;
+      this.save.tutorialDone = true;   /* the dev jump skips the guided opening */
       this.persist();
       return this.setScene(new S.RoomScene(this, 'hub'));
     }
     this.setScene(new S.RoomScene(this, 'intro'));
   };
 
+  /* The opening is bedroom -> square -> abduction -> tutorial -> hub.
+     Continue re-enters wherever the player stopped, so quitting halfway
+     through the tutorial resumes the tutorial rather than skipping it. */
   Game.prototype.continueRun = function () {
     if (!this.save.started) return;
     if (!this.save.seenIntro) return this.setScene(new S.RoomScene(this, 'intro'));
+    if (!this.save.tutorialDone) return this.enterTutorial();
     this.setScene(new S.RoomScene(this, 'hub'));
+  };
+
+  Game.prototype.enterSquare = function () {
+    this.save.tutorialStage = 'square';
+    this.persist();
+    this.setScene(new S.SquareScene(this));
   };
 
   Game.prototype.startAbduction = function () {
@@ -5606,17 +6780,30 @@ html, body {
     if (kind === 'abduction') {
       this.save.seenIntro = true;
       this.persist();
-      /* GDD 8: the gem is granted once, at random, no player input */
-      if (!this.save.gem) {
-        var id = D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)];
-        this.save.gem = { id: id };
-        this.persist();
-        return this.setScene(new S.GemScene(this, id));
-      }
-      return this.enterTrial();
+      /* The gem is no longer handed over here - the tutorial grants it in
+         beat 7, so the player has hands on the controls when it arrives. */
+      return this.enterTutorial();
     }
     /* endgame cutscene */
     this.enterTrial();
+  };
+
+  Game.prototype.enterTutorial = function () {
+    this.save.tutorialStage = 'trial';
+    this.persist();
+    var spec = {
+      index: 0, type: 'tutorial', boss: false, tutorial: true, untimed: true,
+      radius: V.Tutorial.RADIUS, env: D.TUTORIAL_ENVS[V.Tutorial.ENV],
+      seed: U.hash('velthiros:tutorial:' + this.save.resets), label: 'The Square'
+    };
+    this.setScene(new TrialScene(this, new V.Trial(this, spec)));
+  };
+
+  Game.prototype.finishTutorial = function () {
+    this.save.tutorialDone = true;
+    this.save.tutorialStage = null;
+    this.persist();
+    this.setScene(new S.RoomScene(this, 'hub'));
   };
 
   Game.prototype.gemTaken = function () { this.enterTrial(); };
@@ -5669,6 +6856,11 @@ html, body {
   Game.prototype.onTrialFinished = function (result) {
     var sv = this.save;
     var outcome = result.tier.outcome;
+
+    /* The tutorial is not ranked, not paid and not counted. A percentile on a
+       guided sequence is noise, and its deaths must not push anyone toward the
+       25-death wipe before the real game has started. */
+    if (result.trial.tutorial) return this.finishTutorial();
 
     if (result.died) {
       sv.deaths++;
@@ -5755,6 +6947,7 @@ html, body {
 
   Game.prototype.confirmFullReset = function () {
     this.save = Save.fullReset(this.save);
+    this.pendingResult = null;
     this.setScene(new S.StartScene(this));
   };
 

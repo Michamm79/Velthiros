@@ -110,9 +110,12 @@
     var bh = 46 * s;
 
     if (UI.button(ctx, 'newgame', bx, by, bwid, bh, 'New Game')) this.game.newGame();
-    var canContinue = this.game.save.started;
+    var canContinue = Save.hasContinue(this.game.save);
+    var resumeAt = !this.game.save.tutorialDone ? 'the opening'
+      : 'Trial ' + this.game.save.trial;
     if (UI.button(ctx, 'continue', bx, by + bh + 14 * s, bwid, bh, 'Continue',
-      { disabled: !canContinue, sub: canContinue ? 'Trial ' + this.game.save.trial : 'no run yet' })) {
+      { disabled: !canContinue,
+        sub: canContinue ? resumeAt : (this.game.save.beatenGame ? 'run finished' : 'no run yet') })) {
       this.game.continueRun();
     }
 
@@ -226,7 +229,10 @@
     this.game = game;
     this.mode = mode;                 /* 'intro' | 'hub' */
     this.t = 0;
-    this.introTimer = mode === 'intro' ? 11 : 0;
+    /* The bedroom is a mood beat, not a level. It used to run 11s, which is a
+       long time to look at a room you cannot leave; the square that follows it
+       is where the player actually gets to walk around. */
+    this.introTimer = mode === 'intro' ? 8 : 0;
     this.px = 0; this.py = 60;
     this.pfacing = -Math.PI / 2;
     this.animPhase = 0;
@@ -280,12 +286,12 @@
 
     if (this.mode === 'intro') {
       this.introTimer -= dt;
-      if (this.introTimer < 7 && !this.saidTwo) {
+      if (this.introTimer < 4.5 && !this.saidTwo) {
         this.saidTwo = true;
-        this.dialog = 'Nothing in here is worth touching.';
+        this.dialog = 'Nothing in here is worth staying for. Go out.';
         this.dialogTime = 4;
       }
-      if (this.introTimer <= 0) this.game.startAbduction();
+      if (this.introTimer <= 0) this.game.enterSquare();
     }
   };
 
@@ -513,6 +519,333 @@
     this._labels.push({ x: x, y: yy - 82, text: 'THE GATE', size: 12, colour: '#e0ccff' });
   };
 
+  /* ================================================================== SQUARE
+     The crowded plaza the player is taken from. It is deliberately the only
+     place in the game with people in it: everything after this is empty, and
+     the tutorial replays this exact square with the life drained out.
+
+     No combat, no entity classes - the crowd is plain data on a random walk,
+     drawn with the existing player sprite at assorted tints. */
+  var CROWD_TINTS = [
+    '#3d6fa8', '#a8563d', '#4f8a5e', '#8a4f7e', '#c2a061', '#5f6670',
+    '#b06a40', '#446b8a', '#7a5ea8', '#8c8f3f', '#a83d4f', '#3f8a8a'
+  ];
+
+  function SquareScene(game) {
+    this.game = game;
+    this.t = 0;
+    this.W = 900; this.H = 460;
+    this.px = 0; this.py = 170;
+    this.pfacing = -Math.PI / 2;
+    this.animPhase = 0;
+    this.moving = false;
+    this.fade = 1;
+    this.phase = 'walk';          /* walk -> arrival -> fall */
+    this.phaseTime = 0;
+    this.shake = 0;
+    this.dialog = 'Friday night. The square is packed.';
+    this.dialogTime = 4;
+    this.meet = { x: 0, y: -60, r: 78 };
+
+    /* the crowd: a fixed seed so the square looks the same every time */
+    var r = U.rng(U.hash('velthiros:square'));
+    this.crowd = [];
+    for (var i = 0; i < 26; i++) {
+      var a = r() * U.TAU, d = Math.sqrt(r()) * 0.5;
+      this.crowd.push({
+        x: Math.cos(a) * d * this.W, y: Math.sin(a) * d * this.H,
+        angle: r() * U.TAU, speed: 22 + r() * 26,
+        pauseFor: r() * 2.5, walkFor: 0,
+        tint: CROWD_TINTS[i % CROWD_TINTS.length],
+        phase: r() * 6, scatter: 0
+      });
+    }
+    Audio.music('calm');
+  }
+
+  SquareScene.prototype.update = function (dt) {
+    this.t += dt;
+    this.phaseTime += dt;
+    this.fade = Math.max(0, this.fade - dt * 0.8);
+    if (this.dialogTime > 0) {
+      this.dialogTime -= dt;
+      if (this.dialogTime <= 0) this.dialog = null;
+    }
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 1.4);
+
+    if (this.phase === 'walk') {
+      var mv = Input.move;
+      var speed = 150;
+      if (mv.mag > 0.08) {
+        this.px += mv.x * speed * mv.mag * dt;
+        this.py += mv.y * speed * mv.mag * dt;
+        this.pfacing = Math.atan2(mv.y, mv.x);
+        this.moving = true;
+        this.animPhase += dt * 12;
+      } else { this.moving = false; this.animPhase += dt * 2; }
+      this.px = U.clamp(this.px, -this.W / 2 + 30, this.W / 2 - 30);
+      this.py = U.clamp(this.py, -this.H / 2 + 30, this.H / 2 - 30);
+
+      if (this.t > 3 && !this.saidTwo) {
+        this.saidTwo = true;
+        this.dialog = 'Something under the paving is humming.';
+        this.dialogTime = 4;
+      }
+      /* reaching the middle triggers it; so does standing around long enough,
+         so the opening can never stall on a player who will not move */
+      var atMeet = U.dist2(this.px, this.py, this.meet.x, this.meet.y) < this.meet.r * this.meet.r;
+      if ((atMeet && this.t > 2) || this.t > 22) this.beginArrival();
+    } else {
+      this.moving = false;
+      this.animPhase += dt * 2;
+      /* the crowd runs for the edges */
+      for (var i = 0; i < this.crowd.length; i++) {
+        var n = this.crowd[i];
+        n.scatter = Math.min(1, n.scatter + dt * 0.9);
+        var away = Math.atan2(n.y - this.meet.y, n.x - this.meet.x);
+        n.angle = away;
+        n.x += Math.cos(away) * 210 * n.scatter * dt;
+        n.y += Math.sin(away) * 210 * n.scatter * dt;
+        n.phase += dt * 16;
+      }
+      if (this.phaseTime > 4.2) this.game.startAbduction();
+    }
+
+    if (this.phase === 'walk') this.updateCrowd(dt);
+    if (Input.wasPressed('skip')) this.game.startAbduction();
+  };
+
+  SquareScene.prototype.updateCrowd = function (dt) {
+    for (var i = 0; i < this.crowd.length; i++) {
+      var n = this.crowd[i];
+      if (n.pauseFor > 0) {
+        n.pauseFor -= dt;
+        if (n.pauseFor <= 0) { n.walkFor = 1 + Math.random() * 2.5; n.angle = Math.random() * U.TAU; }
+        continue;
+      }
+      n.walkFor -= dt;
+      if (n.walkFor <= 0) { n.pauseFor = 0.6 + Math.random() * 2.2; continue; }
+      n.x += Math.cos(n.angle) * n.speed * dt;
+      n.y += Math.sin(n.angle) * n.speed * dt;
+      n.phase += dt * 10;
+      /* turn back at the edges rather than piling up against them */
+      if (Math.abs(n.x) > this.W / 2 - 30 || Math.abs(n.y) > this.H / 2 - 30) {
+        n.x = U.clamp(n.x, -this.W / 2 + 30, this.W / 2 - 30);
+        n.y = U.clamp(n.y, -this.H / 2 + 30, this.H / 2 - 30);
+        n.angle += Math.PI;
+      }
+    }
+  };
+
+  SquareScene.prototype.beginArrival = function () {
+    this.phase = 'arrival';
+    this.phaseTime = 0;
+    this.shake = 1;
+    this.dialog = '"There you are."';
+    this.dialogTime = 4;
+    Audio.music(null);
+    Audio.play('warp');
+  };
+
+  SquareScene.prototype.render = function (ctx, cw, ch) {
+    var target = this.game.worldTarget();
+    this.renderWorld(target.ctx, target.w, target.h);
+    this.game.flushWorld(target);
+    this.renderUI(ctx, cw, ch);
+  };
+
+  SquareScene.prototype.renderWorld = function (ctx, cw, ch) {
+    var t = this.t, i;
+    var W = this.W, H = this.H, SQ = Art.SQUASH;
+    this._labels = [];
+    var zoom = U.clamp(Math.min(cw / (W + 80), (ch - 40) / (H * SQ + 220)), 0.3, 1.2);
+
+    /* night sky over the rooftops */
+    var sky = ctx.createLinearGradient(0, 0, 0, ch);
+    sky.addColorStop(0, '#0e1220');
+    sky.addColorStop(1, '#2b3446');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, cw, ch);
+
+    var sx = 0, sy = 0;
+    if (this.shake > 0) {
+      sx = Math.round((Math.random() - 0.5) * 10 * this.shake);
+      sy = Math.round((Math.random() - 0.5) * 10 * this.shake);
+    }
+    this._originX = Math.round(cw / 2) + sx;
+    this._originY = Math.round(ch / 2 + 40 * zoom) + sy;
+    this._zoom = zoom;
+
+    ctx.save();
+    ctx.translate(this._originX, this._originY);
+    ctx.scale(zoom, zoom);
+
+    var top = -H / 2 * SQ;
+
+    /* the block: towers and lit signage behind the plaza */
+    var towers = [
+      [-470, 250, 210, '#1b2130'], [-240, 190, 260, '#232a3c'], [-40, 150, 300, '#1b2130'],
+      [120, 210, 240, '#232a3c'], [340, 170, 250, '#1b2130']
+    ];
+    for (i = 0; i < towers.length; i++) {
+      var tw = towers[i];
+      ctx.fillStyle = tw[3];
+      ctx.fillRect(tw[0], top - tw[2], tw[1], tw[2] + 10);
+      /* lit windows */
+      var rw = U.rng(U.hash('tower' + i));
+      for (var wy = top - tw[2] + 14; wy < top - 16; wy += 22) {
+        for (var wx = tw[0] + 12; wx < tw[0] + tw[1] - 14; wx += 20) {
+          if (!rw.chance(0.55)) continue;
+          ctx.fillStyle = rw.chance(0.25) ? 'rgba(255,225,160,0.9)' : 'rgba(150,190,240,0.55)';
+          ctx.fillRect(wx, wy, 9, 11);
+        }
+      }
+    }
+    /* the big sign - the one thing that says "square" rather than "street" */
+    var signPulse = 0.65 + 0.35 * Math.sin(t * 2.4);
+    ctx.fillStyle = 'rgba(200,60,80,' + signPulse + ')';
+    ctx.fillRect(-120, top - 176, 250, 58);
+    ctx.fillStyle = 'rgba(255,225,160,' + (0.5 + 0.4 * Math.sin(t * 3.1)) + ')';
+    ctx.fillRect(-108, top - 164, 226, 12);
+    ctx.fillRect(-108, top - 142, 150, 12);
+    this._labels.push({ x: 5, y: top - 200, text: 'AURELIA SQUARE', size: 12, colour: '#ffd9a0' });
+
+    /* pavement and kerb, so the back of the square meets the buildings
+       instead of the slab ending in mid-air */
+    ctx.fillStyle = '#3a3f48';
+    ctx.fillRect(-W / 2 - 40, top - 26, W + 80, 30);
+    ctx.fillStyle = '#606770';
+    ctx.fillRect(-W / 2 - 40, top - 5, W + 80, 5);
+
+    /* the paving */
+    ctx.fillStyle = '#4f555f';
+    ctx.fillRect(-W / 2, top, W, H * SQ);
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    for (var gx = -W / 2; gx < W / 2; gx += 60) ctx.fillRect(gx, top, 2, H * SQ);
+    for (var gy = top; gy < top + H * SQ; gy += 38) ctx.fillRect(-W / 2, gy, W, 2);
+    /* warm spill from the signage */
+    var spill = ctx.createRadialGradient(0, top + 30, 20, 0, top + 30, 460);
+    spill.addColorStop(0, 'rgba(255,190,120,0.20)');
+    spill.addColorStop(1, 'rgba(255,190,120,0)');
+    ctx.fillStyle = spill;
+    ctx.fillRect(-W / 2, top, W, H * SQ);
+
+    /* the rift, once it opens */
+    if (this.phase !== 'walk') {
+      var open = U.clamp(this.phaseTime / 1.4, 0, 1);
+      var rr = 30 + open * 190;
+      var rg = ctx.createRadialGradient(this.meet.x, this.meet.y * SQ, 4, this.meet.x, this.meet.y * SQ, rr);
+      rg.addColorStop(0, 'rgba(255,220,255,0.95)');
+      rg.addColorStop(0.45, 'rgba(170,90,255,0.5)');
+      rg.addColorStop(1, 'rgba(60,20,90,0)');
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.ellipse(this.meet.x, this.meet.y * SQ, rr, rr * SQ, 0, 0, U.TAU);
+      ctx.fill();
+    } else {
+      /* before that it is only a hum in the stone */
+      var hum = 0.10 + 0.06 * Math.sin(t * 2.6);
+      ctx.strokeStyle = 'rgba(180,120,255,' + hum + ')';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(this.meet.x, this.meet.y * SQ, this.meet.r, this.meet.r * SQ, 0, 0, U.TAU);
+      ctx.stroke();
+    }
+
+    /* collect everyone, then draw after the restore so sprites land on the
+       pixel grid at an exact integer scale (same trick as RoomScene) */
+    var bodies = [];
+    var self = this;
+    function place(wx2, wy2) {
+      return { x: self._originX + wx2 * zoom + sx * 0, y: self._originY + wy2 * SQ * zoom };
+    }
+    for (i = 0; i < this.crowd.length; i++) {
+      var n = this.crowd[i];
+      var moving = this.phase !== 'walk' ? true : (n.pauseFor <= 0 && n.walkFor > 0);
+      /* once they scatter they run off the paving, so fade them as they go
+         rather than letting them jog away across the skyline */
+      var out = Math.max(Math.abs(n.x) / (W / 2), Math.abs(n.y) / (H / 2));
+      var fade = U.clamp(1 - (out - 1) * 3, 0, 1);
+      if (fade <= 0) continue;
+      ctx.globalAlpha = fade;
+      Art.shadow(ctx, n.x, n.y * SQ, 8);
+      ctx.globalAlpha = 1;
+      bodies.push({ y: n.y, at: place(n.x, n.y), facing: n.angle, phase: n.phase,
+                    moving: moving, tint: n.tint, alpha: fade });
+    }
+    Art.shadow(ctx, this.px, this.py * SQ, 9);
+    bodies.push({
+      y: this.py + 0.1, at: place(this.px, this.py), facing: this.pfacing,
+      phase: this.animPhase, moving: this.moving, tint: this.game.playerTint(), isPlayer: true
+    });
+
+    ctx.restore();
+
+    bodies.sort(function (a, b) { return a.y - b.y; });
+    for (i = 0; i < bodies.length; i++) {
+      var bd = bodies[i];
+      var view = V.E.viewOf(bd.facing);
+      var frame = V.E.walkFrame(bd.phase, bd.moving);
+      var opts = { flip: view.flip };
+      if (bd.alpha != null && bd.alpha < 1) opts.alpha = bd.alpha;
+      /* the player drops through the floor once the rift is fully open */
+      if (bd.isPlayer && this.phase !== 'walk' && this.phaseTime > 2.2) {
+        var f = U.clamp((this.phaseTime - 2.2) / 2, 0, 1);
+        opts.alpha = 1 - f;
+        opts.rot = f * 0.6;
+        bd.at.y += f * 34;
+      }
+      V.Px.draw(ctx, V.Spr.player(view.dir, frame, bd.tint), bd.at.x, bd.at.y, opts);
+    }
+
+    /* Garatu comes through the rift above the square */
+    if (this.phase !== 'walk' && this.phaseTime > 0.6) {
+      var em = U.clamp((this.phaseTime - 0.6) / 1.2, 0, 1);
+      var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
+      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2),
+        this._originX + this.meet.x * zoom,
+        this._originY + (this.meet.y * SQ - 40) * zoom,
+        { scale: gScale, alpha: em });
+    }
+  };
+
+  SquareScene.prototype.renderUI = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch);
+    var ps = this.game.pixScale || 1;
+    for (var li = 0; li < (this._labels || []).length; li++) {
+      var lb = this._labels[li];
+      UI.text(ctx, lb.text,
+        (this._originX + lb.x * this._zoom) * ps,
+        (this._originY + lb.y * this._zoom) * ps,
+        { size: lb.size, align: 'center', weight: '800', colour: lb.colour });
+    }
+
+    Input.stickEnabled = this.phase === 'walk';
+    if (this.phase === 'walk') {
+      V.HUD.drawStick(ctx, cw, ch, s);
+      UI.text(ctx, 'walk toward the middle of the square', cw / 2, ch - 22 * s,
+        { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+    }
+
+    if (this.dialog) {
+      var dw = Math.min(440 * s, cw - 40);
+      UI.panel(ctx, cw / 2 - dw / 2, ch - 74 * s, dw, 44 * s, { fill: 'rgba(14,10,22,0.85)' });
+      UI.text(ctx, this.dialog, cw / 2, ch - 52 * s, { size: 14, align: 'center', colour: 'rgba(255,240,220,0.92)' });
+    }
+
+    if (this.phase !== 'walk' && this.phaseTime > 2.6) {
+      ctx.fillStyle = 'rgba(0,0,0,' + U.clamp((this.phaseTime - 2.6) / 1.6, 0, 1) + ')';
+      ctx.fillRect(0, 0, cw, ch);
+    }
+    if (this.fade > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,' + this.fade + ')';
+      ctx.fillRect(0, 0, cw, ch);
+    }
+
+    Input.zone('skip', cw - 90 * s, 14 * s, 76 * s, 30 * s);
+    UI.button(ctx, 'skip', cw - 90 * s, 14 * s, 76 * s, 30 * s, 'Skip', { size: 12 });
+  };
+
   /* ================================================================ CUTSCENE
      GDD 2: Garatu arrives through a gate and takes the player. */
   function CutsceneScene(game, kind) {
@@ -522,17 +855,17 @@
     this.beat = 0;
     this.lines = this.kind === 'abduction' ? [
       { at: 0.0, text: null },
-      { at: 1.6, text: 'The air splits open.' },
-      { at: 4.2, text: '"This is the first of many trials."' },
-      { at: 7.0, text: '"We hope you can entertain us more."' },
-      { at: 10.0, text: null }
+      { at: 1.2, text: 'The paving is gone. You are still falling.' },
+      { at: 4.0, text: '"This is the first of many trials."' },
+      { at: 6.8, text: '"We hope you can entertain us more."' },
+      { at: 9.4, text: null }
     ] : [
       { at: 0.0, text: null },
       { at: 1.4, text: '"Fifty trials. You are still standing."' },
       { at: 4.4, text: '"Then meet what waits underneath."' },
       { at: 7.4, text: null }
     ];
-    this.duration = this.kind === 'abduction' ? 12 : 9;
+    this.duration = this.kind === 'abduction' ? 11 : 9;
     Audio.music(null);
     Audio.play('warp');
   }
@@ -577,14 +910,33 @@
         { scale: demonScale, alpha: em });
     }
 
-    /* the player, small, being lifted */
-    var lift = U.clamp((t - 6.5) / 3, 0, 1);
-    var pxx = U.lerp(cw * 0.28, gx - 40 * s, lift);
-    var pyy = U.lerp(ch * 0.62, gy + 10 * s, lift) - lift * 20 * s;
-    if (t < 10.5 || this.kind !== 'abduction') {
-      var pScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
-      Art.shadow(ctx, pxx, ch * 0.62, 16 * (1 - lift * 0.7), 0.2 * (1 - lift));
+    /* The player is falling past Garatu, not being carried off: the square
+       opened underneath and this is the drop. He holds roughly still on screen
+       and the shaft streaks upward behind him, which reads as a continuous
+       fall - moving the sprite down the screen instead just ends the shot. */
+    var pScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
+    if (this.kind === 'abduction') {
+      var pxx = cw * 0.3 + Math.sin(t * 0.9) * 30 * s;
+      var pyy = ch * 0.44 + Math.sin(t * 1.7) * 16 * s;
+      var rs = U.rng(1337);
+      var span = ch + 120 * s;
+      for (var st = 0; st < 26; st++) {
+        var lx = rs.range(0, cw);
+        var len = rs.range(30, 90) * s;
+        var speed = rs.range(380, 720) * s;
+        var ly = (rs.range(0, span) - t * speed) % span;
+        if (ly < 0) ly += span;
+        ctx.fillStyle = 'rgba(190,150,255,' + rs.range(0.06, 0.2).toFixed(3) + ')';
+        ctx.fillRect(lx, ly - 60 * s, 2 * s, len);
+      }
       V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), pxx, pyy,
+        { scale: pScale, rot: t * 1.1 });
+    } else {
+      var lift = U.clamp((t - 4.5) / 3, 0, 1);
+      var lxx = U.lerp(cw * 0.28, gx - 40 * s, lift);
+      var lyy = U.lerp(ch * 0.62, gy + 10 * s, lift) - lift * 20 * s;
+      Art.shadow(ctx, lxx, ch * 0.62, 16 * (1 - lift * 0.7), 0.2 * (1 - lift));
+      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), lxx, lyy,
         { scale: pScale, rot: lift * 0.5 });
     }
 
@@ -854,6 +1206,7 @@
   S.StartScene = StartScene;
   S.HelpScene = HelpScene;
   S.RoomScene = RoomScene;
+  S.SquareScene = SquareScene;
   S.CutsceneScene = CutsceneScene;
   S.ShopScene = ShopScene;
   S.RankingScene = RankingScene;

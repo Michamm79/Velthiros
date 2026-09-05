@@ -8,11 +8,17 @@
      so the arena grew and the player got much faster: 2500u across at 140u/s
      is ~18s edge to edge, with everything else scaled to match. */
   var ARENA_R = 1250;
-  var BARRIER_R = ARENA_R + 40;
 
   function Trial(game, spec) {
     this.game = game;
-    this.spec = spec;                       /* {index,type,env,seed,boss,wave,label} */
+    /* spec: { index, type, env, seed, label, boss?, finalBoss?, endgame?,
+               tutorial?, radius?, decor?, untimed?, music? } */
+    this.spec = spec;
+    /* Trials are round. The tutorial wants a smaller, less lonely plaza, so the
+       radius is per-trial - everything downstream (spawns, camera clamp, the
+       barrier ring) reads these rather than the module constants. */
+    this.radius = spec.radius || ARENA_R;
+    this.barrierR = this.radius + 40;
     this.env = spec.env;
     this.rng = U.rng(spec.seed);
     this.input = game.input;
@@ -43,6 +49,15 @@
     this.push = null;              /* the stone currently being pushed, if any */
     this.message = null; this.messageTime = 0;
 
+    /* --- scripted-sequence support (the tutorial; inert everywhere else) --- */
+    this.untimed = !!spec.untimed;   /* no clock, and no timeout loss */
+    this.persistentPrompt = null;    /* banner text that stays until cleared */
+    this.lockedActions = null;       /* { attack: true, ... } - HUD greys these out */
+    this.decor = [];                 /* hand-placed props, depth-sorted with bodies */
+    this.markers = [];               /* ground rings: pedestals, the exit gate */
+    this.worldLabels = [];           /* { x, y, text, colour } drawn by the HUD */
+    this.screenLabels = [];          /* the above, projected - filled each frame */
+
     this.stats = V.Save.resolveStats(game.save);
     this.player = new E.Player(this.stats, game.save.weapon, this);
     this.player.drawScale = 1.8;
@@ -65,8 +80,8 @@
       a = (i / ringCount) * U.TAU;
       var jitter = r.range(-14, 14);
       this.props.push({
-        x: Math.cos(a) * (BARRIER_R + jitter),
-        y: Math.sin(a) * (BARRIER_R + jitter),
+        x: Math.cos(a) * (this.barrierR + jitter),
+        y: Math.sin(a) * (this.barrierR + jitter),
         kind: this.env.barrier, s: r.range(1.0, 1.35), seed: r.int(0, 9999), solid: true
       });
     }
@@ -74,15 +89,18 @@
     for (i = 0; i < ringCount; i += 2) {
       a = (i / ringCount) * U.TAU + 0.04;
       this.props.push({
-        x: Math.cos(a) * (BARRIER_R + 62), y: Math.sin(a) * (BARRIER_R + 62),
+        x: Math.cos(a) * (this.barrierR + 62), y: Math.sin(a) * (this.barrierR + 62),
         kind: this.env.barrier, s: r.range(0.9, 1.2), seed: r.int(0, 9999)
       });
     }
 
-    /* cover (GDD 5 + 7.3) */
-    var bushes = 44 + r.int(0, 16);
+    /* cover (GDD 5 + 7.3), thinned in step with the floor area so a small
+       arena is dotted rather than carpeted. area === 1 at the default radius,
+       so the standard trials generate exactly what they always did. */
+    var area = (this.radius / ARENA_R) * (this.radius / ARENA_R);
+    var bushes = Math.max(8, Math.round((44 + r.int(0, 16)) * area));
     for (i = 0; i < bushes; i++) {
-      a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 120);
+      a = r() * U.TAU; d = Math.sqrt(r()) * (this.radius - 120);
       this.cover.push({
         x: Math.cos(a) * d, y: Math.sin(a) * d,
         kind: this.env.cover, s: r.range(0.9, 1.3), seed: r.int(0, 9999), r: 46
@@ -90,8 +108,9 @@
     }
 
     /* ground litter */
-    for (i = 0; i < 150; i++) {
-      a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 40);
+    var litter = Math.max(30, Math.round(150 * area));
+    for (i = 0; i < litter; i++) {
+      a = r() * U.TAU; d = Math.sqrt(r()) * (this.radius - 40);
       this.props.push({
         x: Math.cos(a) * d, y: Math.sin(a) * d,
         kind: r.chance(0.55) ? 'tuft' : this.env.litter,
@@ -101,7 +120,7 @@
 
     /* player start: near the south edge, looking in */
     this.player.x = 0;
-    this.player.y = ARENA_R * 0.62;
+    this.player.y = this.radius * 0.62;
     this.player.facing = -Math.PI / 2;
 
     this.setupObjective();
@@ -136,12 +155,12 @@
       this.objective = { text: 'Defeat the ' + (this.spec.finalBoss ? 'Aurelith' : 'Reaper') };
       this.timeLimit = this.spec.finalBoss ? 300 : 180;
       var bossId = this.spec.finalBoss ? 'aurelith' : 'reaper';
-      var boss = this.spawnEnemy(bossId, 0, -ARENA_R * 0.35, {
+      var boss = this.spawnEnemy(bossId, 0, -this.radius * 0.35, {
         hpScale: 0.7 + tier * 0.5, dmgScale: 0.8 + tier * 0.22, speedScale: 1
       });
       this.boss = boss;
       for (i = 0; i < 2 + Math.floor(tier); i++) {
-        p = this.randomPoint(200, ARENA_R - 150, 340);
+        p = this.randomPoint(200, this.radius - 150, 340);
         this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
       }
       this.par = boss.maxHp * 1.35 + 180;
@@ -152,6 +171,7 @@
     this.type = this.spec.type;
 
     switch (this.type) {
+      case 'tutorial': { V.Tutorial.setup(this); break; }
       case 'defeat': {
         var target = 6 + Math.round(tier * 5);
         this.target = target;
@@ -159,7 +179,7 @@
         this.objective = { text: 'Defeat ' + target + ' enemies' };
         var inField = Math.min(target, 5 + Math.floor(tier * 2));
         for (i = 0; i < inField; i++) {
-          p = this.randomPoint(160, ARENA_R - 120, 320);
+          p = this.randomPoint(160, this.radius - 120, 320);
           this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.remainingToSpawn = target - inField;
@@ -177,14 +197,14 @@
       }
       case 'deliver': {
         this.timeLimit = 100 + Math.round(tier * 12);
-        var rp = this.randomPoint(ARENA_R * 0.5, ARENA_R - 130, 500);
+        var rp = this.randomPoint(this.radius * 0.5, this.radius - 130, 500);
         this.relic = { x: rp.x, y: rp.y, taken: false };
         /* delivery point roughly opposite the relic */
         var ra = Math.atan2(rp.y, rp.x) + Math.PI;
-        this.delivery = { x: Math.cos(ra) * ARENA_R * 0.6, y: Math.sin(ra) * ARENA_R * 0.6, r: 95 };
+        this.delivery = { x: Math.cos(ra) * this.radius * 0.6, y: Math.sin(ra) * this.radius * 0.6, r: 95 };
         this.objective = { text: 'Collect the relic, deliver it' };
         for (i = 0; i < 4 + Math.floor(tier * 3); i++) {
-          p = this.randomPoint(220, ARENA_R - 120, 300);
+          p = this.randomPoint(220, this.radius - 120, 300);
           this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.par = 380 + this.timeLimit * 1.6;
@@ -200,7 +220,7 @@
           this.plates.push({ x: Math.cos(ang + 0.9) * 720, y: Math.sin(ang + 0.9) * 720, r: 56, filled: false });
         }
         for (i = 0; i < 2 + Math.floor(tier); i++) {
-          p = this.randomPoint(300, ARENA_R - 150, 420);
+          p = this.randomPoint(300, this.radius - 150, 420);
           this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
         }
         this.par = 430 + this.timeLimit * 1.5;
@@ -214,11 +234,11 @@
         this.riddle = { q: q.q, answer: q.a, options: opts, revealed: 0, answered: false, correct: false };
         this.objective = { text: 'Answer the riddle - hints are hidden in the arena' };
         for (i = 0; i < 3; i++) {
-          p = this.randomPoint(300, ARENA_R - 150, 300);
+          p = this.randomPoint(300, this.radius - 150, 300);
           this.hints.push({ x: p.x, y: p.y, found: false });
         }
         for (i = 0; i < 2 + Math.floor(tier * 1.5); i++) {
-          p = this.randomPoint(300, ARENA_R - 150, 420);
+          p = this.randomPoint(300, this.radius - 150, 420);
           this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
         }
         this.par = 420 + this.timeLimit * 1.4;
@@ -230,7 +250,7 @@
         this.spottedTime = 0;
         var hunters = 4 + Math.floor(tier * 2.5);
         for (i = 0; i < hunters; i++) {
-          p = this.randomPoint(340, ARENA_R - 120, 420);
+          p = this.randomPoint(340, this.radius - 120, 420);
           var h = this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
           h.def = Object.create(h.def);
           h.def.sight = h.def.sight * 1.3;
@@ -279,11 +299,11 @@
   };
 
   Trial.prototype.confine = function (ent) {
-    U.confineToCircle(ent, 0, 0, ARENA_R - (ent.radius || 12));
+    U.confineToCircle(ent, 0, 0, this.radius - (ent.radius || 12));
   };
 
   Trial.prototype.insideArena = function (x, y, pad) {
-    return U.dist2(x, y, 0, 0) < (ARENA_R - (pad || 0)) * (ARENA_R - (pad || 0));
+    return U.dist2(x, y, 0, 0) < (this.radius - (pad || 0)) * (this.radius - (pad || 0));
   };
 
   Trial.prototype.inCover = function (x, y) {
@@ -330,6 +350,17 @@
   Trial.prototype.onEnemyKilled = function (e) {
     this.kills++;
     if (this.type === 'seek') this.foundCount = (this.foundCount || 0) + 1;
+    if (this.type === 'tutorial') V.Tutorial.onEnemyKilled(this, e);
+  };
+
+  /* Two observation hooks the scripted beats need. Both are no-ops in a
+     normal trial, and both are called unconditionally from entities.js. */
+  Trial.prototype.onEnemyHurt = function (e, dmg) {
+    if (this.type === 'tutorial') V.Tutorial.onEnemyHurt(this, e, dmg);
+  };
+
+  Trial.prototype.onPlayerDodge = function () {
+    if (this.type === 'tutorial') V.Tutorial.onPlayerDodge(this);
   };
 
   /* ================================================================ update */
@@ -348,13 +379,15 @@
 
     /* ---- input ---- */
     var In = this.input;
-    if (In.wasPressed('attack')) {
+    /* a scripted beat can hold back an action until it has been taught */
+    var locked = this.lockedActions || {};
+    if (In.wasPressed('attack') && !locked.attack) {
       if (this.riddle && !this.riddle.answered && this.nearAnswerPad()) { /* handled in HUD taps */ }
       else p.tryAttack(false);
     }
-    if (In.wasPressed('special')) p.tryAttack(true);
-    if (In.wasPressed('dodge')) p.tryDodge();
-    if (In.wasPressed('item')) this.useConsumable();
+    if (In.wasPressed('special') && !locked.special) p.tryAttack(true);
+    if (In.wasPressed('dodge') && !locked.dodge) p.tryDodge();
+    if (In.wasPressed('item') && !locked.item) this.useConsumable();
 
     p.update(dt, In);
     this.updatePush(dt);
@@ -380,13 +413,17 @@
     }
 
     /* ---- timer & objective ---- */
-    this.timeLeft -= dt;
+    if (!this.untimed) this.timeLeft -= dt;
     this.updateObjective(dt);
 
+    /* updateObjective runs first on purpose: an untimed trial gets the chance
+       to revive the player before the death check below can end the run. */
     if (p.dead) return this.finish('death');
     if (this.objectiveDone) return this.finish('complete');
     if (this.objectiveFailed) return this.finish('objective');
-    if (this.timeLeft <= 0) return this.finish(this.type === 'hide' || this.type === 'defend' ? 'complete' : 'timeout');
+    if (!this.untimed && this.timeLeft <= 0) {
+      return this.finish(this.type === 'hide' || this.type === 'defend' ? 'complete' : 'timeout');
+    }
   };
 
   Trial.prototype.updateFx = function (dt) {
@@ -492,7 +529,7 @@
 
     if (ax === 'x') blk.x += dr * PUSH_SPEED * dt;
     else blk.y += dr * PUSH_SPEED * dt;
-    U.confineToCircle(blk, 0, 0, ARENA_R - 60);
+    U.confineToCircle(blk, 0, 0, this.radius - 60);
 
     /* pin the player square behind the stone and slide them onto its centre line */
     if (ax === 'x') {
@@ -517,6 +554,7 @@
     var p = this.player, i;
 
     switch (this.type) {
+      case 'tutorial': { V.Tutorial.update(this, dt); break; }
       case 'boss': {
         if (this.boss.dead || this.enemies.indexOf(this.boss) < 0) this.objectiveDone = true;
         break;
@@ -524,7 +562,7 @@
       case 'defeat': {
         /* trickle in the remainder */
         if (this.remainingToSpawn > 0 && this.enemies.length < 6) {
-          var sp = this.randomPoint(ARENA_R * 0.5, ARENA_R - 120, 380);
+          var sp = this.randomPoint(this.radius * 0.5, this.radius - 120, 380);
           this.spawnEnemy(this.pickEnemy(this.tier(), this.rng), sp.x, sp.y, this.scaleOpts);
           this.remainingToSpawn--;
         }
@@ -539,7 +577,7 @@
           for (i = 0; i < n; i++) {
             var a = Math.random() * U.TAU;
             this.spawnEnemy(this.pickEnemy(this.tier(), this.rng),
-              Math.cos(a) * (ARENA_R - 60), Math.sin(a) * (ARENA_R - 60), this.scaleOpts);
+              Math.cos(a) * (this.radius - 60), Math.sin(a) * (this.radius - 60), this.scaleOpts);
           }
         }
         /* enemies inside the zone chew on it */
@@ -785,6 +823,7 @@
     }
     this.project = P;
     this.screenFloaters = [];
+    this.screenLabels = [];
 
     this.drawGround(ctx, P, cw, ch);
 
@@ -812,6 +851,14 @@
       var sb = P(bl.x, bl.y);
       if (!visible(sb)) continue;
       list.push({ y: bl.y, spr: Spr.prop('stone', i), x: sb.x, sy: sb.y });
+    }
+    /* hand-placed scenery: already baked sprites, so they just join the sort */
+    for (i = 0; i < this.decor.length; i++) {
+      var dc = this.decor[i];
+      if (dc.hidden) continue;
+      var sd = P(dc.x, dc.y);
+      if (!visible(sd)) continue;
+      list.push({ y: dc.y, spr: dc.spr, x: sd.x, sy: sd.y + (dc.lift || 0) });
     }
 
     for (i = 0; i < this.enemies.length; i++) {
@@ -857,7 +904,7 @@
 
   Trial.prototype.drawGround = function (ctx, P, cw, ch) {
     var c = P(0, 0);
-    var r = ARENA_R * ZOOM;
+    var r = this.radius * ZOOM;
 
     ctx.save();
     ctx.beginPath();
@@ -925,6 +972,21 @@
       ctx.lineWidth = 2;
       ctx.stroke();
     }
+    /* scripted rings - weapon pedestals, the exit gate */
+    for (i = 0; i < this.markers.length; i++) {
+      var mk = this.markers[i];
+      if (mk.hidden) continue;
+      sp = P(mk.x, mk.y);
+      var mr = mk.r * ZOOM;
+      var puls = 0.16 + 0.08 * Math.sin(t * 3 + i);
+      ctx.fillStyle = U.rgba(mk.colour || '#ffe45c', mk.active === false ? 0.06 : puls);
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y, mr, mr * Art.SQUASH, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.strokeStyle = U.rgba(mk.colour || '#ffe45c', mk.active === false ? 0.25 : 0.9);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   };
 
   Trial.prototype.drawObjectiveOverlay = function (ctx, P) {
@@ -945,10 +1007,20 @@
       Px.draw(ctx, Spr.prop('hint', 0), sp.x, sp.y - 2 + bob);
     }
 
+    /* Labels are projected here but drawn by the HUD at full resolution: the
+       world buffer is ~240px tall, and text baked into it is unreadable. */
+    for (i = 0; i < this.worldLabels.length; i++) {
+      var wl = this.worldLabels[i];
+      if (wl.hidden) continue;
+      sp = P(wl.x, wl.y);
+      this.screenLabels.push({ x: sp.x, y: sp.y + (wl.lift || -34), text: wl.text, colour: wl.colour || '#ffe45c' });
+    }
+
     var target = null;
     if (this.relic && !this.relic.taken) target = this.relic;
     else if (this.delivery && this.relic && this.relic.taken) target = this.delivery;
     else if (this.zone) target = this.zone;
+    else if (this.guideTarget) target = this.guideTarget;
     if (target) this.drawGuide(ctx, P, target);
   };
 

@@ -17,7 +17,8 @@
       resets: 0,               /* how many full wipes this profile has seen */
       currency: 0,
       lifetimeEarned: 0,
-      gem: null,               /* { id, level } - granted in trial 1 */
+      gem: null,               /* { id } - granted during the tutorial. The level is
+                                  NOT stored: Save.gemLevel derives it from `cleared`. */
       weapon: 'sword',
       weapons: { sword: true },
       scytheUnlocked: false,
@@ -28,6 +29,8 @@
       debuff: null,            /* { id } applied to the next attempt only */
       lastRank: null,
       seenIntro: false,
+      tutorialDone: false,     /* cleared the guided opening; resets with a New Game */
+      tutorialStage: null,     /* 'intro' | 'square' | 'trial' - where Continue resumes */
       endgame: false,          /* reached the wave gauntlet */
       endgameWave: 0,
       beatenGame: false,
@@ -42,9 +45,17 @@
     try {
       var data = JSON.parse(raw);
       if (!data || data.version !== 1) return Save.blank();
+      /* A save written before the tutorial existed has no `tutorialDone` key.
+         Note this BEFORE the back-fill, or every existing player is dragged
+         back through the opening on Continue. */
+      var preTutorial = !('tutorialDone' in data);
+
       /* fill in anything a newer build added */
       var base = Save.blank();
       for (var k in base) if (!(k in data)) data[k] = base[k];
+
+      /* anyone who already saw the intro has effectively done the tutorial */
+      if (preTutorial) data.tutorialDone = !!data.seenIntro;
       /* an in-progress run keeps the combo it was created with, which is
          confusing while the combo is pinned for testing - apply the pin on load */
       if (D.FIXED_COMBO_INDEX != null) data.comboIndex = D.FIXED_COMBO_INDEX;
@@ -91,8 +102,11 @@
     return fresh;
   };
 
-  Save.hasContinue = function () {
-    var s = Save.load();
+  /* Takes the live state rather than re-reading localStorage, because the
+     Start Screen asks this every frame. Beating the game ends the run, so
+     Continue must not offer to replay the final boss forever. */
+  Save.hasContinue = function (state) {
+    var s = state || Save.load();
     return !!s.started && !s.beatenGame;
   };
 
@@ -130,7 +144,10 @@
       maxHp: 100, maxStamina: 100, staminaRegen: 20,
       speed: 190,                 /* ~13s to cross the 2500u arena - see arena.js */
       speedMul: 1, damageMul: 1, rangedMul: 1, defenceMul: 1,
-      dodgeCdMul: 1, dodgeDist: 310, evasion: 0, stealthMul: 1,
+      /* dodgeDist is a distance, not a speed. The player is ~108 world units
+         tall, so 170 is about 1.6 body-lengths - a sidestep past an enemy
+         rather than the 2.9-length leap it used to be. */
+      dodgeCdMul: 1, dodgeDist: 170, evasion: 0, stealthMul: 1,
       glide: false, pierce: false,
       weaponLevel: Save.weaponLevel(state),
       gemLevel: Save.gemLevel(state)

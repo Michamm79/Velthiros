@@ -5,6 +5,12 @@
   var U = V.U, D = V.D, Art = V.Art, Audio = V.Audio;
   var E = {};
 
+  /* how long a dodge takes; the distance travelled is Save.resolveStats.dodgeDist */
+  var DODGE_TIME = 0.2;
+  var DODGE_COOLDOWN = 0.58;
+  E.DODGE_TIME = DODGE_TIME;
+  E.DODGE_COOLDOWN = DODGE_COOLDOWN;
+
   /* facing angle -> which of the three authored views to use */
   function viewOf(facing) {
     var sy = Math.sin(facing), sx = Math.cos(facing);
@@ -83,11 +89,16 @@
 
     /* ------- dodge / glide ------- */
     if (this.dodgeTime > 0) {
+      /* Only integrate the time actually left in the dodge. Stepping a full dt
+         on the last frame overshot the distance by ~8% at 60fps and up to 25%
+         on a stutter, so the same input travelled different distances. */
+      var step = Math.min(dt, this.dodgeTime);
       this.dodgeTime -= dt;
-      var dodgeSpeed = this.stats.dodgeDist / 0.2;
-      this.x += Math.cos(this.dodgeAngle) * dodgeSpeed * dt;
-      this.y += Math.sin(this.dodgeAngle) * dodgeSpeed * dt;
-      this.z = this.stats.glide ? Math.sin((1 - this.dodgeTime / 0.2) * Math.PI) * 18 : 0;
+      var dodgeSpeed = this.stats.dodgeDist / DODGE_TIME;
+      this.x += Math.cos(this.dodgeAngle) * dodgeSpeed * step;
+      this.y += Math.sin(this.dodgeAngle) * dodgeSpeed * step;
+      this.z = this.stats.glide
+        ? Math.sin(U.clamp(1 - this.dodgeTime / DODGE_TIME, 0, 1) * Math.PI) * 18 : 0;
       this.moving = true;
       this.animPhase += dt * 18;
       w.confine(this);
@@ -231,11 +242,12 @@
     var mv = this.world.input.move;
     this.dodgeAngle = mv.mag > 0.15 ? Math.atan2(mv.y, mv.x) : this.facing;
     this.facing = this.dodgeAngle;
-    this.dodgeTime = 0.2;
-    this.dodgeCd = 0.58 * this.stats.dodgeCdMul;
+    this.dodgeTime = DODGE_TIME;
+    this.dodgeCd = DODGE_COOLDOWN * this.stats.dodgeCdMul;
     this.invuln = Math.max(this.invuln, 0.3);
     Audio.play('dodge');
     this.world.dust(this.x, this.y, 6);
+    this.world.onPlayerDodge && this.world.onPlayerDodge();
     return true;
   };
 
@@ -396,6 +408,15 @@
       return;
     }
 
+    /* a bolted-down training dummy: it takes hits and turns to face you,
+       but it never chases, wanders or swings back */
+    if (this.def.inert) {
+      this.moving = false;
+      this.facing = Math.atan2(p.y - this.y, p.x - this.x);
+      this.vx = 0; this.vy = 0;
+      return;
+    }
+
     var d = U.dist(this.x, this.y, p.x, p.y);
     var toP = Math.atan2(p.y - this.y, p.x - this.x);
 
@@ -538,13 +559,16 @@
     this.hp -= dmg;
     this.hurtFlash = 0.18;
     this.aggro = true;
-    var resist = this.def.boss ? 0.25 : (this.def.heavy ? 0.5 : 1);
+    var resist = this.def.inert ? 0 : (this.def.boss ? 0.25 : (this.def.heavy ? 0.5 : 1));
     this.vx += Math.cos(fromAngle) * knock * resist;
     this.vy += Math.sin(fromAngle) * knock * resist;
     this.world.floater(this.x, this.y - 36 - this.radius, String(Math.round(dmg)), '#fff0a8');
     this.world.burst(this.x, this.y - 18, 5, '#ffd66b');
     if (!this.def.boss && knock > 200) { this.state = 'stagger'; this.stateTime = 0; }
     if (this.state === 'idle') { this.state = 'chase'; this.stateTime = 0; }
+    /* every source of enemy damage in the game is the player, arrows included,
+       so this is the one place a scripted beat can watch for "you landed a hit" */
+    this.world.onEnemyHurt && this.world.onEnemyHurt(this, dmg);
     if (this.hp <= 0) this.die(src);
   };
 
@@ -558,7 +582,10 @@
     w.onEnemyKilled && w.onEnemyKilled(this);
   };
 
-  var ENEMY_SPRITE = { goblin: 'goblin', minotaur: 'minotaur', reaper: 'reaper', aurelith: 'aurelith' };
+  var ENEMY_SPRITE = {
+    goblin: 'goblin', minotaur: 'minotaur', reaper: 'reaper', aurelith: 'aurelith',
+    warden: 'warden', dummy: 'dummy'
+  };
 
   Enemy.prototype.draw = function (ctx, t) {
     if (this.dead) return;

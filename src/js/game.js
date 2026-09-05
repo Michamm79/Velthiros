@@ -133,21 +133,33 @@
   /* ============================================================== run flow */
   Game.prototype.newGame = function () {
     this.save = Save.newGame(this.save);
+    this.pendingResult = null;      /* never carry a finished trial into a fresh run */
     this.persist();
     if (this.forceTrial) {
       this.save.trial = this.forceTrial;
       this.save.gem = { id: D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)] };
       this.save.seenIntro = true;
+      this.save.tutorialDone = true;   /* the dev jump skips the guided opening */
       this.persist();
       return this.setScene(new S.RoomScene(this, 'hub'));
     }
     this.setScene(new S.RoomScene(this, 'intro'));
   };
 
+  /* The opening is bedroom -> square -> abduction -> tutorial -> hub.
+     Continue re-enters wherever the player stopped, so quitting halfway
+     through the tutorial resumes the tutorial rather than skipping it. */
   Game.prototype.continueRun = function () {
     if (!this.save.started) return;
     if (!this.save.seenIntro) return this.setScene(new S.RoomScene(this, 'intro'));
+    if (!this.save.tutorialDone) return this.enterTutorial();
     this.setScene(new S.RoomScene(this, 'hub'));
+  };
+
+  Game.prototype.enterSquare = function () {
+    this.save.tutorialStage = 'square';
+    this.persist();
+    this.setScene(new S.SquareScene(this));
   };
 
   Game.prototype.startAbduction = function () {
@@ -158,17 +170,30 @@
     if (kind === 'abduction') {
       this.save.seenIntro = true;
       this.persist();
-      /* GDD 8: the gem is granted once, at random, no player input */
-      if (!this.save.gem) {
-        var id = D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)];
-        this.save.gem = { id: id };
-        this.persist();
-        return this.setScene(new S.GemScene(this, id));
-      }
-      return this.enterTrial();
+      /* The gem is no longer handed over here - the tutorial grants it in
+         beat 7, so the player has hands on the controls when it arrives. */
+      return this.enterTutorial();
     }
     /* endgame cutscene */
     this.enterTrial();
+  };
+
+  Game.prototype.enterTutorial = function () {
+    this.save.tutorialStage = 'trial';
+    this.persist();
+    var spec = {
+      index: 0, type: 'tutorial', boss: false, tutorial: true, untimed: true,
+      radius: V.Tutorial.RADIUS, env: D.TUTORIAL_ENVS[V.Tutorial.ENV],
+      seed: U.hash('velthiros:tutorial:' + this.save.resets), label: 'The Square'
+    };
+    this.setScene(new TrialScene(this, new V.Trial(this, spec)));
+  };
+
+  Game.prototype.finishTutorial = function () {
+    this.save.tutorialDone = true;
+    this.save.tutorialStage = null;
+    this.persist();
+    this.setScene(new S.RoomScene(this, 'hub'));
   };
 
   Game.prototype.gemTaken = function () { this.enterTrial(); };
@@ -221,6 +246,11 @@
   Game.prototype.onTrialFinished = function (result) {
     var sv = this.save;
     var outcome = result.tier.outcome;
+
+    /* The tutorial is not ranked, not paid and not counted. A percentile on a
+       guided sequence is noise, and its deaths must not push anyone toward the
+       25-death wipe before the real game has started. */
+    if (result.trial.tutorial) return this.finishTutorial();
 
     if (result.died) {
       sv.deaths++;
@@ -307,6 +337,7 @@
 
   Game.prototype.confirmFullReset = function () {
     this.save = Save.fullReset(this.save);
+    this.pendingResult = null;
     this.setScene(new S.StartScene(this));
   };
 

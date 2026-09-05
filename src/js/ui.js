@@ -150,6 +150,23 @@
   /* ==================================================================== HUD */
   var HUD = {};
 
+  /* A centred, wrapping caption bar. Tutorial prompts are full sentences, so
+     it has to wrap rather than run off the side of a phone. */
+  HUD.banner = function (ctx, txt, cw, y, s, size, colour) {
+    var maxW = Math.min(cw * 0.78, 420 * s);
+    var lines = UI.wrap(ctx, txt, maxW, size);
+    var lineH = (size + 4) * s;
+    var wide = 0;
+    for (var i = 0; i < lines.length; i++) wide = Math.max(wide, ctx.measureText(lines[i]).width);
+    var bw = wide + 26 * s, bh = lines.length * lineH + 10 * s;
+    UI.panel(ctx, cw / 2 - bw / 2, y, bw, bh, { fill: 'rgba(20,16,28,0.74)' });
+    for (var j = 0; j < lines.length; j++) {
+      UI.text(ctx, lines[j], cw / 2, y + 5 * s + lineH * (j + 0.5),
+        { size: size, align: 'center', colour: colour });
+    }
+    return bh;
+  };
+
   HUD.draw = function (ctx, trial, cw, ch) {
     var s = UI.setScale(cw, ch);
     var p = trial.player;
@@ -167,6 +184,13 @@
       ctx.globalAlpha = f.alpha;
       UI.text(ctx, f.text, fx, fy, { size: 13, align: 'center', weight: '800', colour: f.colour });
     }
+    /* ---- world labels (pedestal names, the gate) - same treatment ---- */
+    var wls = trial.screenLabels || [];
+    for (var li = 0; li < wls.length; li++) {
+      var wl = wls[li];
+      UI.text(ctx, wl.text, (trial._originX + wl.x) * ps, (trial._originY + wl.y) * ps,
+        { size: 12, align: 'center', weight: '800', colour: wl.colour });
+    }
     ctx.globalAlpha = 1;
 
     /* ---- top-left: health + stamina (GDD 12) ---- */
@@ -175,10 +199,11 @@
     UI.bar(ctx, pad, pad + 22 * s, barW * 0.86, 8 * s, p.stamina / p.stats.maxStamina, '#7fe08a');
     UI.text(ctx, Math.ceil(p.hp) + '/' + p.stats.maxHp, pad + barW + 8, pad + 9 * s, { size: 11, colour: 'rgba(255,255,255,0.9)' });
 
-    /* ---- top-middle: timer ---- */
-    var warn = trial.timeLeft < 15;
-    UI.text(ctx, U.fmtTime(trial.timeLeft), cw / 2, pad + 12 * s, {
-      size: 26, align: 'center', weight: '800', colour: warn ? '#ff8a8a' : '#fff'
+    /* ---- top-middle: timer (a dash when the trial has no clock) ---- */
+    var warn = !trial.untimed && trial.timeLeft < 15;
+    UI.text(ctx, trial.untimed ? '--:--' : U.fmtTime(trial.timeLeft), cw / 2, pad + 12 * s, {
+      size: 26, align: 'center', weight: '800',
+      colour: trial.untimed ? 'rgba(255,255,255,0.45)' : (warn ? '#ff8a8a' : '#fff')
     });
 
     /* ---- top-right: trial label + objective progress ---- */
@@ -190,14 +215,16 @@
       trial.paused = !trial.paused;
     }
 
-    /* ---- objective banner ---- */
+    /* ---- objective banner ----
+       Instruction has to stay put: trial.message auto-clears after a couple of
+       seconds, which is right for a combat nudge and useless for "here is how
+       to move". persistentPrompt sits underneath and only the beat clears it. */
     if (trial.t < 6 || trial.message) {
-      var txt = trial.message || trial.objective.text;
-      UI.font(ctx, 14);
-      var tw = ctx.measureText(txt).width + 26 * s;
-      var bx = cw / 2 - tw / 2, by = pad + 34 * s;
-      UI.panel(ctx, bx, by, tw, 26 * s, { fill: 'rgba(20,16,28,0.7)' });
-      UI.text(ctx, txt, cw / 2, by + 13 * s, { size: 14, align: 'center' });
+      HUD.banner(ctx, trial.message || trial.objective.text, cw, pad + 34 * s, s, 14, '#fff');
+    }
+    if (trial.persistentPrompt) {
+      var py = pad + (trial.message || trial.t < 6 ? 64 : 34) * s;
+      HUD.banner(ctx, trial.persistentPrompt, cw, py, s, 13, '#ffe45c');
     }
 
     /* ---- hide-trial spotted warning ---- */
@@ -214,26 +241,29 @@
 
     /* ---- bottom-right: action buttons ---- */
     var live = trial.state === 'play' && !trial.paused && !p.dead;
+    var lk = trial.lockedActions || {};
     var aR = 44 * s, sR = 31 * s, dR = 26 * s;
     var ax = cw - pad - aR - 6 * s, ay = ch - pad - aR - 6 * s;
-    if (UI.roundButton(ctx, 'attack', ax, ay, aR, 'ATK', { disabled: !live, size: 16 }) && live) p.tryAttack(false);
+    if (UI.roundButton(ctx, 'attack', ax, ay, aR, 'ATK', { disabled: !live || lk.attack, size: 16 })
+      && live && !lk.attack) p.tryAttack(false);
 
     var sx = ax - aR - sR + 6 * s, sy = ay - 12 * s;
     var wpn = D.WEAPONS[p.weaponId];
     if (UI.roundButton(ctx, 'special', sx, sy, sR, wpn.special.name, {
-      disabled: !live, size: 11, cooldown: p.specialCd, cooldownMax: wpn.special.cooldown
-    }) && live) p.tryAttack(true);
+      disabled: !live || lk.special, size: 11, cooldown: p.specialCd, cooldownMax: wpn.special.cooldown
+    }) && live && !lk.special) p.tryAttack(true);
 
     var dx = ax - 6 * s, dy = ay - aR - dR - 4 * s;
     if (UI.roundButton(ctx, 'dodge', dx, dy, dR, 'DODGE', {
-      disabled: !live, size: 9, cooldown: p.dodgeCd, cooldownMax: 0.85 * p.stats.dodgeCdMul
-    }) && live) p.tryDodge();
+      disabled: !live || lk.dodge, size: 9, cooldown: p.dodgeCd,
+      cooldownMax: V.E.DODGE_COOLDOWN * p.stats.dodgeCdMul
+    }) && live && !lk.dodge) p.tryDodge();
 
     var items = trial.consumables.potion + trial.consumables.tonic + trial.consumables.smoke;
     var ix = sx - sR - dR + 2 * s, iy = sy - 6 * s;
     if (UI.roundButton(ctx, 'item', ix, iy, dR, 'ITEM ' + items, {
-      disabled: !live || items <= 0, size: 9
-    }) && live) trial.useConsumable();
+      disabled: !live || lk.item || items <= 0, size: 9
+    }) && live && !lk.item) trial.useConsumable();
 
     /* ---- riddle panel ---- */
     if (trial.riddle && !trial.riddle.answered) HUD.drawRiddle(ctx, trial, cw, ch, s);
@@ -247,6 +277,7 @@
 
   HUD.progressText = function (trial) {
     switch (trial.type) {
+      case 'tutorial': return V.Tutorial.progressText(trial);
       case 'defeat': return trial.kills + ' / ' + trial.target + ' slain';
       case 'seek': return (trial.target - (trial.enemiesLeft || trial.target)) + ' / ' + trial.target + ' found';
       case 'defend': return 'Ground ' + Math.ceil(trial.zone.hp) + '%';
@@ -335,7 +366,15 @@
     if (UI.button(ctx, 'resume', x + 20 * s, y + 76 * s, w - 40 * s, 38 * s, 'Resume')) trial.paused = false;
     if (UI.button(ctx, 'sound', x + 20 * s, y + 122 * s, w - 40 * s, 34 * s,
       'Sound: ' + (Audio.enabled ? 'on' : 'off'))) Audio.setEnabled(!Audio.enabled);
-    if (UI.button(ctx, 'giveup', x + 20 * s, y + 164 * s, w - 40 * s, 34 * s, 'Abandon trial',
+    /* The tutorial cannot be abandoned - dying there just revives you - so the
+       same slot becomes a way out for anyone who already knows the game. */
+    if (trial.type === 'tutorial') {
+      if (UI.button(ctx, 'giveup', x + 20 * s, y + 164 * s, w - 40 * s, 34 * s, 'Skip the tutorial',
+        { fill: 'rgba(70,66,96,0.9)' })) {
+        trial.paused = false;
+        V.Tutorial.skip(trial);
+      }
+    } else if (UI.button(ctx, 'giveup', x + 20 * s, y + 164 * s, w - 40 * s, 34 * s, 'Abandon trial',
       { fill: 'rgba(120,40,52,0.9)' })) {
       trial.paused = false;
       trial.player.hp = 0;

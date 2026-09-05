@@ -41,6 +41,17 @@
   };
   D.WEAPON_ORDER = ['sword', 'battleaxe', 'bow', 'scythe'];
 
+  /* Empty hands, for the stretch of the tutorial before you pick. It is a real
+     entry rather than a null so the HUD and the attack code need no special
+     case; it is kept out of WEAPON_ORDER so it never reaches a shop. */
+  D.WEAPONS.none = {
+    id: 'none', name: 'Unarmed', kind: 'melee', owned: true, price: 0,
+    damage: 3, arc: 1.1, range: 56, windup: 0.08, recover: 0.26, stamina: 6,
+    moveScale: 0.9, knock: 60,
+    special: { name: '--', damage: 0, arc: 0.4, range: 40, windup: 0.1, recover: 0.2, stamina: 999, cooldown: 1 },
+    blurb: 'Nothing but your fists.'
+  };
+
   /* ----------------------------------------------------------------- gems
      GDD 8. One is granted at random during the first trial and levels up. */
   D.GEMS = {
@@ -65,8 +76,9 @@
     wingshard: {
       id: 'wingshard', name: 'Wingshard', colour: '#f0e6ff', glow: '#ffffff',
       role: 'Jump / Glide',
-      desc: function (l) { return 'Dodge becomes a glide: +' + (30 * l) + ' distance, vaults bushes'; },
-      apply: function (s, l) { s.glide = true; s.dodgeDist += 30 * l; }
+      /* scaled with the shorter base dodge: 170 -> 260 at level V */
+      desc: function (l) { return 'Dodge becomes a glide: +' + (18 * l) + ' distance'; },
+      apply: function (s, l) { s.glide = true; s.dodgeDist += 18 * l; }
     },
     stormshard: {
       id: 'stormshard', name: 'Stormshard', colour: '#ffe45c', glow: '#fff7c2',
@@ -105,6 +117,21 @@
       radius: 40, attackRange: 150, attackWindup: 0.52, attackRecover: 0.54,
       score: 1200, reward: 900, colour: '#e9e2ea', dark: '#2a2331', boss: true, finalBoss: true,
       teleport: true
+    },
+    /* --- tutorial only; never enters the trial rotation --- */
+    dummy: {
+      id: 'dummy', name: 'Straw Dummy', hp: 40, speed: 0, damage: 0, sight: 0,
+      radius: 16, attackRange: 0, attackWindup: 1, attackRecover: 1,
+      score: 0, reward: 0, colour: '#d8c188', dark: '#b09a5c', inert: true
+    },
+    warden: {
+      /* Slower and far more telegraphed than a Reaper, but it hits like one.
+         Beatable on the tutorial's terms - dodge the wind-up, punish the
+         recovery - which is exactly the lesson the preceding beats taught. */
+      id: 'warden', name: 'Warden', hp: 560, speed: 128, damage: 24, sight: 4000,
+      radius: 28, attackRange: 118, attackWindup: 0.62, attackRecover: 0.62,
+      score: 0, reward: 0, colour: '#5c2b4a', dark: '#3a1830', boss: true,
+      heavy: true, charge: true
     }
   };
 
@@ -126,6 +153,18 @@
     { id: 'desert', name: 'Dunes', ground: '#d0ac68', ground2: '#bd9955', accent: '#9a7a3d',
       barrier: 'cactus', cover: 'shrub', sky: '#c98f52', litter: 'rock' }
   ];
+
+  /* The two plaza skins live OUTSIDE D.ENVIRONMENTS on purpose: makeSpec picks
+     a trial's environment with `hash % ENVIRONMENTS.length`, so appending here
+     would silently re-roll the environment of all 50 trials. */
+  D.TUTORIAL_ENVS = {
+    /* the living square: warm shopfront glow under a night sky */
+    square: { id: 'square', name: 'Aurelia Square', ground: '#6e747d', ground2: '#5f656d',
+      accent: '#464b52', barrier: 'wall', cover: 'crate', sky: '#2b3446', litter: 'rock' },
+    /* the same square after the fall - identical tiles, all the life drained out */
+    drained: { id: 'drained', name: 'Aurelia Square', ground: '#4c525b', ground2: '#40454d',
+      accent: '#2e3238', barrier: 'wall', cover: 'crate', sky: '#171b26', litter: 'rock' }
+  };
 
 
   /* -------------------------------------------------------------- trials

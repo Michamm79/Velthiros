@@ -25,6 +25,13 @@
     return target;
   };
 
+  /* '#rrggbb' + alpha -> 'rgba(r,g,b,a)'. Short hex is not supported: every
+     colour in the game comes from the locked palette, which is all 6-digit. */
+  U.rgba = function (hex, alpha) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
+  };
+
   U.easeOut = function (t) { return 1 - (1 - t) * (1 - t); };
   U.easeIn = function (t) { return t * t; };
   U.easeInOut = function (t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; };

@@ -247,6 +247,63 @@
     });
   };
 
+  /* The Warden: the tutorial's optional boss. Heavier and squarer than a
+     Reaper, in the same demon palette as Garatu so it reads as his creature. */
+  Spr.warden = function (dir, frame) {
+    return cached('wd:' + dir + frame, function () {
+      return Px.make(28, 40, function (g) {
+        var cx = 14;
+        var bob = frame ? 1 : 0;
+        var top = 4 + bob;
+
+        /* legs, planted wide */
+        g.rect('4', cx - 8, top + 26, 5, 9);
+        g.rect('4', cx + 3, top + 26, 5, 9);
+        g.rect('9', cx - 8, top + 33, 5, 2);
+        g.rect('9', cx + 3, top + 33, 5, 2);
+
+        /* slab torso with heavy plate */
+        g.rect('5', cx - 8, top + 12, 17, 15);
+        g.rect('6', cx - 7, top + 13, 6, 13);
+        g.rect('4', cx + 4, top + 13, 4, 13);
+        g.rect('A', cx - 8, top + 16, 17, 3);        /* chest band */
+        g.rect('a', cx - 8, top + 16, 17, 1);
+        g.rect('A', cx - 2, top + 12, 5, 15);        /* centre strap */
+
+        /* pauldrons */
+        g.oval('A', cx - 9, top + 13, 4, 3);
+        g.oval('A', cx + 9, top + 13, 4, 3);
+        g.oval('a', cx - 9, top + 12, 2, 1);
+        g.oval('a', cx + 9, top + 12, 2, 1);
+
+        /* arms */
+        g.rect('6', cx - 11, top + 16, 3, 9);
+        g.rect('6', cx + 9, top + 16, 3, 9);
+        g.rect('7', cx - 11, top + 24, 3, 3);
+        g.rect('7', cx + 9, top + 24, 3, 3);
+
+        /* horned helm */
+        g.oval('5', cx, top + 6, 5, 5);
+        g.rect('4', cx + 2, top + 3, 3, 7);
+        g.rect('A', cx - 6, top + 2, 13, 3);         /* brow */
+        g.line('A', cx - 6, top + 2, cx - 9, top - 2);
+        g.line('A', cx + 6, top + 2, cx + 9, top - 2);
+        if (dir !== 'up') {
+          g.set(cx - 3, top + 6, '8'); g.set(cx + 3, top + 6, '8');
+          g.set(cx - 3, top + 7, 'X'); g.set(cx + 3, top + 7, 'X');
+        }
+        if (dir === 'side') g.rect('4', cx - 6, top + 4, 4, 6);
+
+        g.outline('K');
+      });
+    });
+  };
+
+  /* the training dummy is an enemy so it can be hit, but it is scenery */
+  Spr.dummy = function (dir, frame) {
+    return cached('dm:' + dir + frame, function () { return Spr.prop('dummy', 0); });
+  };
+
   Spr.aurelith = function (frame) {
     return cached('au:' + frame, function () {
       return Px.make(56, 60, function (g) {
@@ -540,10 +597,111 @@
     });
   }
 
+  /* ------------------------------------------------------- plaza furniture */
+
+  function pedestal() {
+    return Px.make(20, 26, function (g) {
+      g.rect('R', 2, 18, 16, 6);        /* base */
+      g.rect('r', 3, 19, 14, 3);
+      g.rect('R', 5, 8, 10, 11);        /* column */
+      g.rect('r', 6, 9, 4, 10);
+      g.rect('q', 4, 5, 12, 4);         /* cap */
+      g.rect('r', 5, 6, 10, 2);
+      g.rect('x', 8, 12, 4, 4);         /* inset socket */
+      g.outline('K');
+    });
+  }
+
+  function dummyProp() {
+    /* a straw torso lashed to a post - deliberately non-threatening */
+    return Px.make(18, 30, function (g) {
+      g.rect('W', 8, 18, 3, 11);        /* post */
+      g.rect('w', 8, 18, 1, 11);
+      g.rect('W', 3, 14, 13, 2);        /* crossbar */
+      g.oval('T', 9, 12, 5, 6);         /* body */
+      g.oval('t', 8, 11, 4, 5);
+      g.oval('u', 7, 9, 2, 2);
+      g.rect('W', 4, 12, 2, 5);         /* bound arms */
+      g.rect('W', 13, 12, 2, 5);
+      g.oval('t', 9, 4, 3, 3);          /* sack head */
+      g.set(8, 4, 'K'); g.set(11, 4, 'K');
+      g.rect('n', 6, 13, 7, 1);         /* target band */
+      g.outline('K');
+    });
+  }
+
+  function lamp() {
+    return Px.make(14, 40, function (g) {
+      g.rect('A', 5, 34, 5, 5);         /* footing */
+      g.rect('R', 6, 10, 3, 25);        /* pole */
+      g.rect('A', 6, 10, 1, 25);
+      g.rect('A', 4, 6, 7, 5);          /* housing */
+      g.rect('Y', 5, 7, 5, 3);          /* lit pane */
+      g.rect('Q', 6, 8, 3, 1);
+      g.rect('A', 4, 3, 7, 3);          /* cowl */
+      g.outline('K');
+    });
+  }
+
+  function bench() {
+    return Px.make(26, 18, function (g) {
+      g.rect('W', 3, 12, 3, 5);         /* legs */
+      g.rect('W', 20, 12, 3, 5);
+      g.rect('v', 2, 9, 22, 3);         /* seat */
+      g.rect('w', 2, 11, 22, 1);
+      g.rect('v', 2, 4, 22, 2);         /* back slats */
+      g.rect('v', 2, 7, 22, 2);
+      g.rect('W', 3, 4, 2, 6);
+      g.rect('W', 21, 4, 2, 6);
+      g.outline('K');
+    });
+  }
+
+  function kiosk() {
+    return Px.make(30, 32, function (g) {
+      g.rect('W', 2, 12, 26, 19);       /* body */
+      g.rect('w', 3, 13, 12, 17);
+      g.rect('v', 4, 16, 9, 10);        /* serving window */
+      g.rect('x', 5, 17, 7, 8);
+      g.rect('n', 1, 7, 28, 6);         /* awning */
+      g.rect('Q', 1, 7, 28, 2);
+      for (var i = 0; i < 5; i++) g.rect('N', 2 + i * 6, 9, 3, 4);
+      g.rect('W', 2, 29, 26, 2);
+      g.outline('K');
+    });
+  }
+
+  function gatePost() {
+    /* half of the exit arch: two of these flank the way out */
+    return Px.make(16, 40, function (g) {
+      g.rect('R', 3, 8, 10, 30);
+      g.rect('r', 4, 9, 4, 28);
+      g.rect('q', 2, 4, 12, 5);         /* capital */
+      g.rect('r', 3, 5, 10, 3);
+      g.rect('P', 5, 14, 6, 12);        /* portal glow inset */
+      g.rect('p', 6, 15, 4, 10);
+      g.speckle('x', 4, 10, 8, 26, 12, 5);
+      g.outline('K');
+    });
+  }
+
+  function gemProp() {
+    return Px.make(12, 16, function (g) {
+      g.oval('p', 6, 8, 3, 4);
+      g.rect('P', 3, 8, 6, 4);
+      g.set(5, 5, 'Q'); g.set(6, 6, 'Q');
+      g.rect('p', 4, 4, 4, 3);
+      g.set(6, 11, 'Q');
+      g.outline('K');
+    });
+  }
+
   var PROPS = {
     tree: tree, pine: pine, cactus: cactus, crate: crate, fence: fence,
     wall: wall, rock: rock, flower: flower, fern: fern, tuft: tuft,
-    stone: puzzleStone, relic: relic, hint: hintGlyph
+    stone: puzzleStone, relic: relic, hint: hintGlyph,
+    pedestal: pedestal, dummy: dummyProp, lamp: lamp, bench: bench,
+    kiosk: kiosk, gate: gatePost, gem: gemProp
   };
 
   Spr.prop = function (kind, seed) {
@@ -566,7 +724,10 @@
     village: { base: 'd', dark: 'D', lite: 'e', pop: 'e', detail: 'D' },
     hq:      { base: 'V', dark: 'M', lite: 'x', pop: 'R', detail: 'M' },
     city:    { base: 'r', dark: 'R', lite: 'q', pop: 'q', detail: 'x' },
-    desert:  { base: 's', dark: 'S', lite: 'z', pop: 'z', detail: 'S' }
+    desert:  { base: 's', dark: 'S', lite: 'z', pop: 'z', detail: 'S' },
+    /* plaza paving, before and after the fall */
+    square:  { base: 'r', dark: 'R', lite: 'q', pop: 'q', detail: 'x' },
+    drained: { base: 'R', dark: 'E', lite: 'x', pop: 'x', detail: 'E' }
   };
 
   Spr.groundTile = function (envId) {
@@ -604,6 +765,9 @@
   /* ============================================================== WEAPONS
      Small held sprites, drawn beside the character at its hand height. */
   function weaponSprite(id) {
+    /* empty hands: a blank sprite, so nothing is drawn and nothing branches.
+       Without this, an unrecognised id falls through to the scythe below. */
+    if (id === 'none') return Px.make(1, 1, function () { }, { ax: 0, ay: 0 });
     if (id === 'sword') {
       return Px.make(20, 9, function (g) {
         g.rect('b', 5, 3, 12, 3);          /* blade */

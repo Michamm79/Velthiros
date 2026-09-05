@@ -104,19 +104,204 @@ async function main() {
   const moved = await page.evaluate(() => Math.abs(window.VELTHIROS.scene.px) + Math.abs(window.VELTHIROS.scene.py - 60));
   check('joystick moves the player', moved > 5, 'delta=' + Math.round(moved));
 
-  /* fast-forward the mood intro */
+  /* fast-forward the mood intro: bedroom -> crowded square */
   await page.evaluate(() => { window.VELTHIROS.scene.introTimer = 0.15; });
-  check('abduction cutscene', await waitForScene('CutsceneScene'), await sceneName());
-  await wait(2200);
-  await shot('03-cutscene');
-  await tapZone('skip');
-  check('gem granted', await waitForScene('GemScene'), await sceneName());
-  await shot('04-gem');
-  await tapZone('continue');
+  check('bedroom leads to the crowded square', await waitForScene('SquareScene'), await sceneName());
+  await wait(900);
+  await shot('03-square');
+  const square = await page.evaluate(() => {
+    const s = window.VELTHIROS.scene;
+    return { crowd: s.crowd.length, phase: s.phase, stage: window.VELTHIROS.save.tutorialStage };
+  });
+  check('the square is crowded and walkable',
+    square.crowd >= 20 && square.phase === 'walk' && square.stage === 'square', JSON.stringify(square));
 
-  /* --- trial 1 --- */
+  /* walking to the middle brings Garatu through */
+  await page.evaluate(() => {
+    const s = window.VELTHIROS.scene;
+    s.t = 3; s.px = s.meet.x; s.py = s.meet.y;
+  });
+  await wait(600);
+  const arrival = await page.evaluate(() => window.VELTHIROS.scene.phase);
+  check('reaching the middle opens the rift', arrival !== 'walk', arrival);
+  await wait(1200);                                    /* let Garatu fade in */
+  await shot('04-square-rift');
+
+  await tapZone('skip');
+  check('the fall cutscene plays', await waitForScene('CutsceneScene'), await sceneName());
+  await wait(1800);
+  await shot('05-cutscene-fall');
+  await tapZone('skip');
+
+  /* --- the tutorial trial --- */
+  check('the fall lands in the tutorial', await waitForScene('TrialScene'), await sceneName());
+  const tut = await page.evaluate(() => {
+    const t = window.VELTHIROS.scene.trial;
+    return {
+      type: t.type, untimed: t.untimed, radius: t.radius, prompt: !!t.persistentPrompt,
+      beat: t.tut.beatId, weapon: t.player.weaponId, hasObjective: !!t.objective.text,
+      env: t.env.id, stage: window.VELTHIROS.save.tutorialStage
+    };
+  });
+  check('the tutorial builds as an untimed, unarmed first beat',
+    tut.type === 'tutorial' && tut.untimed === true && tut.radius === 700 && tut.prompt &&
+    tut.beat === 'move' && tut.weapon === 'none' && tut.hasObjective && tut.env === 'drained',
+    JSON.stringify(tut));
+
+  await page.evaluate(() => { window.VELTHIROS.scene.trial.introTimer = 0.1; });
+  await wait(500);
+  await shot('06-tutorial-move');
+
+  /* Buttons a beat has not taught yet must be inert, not merely greyed out -
+     so this presses them through the real input path, not p.tryAttack(). */
+  const lockCheck = await page.evaluate(() => {
+    const t = window.VELTHIROS.scene.trial;
+    const In = window.V.Input;
+    const p = t.player;
+    p.atkState = null; p.stamina = 100;
+    const locked = Object.keys(t.lockedActions);
+    In.down.attack = true; In.down.dodge = true; In.down.special = true;
+    t.update(1 / 60);
+    const blocked = { atkState: p.atkState, dodgeTime: p.dodgeTime, stamina: Math.round(p.stamina) };
+    In.down = {}; In.activeZones = [];
+    t.update(1 / 60);
+    return { locked, blocked };
+  });
+  check('an action the tutorial has not taught yet cannot be pressed',
+    lockCheck.locked.length === 4 && lockCheck.blocked.atkState === null &&
+    lockCheck.blocked.dodgeTime <= 0 && lockCheck.blocked.stamina === 100,
+    JSON.stringify(lockCheck));
+
+  /* HUD zones are registered where a thumb expects them */
+  const hudZones = await page.evaluate(() => (window.V.Input.lastZones || []).map((z) => z.id));
+  check('HUD action buttons present', ['attack', 'special', 'dodge', 'item', 'pause'].every((z) => hudZones.includes(z)),
+    hudZones.join(','));
+
+  /* Walk the whole script: each beat is satisfied on its own terms and the
+     order is asserted, so a beat cannot be skipped or fire early. */
+  const beatWalk = await page.evaluate(() => {
+    const g = window.VELTHIROS;
+    const t = g.scene.trial;
+    const T = window.V.Tutorial;
+    const order = [];
+    const step = () => { for (let i = 0; i < 4; i++) t.update(1 / 60); };
+
+    const guard = (id) => order.push({ want: id, got: t.tut.beatId });
+    guard('move');
+    /* 1. move: stand on the waypoint */
+    t.player.x = t.tut.waypoint.x; t.player.y = t.tut.waypoint.y;
+    step(); guard('weapon');
+    /* 2. weapon: stand on the sword pedestal */
+    t.player.x = t.tut.picks[0].x; t.player.y = t.tut.picks[0].y;
+    step();
+    const gotWeapon = { player: t.player.weaponId, save: g.save.weapon };
+    guard('strike');
+    /* 3. strike: the dummy must be inert - it should never have moved */
+    const dummy = t.tut.dummy;
+    const dummyStart = { x: dummy.x, y: dummy.y };
+    for (let i = 0; i < 120; i++) t.update(1 / 60);
+    const dummyMoved = Math.abs(dummy.x - dummyStart.x) + Math.abs(dummy.y - dummyStart.y);
+    const stillStrike = t.tut.beatId === 'strike';
+    dummy.hurt(999, 0, 0, t.player);
+    step(); guard('fight');
+    /* 4. fight: both goblins down */
+    t.tut.foes.forEach((f) => f.hurt(999, 0, 0, t.player));
+    step(); guard('dodge');
+    /* 5. dodge: two rolls */
+    t.player.stamina = 100; t.player.tryDodge();
+    t.player.dodgeTime = 0; t.player.dodgeCd = 0; t.player.stamina = 100;
+    const halfWay = t.tut.beatId;
+    t.player.tryDodge();
+    t.player.dodgeTime = 0;
+    step(); guard('hide');
+    /* 6. hide: stand still in the cover the beat planted. `hidden` is
+       recomputed from the world every frame, so this has to be real. */
+    window.V.Input.move.x = 0; window.V.Input.move.y = 0; window.V.Input.move.mag = 0;
+    t.player.x = t.tut.hideSpot.x; t.player.y = t.tut.hideSpot.y;
+    let wasHidden = false;
+    for (let i = 0; i < 130 && t.tut.beatId === 'hide'; i++) {
+      t.player.x = t.tut.hideSpot.x; t.player.y = t.tut.hideSpot.y;
+      t.update(1 / 60);
+      wasHidden = wasHidden || t.player.hidden;
+    }
+    guard('gem');
+    /* 7. gem: walk onto it */
+    t.player.x = t.tut.gemSpot.x; t.player.y = t.tut.gemSpot.y;
+    step();
+    const gem = g.save.gem && g.save.gem.id;
+    guard('warden');
+    return {
+      order, gotWeapon, dummyMoved: Math.round(dummyMoved), stillStrike, halfWay, gem, wasHidden,
+      wardenAlive: !!t.tut.warden && !t.tut.warden.dead
+    };
+  });
+  const beatsInOrder = beatWalk.order.every((o) => o.want === o.got);
+  check('the beats advance in order, and only when their own test passes',
+    beatsInOrder && beatWalk.stillStrike && beatWalk.halfWay === 'dodge',
+    JSON.stringify(beatWalk.order));
+  check('picking a pedestal grants that weapon',
+    beatWalk.gotWeapon.player === 'sword' && beatWalk.gotWeapon.save === 'sword',
+    JSON.stringify(beatWalk.gotWeapon));
+  check('the training dummy never moves or fights back', beatWalk.dummyMoved === 0,
+    'drifted ' + beatWalk.dummyMoved + 'u');
+  check('the hide beat plants cover you can actually vanish into', beatWalk.wasHidden === true);
+  check('the gem is granted by its beat', !!beatWalk.gem, String(beatWalk.gem));
+  check('the Warden is waiting at the last beat', beatWalk.wardenAlive);
+  await shot('07-tutorial-warden');
+
+  /* dying in the tutorial revives rather than ending the run */
+  const tutDeath = await page.evaluate(() => {
+    const g = window.VELTHIROS;
+    const t = g.scene.trial;
+    g.save.deaths = 0;
+    t.player.hp = 0; t.player.dead = true;
+    for (let i = 0; i < 6; i++) t.update(1 / 60);
+    return { dead: t.player.dead, hp: Math.round(t.player.hp), state: t.state,
+             deaths: g.save.deaths, scene: g.scene.constructor.name };
+  });
+  check('a tutorial death revives you and never counts toward the wipe',
+    !tutDeath.dead && tutDeath.hp > 0 && tutDeath.state === 'play' && tutDeath.deaths === 0,
+    JSON.stringify(tutDeath));
+
+  /* killing the Warden hands over the scythe under the secret's rules */
+  const wardenKill = await page.evaluate(() => {
+    const g = window.VELTHIROS;
+    const t = g.scene.trial;
+    if (!t.tut.warden || t.tut.warden.dead) t.tut.warden = t.spawnEnemy('warden', 0, -300, {});
+    t.tut.warden.hurt(9999, 0, 0, t.player);
+    for (let i = 0; i < 4; i++) t.update(1 / 60);
+    const earned = { unlocked: g.save.scytheUnlocked, weapon: g.save.weapon };
+    const after = window.V.Save.newGame(g.save);
+    return { earned, afterNewGame: { unlocked: after.scytheUnlocked, weapon: after.weapon } };
+  });
+  check('the Warden drops the scythe, and a New Game takes it away again',
+    wardenKill.earned.unlocked && wardenKill.earned.weapon === 'scythe' &&
+    !wardenKill.afterNewGame.unlocked && wardenKill.afterNewGame.weapon === 'sword',
+    JSON.stringify(wardenKill));
+
+  /* reaching the gate ends the tutorial - no ranking screen, straight home */
+  const tutEnd = await page.evaluate(() => {
+    const g = window.VELTHIROS;
+    const t = g.scene.trial;
+    t.player.x = t.tut.gate.x; t.player.y = t.tut.gate.y;
+    for (let i = 0; i < 6; i++) t.update(1 / 60);
+    return { scene: g.scene.constructor.name, mode: g.scene.mode,
+             done: g.save.tutorialDone, stage: g.save.tutorialStage, deaths: g.save.deaths };
+  });
+  check('walking into the gate finishes the tutorial and lands in the hub',
+    tutEnd.scene === 'RoomScene' && tutEnd.mode === 'hub' && tutEnd.done === true &&
+    tutEnd.stage === null && tutEnd.deaths === 0,
+    JSON.stringify(tutEnd));
+  await shot('08-hub-after-tutorial');
+
+  /* --- trial 1, the real thing --- */
+  await page.evaluate(() => {
+    const g = window.VELTHIROS;
+    g.save.weapons = { sword: true };
+    g.save.weapon = 'sword';
+    g.enterTrial();
+  });
   check('entered trial', await waitForScene('TrialScene'), await sceneName());
-  await shot('05-trial-intro');
   await page.evaluate(() => { window.VELTHIROS.scene.trial.introTimer = 0.1; });
   await wait(500);
 
@@ -130,7 +315,7 @@ async function main() {
   }
   await page.mouse.up();
   await wait(400);
-  await shot('06-trial-combat');
+  await shot('09-trial-combat');
 
   const trialState = await page.evaluate(() => {
     const t = window.VELTHIROS.scene.trial;
@@ -138,11 +323,6 @@ async function main() {
   });
   check('trial has live enemies', trialState.enemies > 0, JSON.stringify(trialState));
   check('trial is playing', trialState.state === 'play', trialState.state);
-
-  /* HUD zones are registered where a thumb expects them */
-  const hudZones = await page.evaluate(() => (window.V.Input.lastZones || []).map((z) => z.id));
-  check('HUD action buttons present', ['attack', 'special', 'dodge', 'item', 'pause'].every((z) => hudZones.includes(z)),
-    hudZones.join(','));
 
   /* --- force a clean completion and check the ranking maths --- */
   await page.evaluate(() => {
@@ -155,17 +335,17 @@ async function main() {
   const rank = await page.evaluate(() => window.VELTHIROS.pendingResult);
   check('rank percentile in range', rank.percentile >= 1 && rank.percentile <= 99, 'p=' + rank.percentile);
   await wait(1400);
-  await shot('07-ranking');
+  await shot('10-ranking');
   await tapZone('continue');
   check('back in hub', await waitForScene('RoomScene'), await sceneName());
   const hub = await page.evaluate(() => ({ mode: window.VELTHIROS.scene.mode, trial: window.VELTHIROS.save.trial, cur: window.VELTHIROS.save.currency }));
   check('hub mode + trial advanced', hub.mode === 'hub' && hub.trial === 2, JSON.stringify(hub));
-  await shot('08-hub');
+  await shot('11-hub');
 
   /* --- shops --- */
   await page.evaluate(() => { window.VELTHIROS.save.currency = 5000; window.VELTHIROS.setScene(new window.V.S.ShopScene(window.VELTHIROS, 'trial')); });
   await wait(400);
-  await shot('09-shop-trial');
+  await shot('12-shop-trial');
   const bought = await page.evaluate(() => {
     const g = window.VELTHIROS;
     const before = g.save.currency;
@@ -176,7 +356,7 @@ async function main() {
 
   await page.evaluate(() => window.VELTHIROS.setScene(new window.V.S.ShopScene(window.VELTHIROS, 'reality')));
   await wait(300);
-  await shot('10-shop-reality');
+  await shot('13-shop-reality');
 
   /* --- every trial type renders and simulates without throwing --- */
   const typeReport = await page.evaluate(async () => {
@@ -230,7 +410,7 @@ async function main() {
     g.setScene(new window.V.TrialScene(g, t));
   });
   await wait(1600);
-  await shot('11-boss');
+  await shot('14-boss');
 
   /* --- a scripted bot actually plays a trial to completion --- */
   const botRun = await page.evaluate(() => {
@@ -292,17 +472,20 @@ async function main() {
         check(Spr.goblin(dir, f), `goblin:${dir}:${f}`);
         check(Spr.minotaur(dir, f), `minotaur:${dir}:${f}`);
         check(Spr.reaper(dir, f), `reaper:${dir}:${f}`);
+        check(Spr.warden(dir, f), `warden:${dir}:${f}`);
       }
     }
     check(Spr.aurelith(0), 'aurelith:0');
     check(Spr.aurelith(1), 'aurelith:1');
     for (const k of ['tree', 'pine', 'cactus', 'crate', 'fence', 'wall', 'rock',
                      'flower', 'fern', 'tuft', 'stone', 'relic', 'hint',
-                     'bush', 'snowbush', 'shrub']) {
+                     'bush', 'snowbush', 'shrub',
+                     'pedestal', 'dummy', 'lamp', 'bench', 'kiosk', 'gate', 'gem']) {
       check(Spr.prop(k, 1), 'prop:' + k);
     }
-    for (const w of ['sword', 'battleaxe', 'bow', 'scythe']) check(Spr.weapon(w), 'weapon:' + w);
+    for (const w of ['sword', 'battleaxe', 'bow', 'scythe', 'none']) check(Spr.weapon(w), 'weapon:' + w);
     for (const e of window.V.D.ENVIRONMENTS) check(Spr.groundTile(e.id), 'ground:' + e.id);
+    for (const k of Object.keys(window.V.D.TUTORIAL_ENVS)) check(Spr.groundTile(k), 'ground:' + k);
     return { count, problems };
   });
   check('every sprite bakes against the locked palette',
@@ -569,6 +752,29 @@ async function main() {
   check('an existing save picks up the pinned combo on load',
     oldSave.loaded === oldSave.pinned, JSON.stringify(oldSave));
 
+  /* A save written before the tutorial existed has no `tutorialDone` key. It
+     must NOT be dragged back through the opening on Continue - but a save that
+     never saw the intro should still get it. */
+  const migrate = await page.evaluate(() => {
+    const Save = window.V.Save;
+    const shape = (seenIntro) => {
+      const old = Save.blank();
+      old.started = true;
+      old.seenIntro = seenIntro;
+      old.trial = 12;
+      delete old.tutorialDone;                 /* as an older build wrote it */
+      delete old.tutorialStage;
+      Save.write(old);
+      const s = Save.load();
+      return { tutorialDone: s.tutorialDone, trial: s.trial, hasStage: 'tutorialStage' in s };
+    };
+    return { veteran: shape(true), neverStarted: shape(false) };
+  });
+  check('a pre-tutorial save is not dragged back through the opening',
+    migrate.veteran.tutorialDone === true && migrate.veteran.trial === 12 &&
+    migrate.veteran.hasStage && migrate.neverStarted.tutorialDone === false,
+    JSON.stringify(migrate));
+
   check('scythe unlock prompt + combo', scythe.shown && scythe.unlocked && scythe.weapon === 'scythe', JSON.stringify(scythe));
 
   await page.evaluate(() => {
@@ -580,7 +786,7 @@ async function main() {
     s.update(0.016);
   });
   await wait(400);
-  await shot('12-scythe-prompt');
+  await shot('15-scythe-prompt');
 
   /* --- reset rules (GDD 9) --- */
   const reset = await page.evaluate(() => {
@@ -610,6 +816,96 @@ async function main() {
     reset.currency === 0 && reset.deaths === 0 && !reset.scythe && reset.heldPin && reset.rerolled,
     JSON.stringify(reset));
 
+  /* --- New Game must leave nothing behind.
+         The gem level is not a stored field - Save.gemLevel derives it from
+         `cleared` - so this asserts the derived value drops too, not just the
+         object. Only `resets` (which seeds arena layouts) may survive. --- */
+  const freshStart = await page.evaluate(() => {
+    const g = window.VELTHIROS, Save = window.V.Save;
+    /* a thoroughly dirty profile */
+    g.save.gem = { id: 'emberstone' };
+    g.save.cleared = 33;
+    g.save.currency = 4242;
+    g.save.lifetimeEarned = 9999;
+    g.save.weapons = { sword: true, bow: true, battleaxe: true, scythe: true };
+    g.save.weapon = 'scythe';
+    g.save.scytheUnlocked = true;
+    g.save.owned = { w_bow: true, g_boots: true, c_potion: 3 };
+    g.save.equippedTint = '#ff0000';
+    g.save.decor = { rug: true, lamp: true };
+    g.save.trial = 34;
+    g.save.deaths = 11;
+    g.save.debuff = 'weak';
+    g.save.tutorialDone = true;
+    g.save.stats = { kills: 400, trialsFailed: 9, bestRank: 3 };
+    g.save.resets = 2;
+    const beforeLevel = Save.gemLevel(g.save);
+    const beforeStats = Save.resolveStats(g.save);
+
+    const s = Save.newGame(g.save);
+    const reloaded = Save.load();          /* what actually hit localStorage */
+    const stats = Save.resolveStats(s);
+    return {
+      beforeLevel, beforeDamage: Math.round(beforeStats.damageMul * 100),
+      gem: s.gem, gemLevel: Save.gemLevel(s), damageMul: Math.round(stats.damageMul * 100),
+      currency: s.currency, lifetime: s.lifetimeEarned, cleared: s.cleared, trial: s.trial,
+      deaths: s.deaths, debuff: s.debuff, weapon: s.weapon,
+      weaponKeys: Object.keys(s.weapons).filter((k) => s.weapons[k]),
+      ownedKeys: Object.keys(s.owned), tint: s.equippedTint,
+      decorKeys: Object.keys(s.decor), scythe: s.scytheUnlocked,
+      tutorialDone: s.tutorialDone, kills: s.stats.kills, bestRank: s.stats.bestRank,
+      resets: s.resets, persistedGem: reloaded.gem, persistedCurrency: reloaded.currency
+    };
+  });
+  check('a New Game wipes the gem, its derived level, and every stat it fed',
+    freshStart.beforeLevel === 5 && freshStart.beforeDamage > 100 &&
+    freshStart.gem === null && freshStart.gemLevel === 0 && freshStart.damageMul === 100 &&
+    freshStart.persistedGem === null,
+    JSON.stringify({ before: freshStart.beforeLevel + '/' + freshStart.beforeDamage + '%',
+                     after: freshStart.gemLevel + '/' + freshStart.damageMul + '%' }));
+  check('a New Game wipes currency, purchases, weapons, tint, decor and progress',
+    freshStart.currency === 0 && freshStart.lifetime === 0 && freshStart.persistedCurrency === 0 &&
+    freshStart.cleared === 0 && freshStart.trial === 1 && freshStart.deaths === 0 &&
+    freshStart.debuff === null && freshStart.weapon === 'sword' &&
+    freshStart.weaponKeys.join(',') === 'sword' && freshStart.ownedKeys.length === 0 &&
+    freshStart.tint === null && freshStart.decorKeys.length === 0 && !freshStart.scythe &&
+    freshStart.tutorialDone === false && freshStart.kills === 0 && freshStart.bestRank === 100,
+    JSON.stringify(freshStart));
+  check('a New Game keeps only the reset counter, which seeds arena layouts',
+    freshStart.resets === 2, 'resets=' + freshStart.resets);
+
+  /* --- the dodge is a sidestep, and the same one at any frame rate.
+         It used to integrate a full dt on its last frame, so the distance
+         travelled depended on how the frames happened to land. --- */
+  const dodge = await page.evaluate(() => {
+    const g = window.VELTHIROS, D = window.V.D, E = window.V.E;
+    const roll = (dt) => {
+      const spec = { index: 3, type: 'defeat', boss: false, env: D.ENVIRONMENTS[0], seed: 8, label: 'dodge' };
+      const t = new window.V.Trial(g, spec);
+      t.state = 'play';
+      t.enemies.length = 0;
+      const p = t.player;
+      p.x = 0; p.y = 0; p.facing = 0; p.stamina = 100;
+      window.V.Input.move.x = 0; window.V.Input.move.y = 0; window.V.Input.move.mag = 0;
+      p.tryDodge();
+      let guard = 0;
+      while (p.dodgeTime > 0 && guard++ < 400) p.update(dt, window.V.Input);
+      return Math.round(Math.abs(p.x));
+    };
+    return {
+      dist: g.save && roll(1 / 60),
+      at120: roll(1 / 120),
+      atStutter: roll(0.05),               /* the dt clamp in game.js */
+      configured: window.V.Save.resolveStats(window.V.Save.blank()).dodgeDist,
+      duration: E.DODGE_TIME
+    };
+  });
+  check('a dodge is a sidestep, not a leap', dodge.configured === 170 && dodge.dist <= 175,
+    JSON.stringify(dodge));
+  check('a dodge covers the same ground at any frame rate',
+    Math.abs(dodge.dist - dodge.at120) <= 2 && Math.abs(dodge.dist - dodge.atStutter) <= 2,
+    `60fps=${dodge.dist} 120fps=${dodge.at120} stutter=${dodge.atStutter}`);
+
   /* --- ranking tier boundaries match GDD 6.2 --- */
   const tiers = await page.evaluate(() => {
     const D = window.V.D;
@@ -625,7 +921,7 @@ async function main() {
   await wait(500);
   await page.evaluate(() => window.VELTHIROS.setScene(new window.V.S.StartScene(window.VELTHIROS)));
   await wait(400);
-  await shot('13-portrait-start');
+  await shot('16-portrait-start');
 
   check('no runtime errors', errors.length === 0, errors.slice(0, 6).join(' | '));
 
