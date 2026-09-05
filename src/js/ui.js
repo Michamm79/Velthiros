@@ -155,6 +155,20 @@
     var p = trial.player;
     var pad = 14 * s;
 
+    /* ---- damage numbers, handed up from the world pass so they stay crisp ---- */
+    var ps = (trial.game && trial.game.pixScale) || 1;
+    var fl = trial.screenFloaters || [];
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (var fi = 0; fi < fl.length; fi++) {
+      var f = fl[fi];
+      var fx = (trial._originX + f.x) * ps;
+      var fy = (trial._originY + f.y) * ps;
+      ctx.globalAlpha = f.alpha;
+      UI.text(ctx, f.text, fx, fy, { size: 13, align: 'center', weight: '800', colour: f.colour });
+    }
+    ctx.globalAlpha = 1;
+
     /* ---- top-left: health + stamina (GDD 12) ---- */
     var barW = Math.min(150 * s, cw * 0.34);
     UI.bar(ctx, pad, pad + 4, barW, 11 * s, p.hp / p.stats.maxHp, '#ff5f6d');

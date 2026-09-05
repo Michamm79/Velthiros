@@ -5,6 +5,20 @@
   var U = V.U, D = V.D, Art = V.Art, Audio = V.Audio;
   var E = {};
 
+  /* facing angle -> which of the three authored views to use */
+  function viewOf(facing) {
+    var sy = Math.sin(facing), sx = Math.cos(facing);
+    if (Math.abs(sy) > 0.55) return { dir: sy > 0 ? 'down' : 'up', flip: false };
+    return { dir: 'side', flip: sx < 0 };
+  }
+  /* a 4-step walk cycle: contact, left lift, contact, right lift */
+  function walkFrame(phase, moving) {
+    if (!moving) return 0;
+    return [0, 1, 0, 2][Math.floor(phase) % 4];
+  }
+  E.viewOf = viewOf;
+  E.walkFrame = walkFrame;
+
   /* ================================================================= PLAYER */
   function Player(stats, weaponId, world) {
     this.world = world;
@@ -223,7 +237,49 @@
   };
 
   Player.prototype.draw = function (ctx, t) {
-    Art.drawPlayer(ctx, this, t);
+    var Px = V.Px, Spr = V.Spr;
+    var view = viewOf(this.facing);
+    var frame = walkFrame(this.animPhase, this.moving);
+    var spr = Spr.player(view.dir, frame, this.tint);
+    var y = this.sy - (this.z || 0) * 0.26;
+
+    Px.shadow(ctx, this.sx, this.sy, 7, this.z > 2 ? 0.16 : 0.28);
+
+    /* weapon sits behind the body when the swing goes away from camera */
+    var wpn = Spr.weapon(this.weaponId);
+    var behind = view.dir === 'up';
+
+    /* the weapon rotates through the swing so the attack reads without an arc */
+    var rot = -0.5;
+    if (this.atkState && this.atkDef) {
+      var span = this.atkDef.windup + this.atkDef.recover;
+      var prog = U.clamp((this.atkState === 'windup'
+        ? this.atkTime
+        : this.atkDef.windup + this.atkTime) / Math.max(span, 0.01), 0, 1);
+      rot = U.lerp(-1.5, 1.3, prog);
+    }
+    var wx = this.sx + (view.flip ? -6 : 6);
+    var wy = y - 13;
+    var wOpts = { flip: view.flip, rot: rot };
+
+    if (behind) Px.draw(ctx, wpn, wx, wy, wOpts);
+    var flash = this.hurtFlash > 0 && Math.floor(this.hurtFlash * 24) % 2 === 0;
+    Px.draw(ctx, spr, this.sx, y, { flip: view.flip, alpha: flash ? 0.45 : null });
+    if (!behind) Px.draw(ctx, wpn, wx, wy, wOpts);
+
+    if (this.hidden) {
+      ctx.fillStyle = 'rgba(120,200,140,0.22)';
+      ctx.beginPath();
+      ctx.ellipse(this.sx, y - 13, 12, 15, 0, 0, U.TAU);
+      ctx.fill();
+    }
+    if (this.invuln > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.2 + 0.2 * Math.sin(t * 22)) + ')';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(this.sx, this.sy, 10, 5, 0, 0, U.TAU);
+      ctx.stroke();
+    }
   };
 
   /* ================================================================= ENEMY */
@@ -457,33 +513,39 @@
     w.onEnemyKilled && w.onEnemyKilled(this);
   };
 
+  var ENEMY_SPRITE = { goblin: 'goblin', minotaur: 'minotaur', reaper: 'reaper', aurelith: 'aurelith' };
+
   Enemy.prototype.draw = function (ctx, t) {
     if (this.dead) return;
-    if (this.hiding) {
-      /* only a faint rustle gives them away */
-      ctx.globalAlpha = 0.22 + 0.08 * Math.sin(t * 3 + this.animPhase);
-    }
-    if (this.id === 'goblin') Art.drawGoblin(ctx, this);
-    else if (this.id === 'minotaur') Art.drawMinotaur(ctx, this);
-    else if (this.id === 'reaper') Art.drawReaper(ctx, this, t);
-    else if (this.id === 'aurelith') Art.drawAurelith(ctx, this, t);
-    ctx.globalAlpha = 1;
+    var Px = V.Px, Spr = V.Spr, Z = V.Trial.ZOOM;
+    var view = viewOf(this.facing);
+    var frame = walkFrame(this.animPhase, this.moving);
+    var name = ENEMY_SPRITE[this.id];
+    var spr = this.id === 'aurelith' ? Spr.aurelith(frame ? 1 : 0) : Spr[name](view.dir, frame);
+    var y = this.sy - (this.z || 0) * Z;
+
+    var alpha = null;
+    if (this.hiding) alpha = 0.24 + 0.08 * Math.sin(t * 3 + this.animPhase);
+    else if (this.hurtFlash > 0) alpha = 0.55;
+
+    Px.shadow(ctx, this.sx, this.sy, this.def.boss ? 12 : (this.def.heavy ? 9 : 7));
+    Px.draw(ctx, spr, this.sx, y, { flip: view.flip, alpha: alpha });
 
     /* windup telegraph */
     if (this.state === 'windup' || this.state === 'charge') {
-      var prog = U.clamp(this.stateTime / (this.state === 'charge' ? 1.1 : this.def.attackWindup), 0, 1);
-      ctx.strokeStyle = 'rgba(255,90,80,' + (0.25 + prog * 0.5) + ')';
-      ctx.lineWidth = 3;
+      var prog = U.clamp(this.stateTime / (this.state === 'charge' ? 0.9 : this.def.attackWindup), 0, 1);
+      ctx.strokeStyle = 'rgba(255,90,80,' + (0.3 + prog * 0.55) + ')';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(this.sx, this.sy, this.def.attackRange * 0.5, this.facing - 0.6, this.facing + 0.6);
+      ctx.arc(this.sx, this.sy, this.def.attackRange * Z * 0.7, this.facing - 0.6, this.facing + 0.6);
       ctx.stroke();
     }
     if (this.def.boss) {
-      var bw = 74, bx = this.sx - bw / 2, by = this.sy - 96;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      Art.roundRect(ctx, bx - 2, by - 2, bw + 4, 9, 4); ctx.fill();
+      var bw = 36, bx = Math.round(this.sx - bw / 2), by = Math.round(y - spr.h - 6);
+      ctx.fillStyle = '#241c2b';
+      ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
       ctx.fillStyle = '#ff4d5e';
-      Art.roundRect(ctx, bx, by, bw * (this.hp / this.maxHp), 5, 2.5); ctx.fill();
+      ctx.fillRect(bx, by, Math.round(bw * (this.hp / this.maxHp)), 3);
     }
   };
 
@@ -537,24 +599,25 @@
     ctx.save();
     for (var i = 0; i < this.trail.length; i++) {
       var tp = this.trail[i];
-      ctx.globalAlpha = (i / this.trail.length) * 0.4;
+      ctx.globalAlpha = (i / this.trail.length) * 0.35;
       ctx.fillStyle = this.colour;
-      Art.ellipse(ctx, tp.sx, tp.sy, 3, 2); ctx.fill();
+      ctx.fillRect(Math.round(tp.sx) - 1, Math.round(tp.sy) - 1, 2, 2);
     }
     ctx.globalAlpha = 1;
-    ctx.translate(this.sx, this.sy);
+    ctx.translate(Math.round(this.sx), Math.round(this.sy));
     ctx.rotate(this.angle);
-    ctx.fillStyle = this.colour;
     if (this.hostile) {
-      Art.ellipse(ctx, 0, 0, 7, 4); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      Art.ellipse(ctx, -1, -1, 2.4, 1.6); ctx.fill();
+      ctx.fillStyle = '#ff4d5e';
+      ctx.fillRect(-2, -2, 4, 4);
+      ctx.fillStyle = '#ffd0d8';
+      ctx.fillRect(-1, -1, 2, 2);
     } else {
-      Art.roundRect(ctx, -10, -1.6, 20, 3.2, 1.6); ctx.fill();
-      ctx.fillStyle = '#cfd8e2';
-      ctx.beginPath();
-      ctx.moveTo(10, 0); ctx.lineTo(4, -4); ctx.lineTo(4, 4);
-      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#8a5a33';
+      ctx.fillRect(-5, 0, 8, 1);
+      ctx.fillStyle = '#d8e0e8';
+      ctx.fillRect(3, 0, 3, 1);
+      ctx.fillStyle = '#efe3c8';
+      ctx.fillRect(-6, -1, 2, 3);
     }
     ctx.restore();
   };

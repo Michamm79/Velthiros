@@ -400,16 +400,18 @@
       this.drawGate(ctx, 0, -112, t);
     }
 
-    /* player */
+    /* the player is a sprite, so remember where the room transform puts them
+       and draw it after the restore at exactly one buffer pixel per sprite pixel */
     var pp = P(this.px, this.py);
-    Art.shadow(ctx, pp.x, pp.y, 16);
-    Art.chibi(ctx, {
-      x: pp.x, y: pp.y, scale: 1.5, phase: this.animPhase, moving: this.moving,
-      body: this.game.playerTint(), skin: '#f5c9a0', hair: '#5b3d2b', legs: '#3f6ea8',
-      faceDir: Math.cos(this.pfacing) > 0.25 ? 1 : (Math.cos(this.pfacing) < -0.25 ? -1 : 0)
-    });
+    Art.shadow(ctx, pp.x, pp.y, 9);
+    this._playerAt = { x: this._originX + pp.x * zoom, y: this._originY + pp.y * zoom };
 
     ctx.restore();
+
+    var view = V.E.viewOf(this.pfacing);
+    var frame = V.E.walkFrame(this.animPhase, this.moving);
+    V.Px.draw(ctx, V.Spr.player(view.dir, frame, this.game.playerTint()),
+      this._playerAt.x, this._playerAt.y, { flip: view.flip });
   };
 
   /* HUD and prompts - always full resolution so text stays crisp */

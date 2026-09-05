@@ -67,7 +67,9 @@ src/js/
   save.js             localStorage run state + resolved player stats
   input.js            pointer/keyboard, virtual joystick, button hit-zones
   audio.js            procedural WebAudio SFX and music (no audio files)
-  art.js              every sprite, drawn procedurally on canvas
+  art.js              menus, cutscene and interior art (procedural canvas)
+  pixel.js            pixel-art core: locked palette, grid authoring, sprite baking
+  sprites.js          the sprite sheet - characters, props, weapons, ground tiles
   entities.js         player, enemy AI, projectiles
   arena.js            trial generation, objectives, scoring, world rendering
   ui.js               UI widgets + the trial HUD
@@ -112,11 +114,16 @@ Three deliberate departures, all reversible from one place each:
   play, so the player went from 60 to 140 units/sec, the arena from 1800 to 2500 units
   across (~18s edge to edge), and every enemy speed, attack wind-up and projectile was
   scaled to match.
-- **The art is pixel-rendered, and characters are less chibi.** The world draws into a
-  low-resolution buffer that is scaled up with no smoothing; the HUD stays full
-  resolution so text is readable. Character proportions moved from roughly 1:2 head-to-body
-  to about 1:3, which survives being drawn at buffer resolution. `Art.RIG` in
-  `src/js/art.js` holds every proportion in one object.
+- **The art is hand-authored pixel art.** Every character, prop, weapon and ground tile
+  is drawn pixel by pixel against a locked ~35-colour palette in `src/js/sprites.js`,
+  baked once into offscreen canvases, and blitted at exactly one sprite pixel per buffer
+  pixel so nothing shimmers as you move. The HUD is drawn afterwards at full resolution
+  so text stays readable. `?smooth=1` turns the pixel buffer off.
+
+  Characters have three authored views (facing down, up and side, mirrored for the other
+  side) and a three-frame walk cycle. The look follows a classic top-down RPG tileset:
+  one hard dark pixel outlining every silhouette, three-tone foliage, warm dirt.
+  `Grid.outline()` in `pixel.js` is what produces those outlines automatically.
 
 ### Not in this version
 

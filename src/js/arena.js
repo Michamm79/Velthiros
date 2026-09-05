@@ -89,11 +89,11 @@
     }
 
     /* ground litter */
-    for (i = 0; i < 300; i++) {
+    for (i = 0; i < 150; i++) {
       a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 40);
       this.props.push({
         x: Math.cos(a) * d, y: Math.sin(a) * d,
-        kind: r.chance(0.45) ? 'tuft' : this.env.litter,
+        kind: r.chance(0.55) ? 'tuft' : this.env.litter,
         s: r.range(0.7, 1.3), seed: r.int(0, 9999)
       });
     }
@@ -673,17 +673,17 @@
     this.game.onTrialFinished(this.result);
   };
 
-  /* ================================================================= render */
-  Trial.prototype.zoom = function (cw, ch) {
-    /* the arena is 2500u across, so pull the camera back enough to read it */
-    return U.clamp(Math.min(cw, ch * 1.75) / 1150, 0.42, 1.0);
-  };
+  /* ================================================================= render
+     Everything below works in BUFFER PIXELS, not world units. ZOOM converts
+     between them, and it is fixed so one sprite pixel is always one buffer
+     pixel - which is what stops pixel art from shimmering as you move. */
+  var ZOOM = 0.26;
 
   Trial.prototype.render = function (ctx, cw, ch) {
     var p = this.player;
-    var zoom = this.zoom(cw, ch);
+    var Px = V.Px, Spr = V.Spr;
 
-    /* camera lead + smoothing */
+    /* camera lead + smoothing, in world units */
     var lead = 130;
     var tx = p.x + Math.cos(p.facing) * lead * 0.35;
     var ty = p.y + Math.sin(p.facing) * lead * 0.35;
@@ -692,68 +692,88 @@
 
     var shakeX = 0, shakeY = 0;
     if (this.shakeTime > 0) {
-      shakeX = (Math.random() - 0.5) * this.shakeAmt;
-      shakeY = (Math.random() - 0.5) * this.shakeAmt;
+      shakeX = Math.round((Math.random() - 0.5) * this.shakeAmt * ZOOM * 2);
+      shakeY = Math.round((Math.random() - 0.5) * this.shakeAmt * ZOOM * 2);
     }
 
     ctx.fillStyle = this.env.sky;
     ctx.fillRect(0, 0, cw, ch);
 
+    this._originX = Math.round(cw / 2) + shakeX;
+    this._originY = Math.round(ch / 2) + shakeY;
+
     ctx.save();
-    ctx.translate(cw / 2 + shakeX, ch / 2 + shakeY);
-    ctx.scale(zoom, zoom);
+    ctx.translate(this._originX, this._originY);
 
     var self = this;
-    function P(x, y) { return { x: x - self.cam.x, y: (y - self.cam.y) * Art.SQUASH }; }
+    function P(x, y) {
+      return { x: Math.round((x - self.cam.x) * ZOOM), y: Math.round((y - self.cam.y) * Art.SQUASH * ZOOM) };
+    }
     this.project = P;
+    this.screenFloaters = [];
 
-    this.drawGround(ctx, P);
+    this.drawGround(ctx, P, cw, ch);
 
-    /* build the depth-sorted draw list */
+    /* cull to the visible box, with a margin for tall sprites */
+    var halfW = cw / 2 + 60, halfH = ch / 2 + 80;
+    function visible(sp) { return Math.abs(sp.x) < halfW && Math.abs(sp.y) < halfH; }
+
     var list = [];
-    var i, s;
+    var i;
 
     for (i = 0; i < this.props.length; i++) {
       var pr = this.props[i];
-      list.push({ y: pr.y, fn: makePropDraw(ctx, pr, P, this.t) });
+      var sp = P(pr.x, pr.y);
+      if (!visible(sp)) continue;
+      list.push({ y: pr.y, spr: Spr.prop(pr.kind, pr.seed), x: sp.x, sy: sp.y });
     }
     for (i = 0; i < this.cover.length; i++) {
       var cv = this.cover[i];
-      list.push({ y: cv.y, fn: makePropDraw(ctx, cv, P, this.t) });
+      var sc = P(cv.x, cv.y);
+      if (!visible(sc)) continue;
+      list.push({ y: cv.y, spr: Spr.prop(cv.kind, cv.seed), x: sc.x, sy: sc.y });
     }
     for (i = 0; i < this.blocks.length; i++) {
-      list.push({ y: this.blocks[i].y, fn: makePropDraw(ctx, { x: this.blocks[i].x, y: this.blocks[i].y, kind: 'stone', s: 1.25, seed: i }, P, this.t) });
+      var bl = this.blocks[i];
+      var sb = P(bl.x, bl.y);
+      if (!visible(sb)) continue;
+      list.push({ y: bl.y, spr: Spr.prop('stone', i), x: sb.x, sy: sb.y });
     }
+
     for (i = 0; i < this.enemies.length; i++) {
       (function (e) {
-        var sp = P(e.x, e.y);
-        e.sx = sp.x; e.sy = sp.y;
+        var s2 = P(e.x, e.y);
+        e.sx = s2.x; e.sy = s2.y;
+        if (!visible(s2)) return;
         list.push({ y: e.y, fn: function () { e.draw(ctx, self.t); } });
       })(this.enemies[i]);
     }
     (function (pl) {
-      var sp = P(pl.x, pl.y);
-      pl.sx = sp.x; pl.sy = sp.y;
+      var s3 = P(pl.x, pl.y);
+      pl.sx = s3.x; pl.sy = s3.y;
       list.push({ y: pl.y + 0.1, fn: function () { pl.draw(ctx, self.t); } });
     })(p);
 
     for (i = 0; i < this.projectiles.length; i++) {
       (function (pj) {
-        var sp = P(pj.x, pj.y);
-        pj.sx = sp.x; pj.sy = sp.y - 24;
+        var s4 = P(pj.x, pj.y);
+        pj.sx = s4.x; pj.sy = s4.y - 6;
         for (var k = 0; k < pj.trail.length; k++) {
           var tp = P(pj.trail[k].x, pj.trail[k].y);
-          pj.trail[k].sx = tp.x; pj.trail[k].sy = tp.y - 24;
+          pj.trail[k].sx = tp.x; pj.trail[k].sy = tp.y - 6;
         }
         list.push({ y: pj.y, fn: function () { pj.draw(ctx); } });
       })(this.projectiles[i]);
     }
 
-    /* objective markers sit on the ground, drawn before actors of the same row */
     this.drawObjectiveGround(ctx, P);
 
     list.sort(function (a, b) { return a.y - b.y; });
-    for (i = 0; i < list.length; i++) list[i].fn();
+    for (i = 0; i < list.length; i++) {
+      var it = list[i];
+      if (it.fn) it.fn();
+      else Px.draw(ctx, it.spr, it.x, it.sy);
+    }
 
     this.drawFx(ctx, P);
     this.drawObjectiveOverlay(ctx, P);
@@ -761,35 +781,10 @@
     ctx.restore();
   };
 
-  function makePropDraw(ctx, pr, P, t) {
-    return function () {
-      var sp = P(pr.x, pr.y);
-      V.Art.drawProp(ctx, pr.kind, sp.x, sp.y, pr.s, pr.seed || 0, t);
-    };
-  }
-
-  /* a small tile of two-tone dither, built once per environment */
-  Trial.prototype.groundPattern = function (ctx) {
-    if (this._pat !== undefined) return this._pat;
-    if (typeof document === 'undefined') { this._pat = null; return null; }
-    var size = 24;
-    var tile = document.createElement('canvas');
-    tile.width = tile.height = size;
-    var tc = tile.getContext('2d');
-    var rr = U.rng(U.hash(this.env.id));
-    var i;
-    tc.fillStyle = this.env.ground2;
-    for (i = 0; i < size * size * 0.16; i++) tc.fillRect(rr.int(0, size - 2), rr.int(0, size - 2), 2, 2);
-    tc.fillStyle = this.env.accent;
-    for (i = 0; i < size * size * 0.05; i++) tc.fillRect(rr.int(0, size - 2), rr.int(0, size - 2), 2, 2);
-    this._pat = ctx.createPattern(tile, 'repeat');
-    return this._pat;
-  };
-
-  Trial.prototype.drawGround = function (ctx, P) {
+  Trial.prototype.drawGround = function (ctx, P, cw, ch) {
     var c = P(0, 0);
-    var r = ARENA_R;
-    /* arena disc */
+    var r = ARENA_R * ZOOM;
+
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, r, r * Art.SQUASH, 0, 0, U.TAU);
@@ -797,11 +792,10 @@
     ctx.clip();
 
     ctx.fillStyle = this.env.ground;
-    ctx.fillRect(c.x - r - 10, c.y - r - 10, r * 2 + 20, r * 2 + 20);
+    ctx.fillRect(c.x - r - 4, c.y - r - 4, r * 2 + 8, r * 2 + 8);
 
-    /* dithered ground texture instead of a flat checker - reads as pixel art
-       and, being anchored to the world origin, it scrolls with the map */
-    var pat = this.groundPattern(ctx);
+    /* the tiled floor, anchored to the world origin so it scrolls with the map */
+    var pat = V.Spr.groundPattern(ctx, this.env.id);
     if (pat) {
       ctx.save();
       ctx.translate(c.x, c.y);
@@ -810,78 +804,73 @@
       ctx.restore();
     }
 
-    /* edge vignette */
-    var grd = ctx.createRadialGradient(c.x, c.y, r * 0.55, c.x, c.y, r);
+    /* darken toward the tree line */
+    var grd = ctx.createRadialGradient(c.x, c.y, r * 0.6, c.x, c.y, r);
     grd.addColorStop(0, 'rgba(0,0,0,0)');
-    grd.addColorStop(1, 'rgba(20,26,18,0.28)');
+    grd.addColorStop(1, 'rgba(20,16,26,0.4)');
     ctx.fillStyle = grd;
     ctx.fillRect(c.x - r, c.y - r, r * 2, r * 2);
     ctx.restore();
-
-    ctx.strokeStyle = 'rgba(30,40,28,0.35)';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.ellipse(c.x, c.y, r, r * Art.SQUASH, 0, 0, U.TAU);
-    ctx.stroke();
   };
 
   Trial.prototype.drawObjectiveGround = function (ctx, P) {
     var t = this.t, i, sp;
     if (this.zone) {
       sp = P(this.zone.x, this.zone.y);
+      var zr = this.zone.r * ZOOM;
       var frac = this.zone.hp / this.zone.maxHp;
-      ctx.fillStyle = 'rgba(90,200,255,' + (0.10 + 0.05 * Math.sin(t * 2)) + ')';
+      ctx.fillStyle = 'rgba(90,200,255,' + (0.12 + 0.05 * Math.sin(t * 2)) + ')';
       ctx.beginPath();
-      ctx.ellipse(sp.x, sp.y, this.zone.r, this.zone.r * Art.SQUASH, 0, 0, U.TAU);
+      ctx.ellipse(sp.x, sp.y, zr, zr * Art.SQUASH, 0, 0, U.TAU);
       ctx.fill();
       ctx.strokeStyle = frac > 0.4 ? '#5ac8ff' : '#ff6a6a';
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.ellipse(sp.x, sp.y, this.zone.r, this.zone.r * Art.SQUASH, 0, -Math.PI / 2, -Math.PI / 2 + U.TAU * frac);
+      ctx.ellipse(sp.x, sp.y, zr, zr * Art.SQUASH, 0, -Math.PI / 2, -Math.PI / 2 + U.TAU * frac);
       ctx.stroke();
     }
     if (this.delivery) {
       sp = P(this.delivery.x, this.delivery.y);
-      ctx.strokeStyle = this.relic.taken ? '#7fe08a' : 'rgba(255,255,255,0.4)';
-      ctx.lineWidth = 5;
-      ctx.setLineDash([14, 10]);
+      var dr = this.delivery.r * ZOOM;
+      ctx.strokeStyle = this.relic.taken ? '#7fe08a' : 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
       ctx.beginPath();
-      ctx.ellipse(sp.x, sp.y, this.delivery.r, this.delivery.r * Art.SQUASH, 0, 0, U.TAU);
+      ctx.ellipse(sp.x, sp.y, dr, dr * Art.SQUASH, 0, 0, U.TAU);
       ctx.stroke();
       ctx.setLineDash([]);
     }
     for (i = 0; i < this.plates.length; i++) {
       sp = P(this.plates[i].x, this.plates[i].y);
-      ctx.fillStyle = this.plates[i].filled ? 'rgba(120,240,150,0.28)' : 'rgba(255,228,92,0.16)';
+      var pr2 = this.plates[i].r * ZOOM;
+      ctx.fillStyle = this.plates[i].filled ? 'rgba(120,240,150,0.3)' : 'rgba(255,228,92,0.18)';
       ctx.beginPath();
-      ctx.ellipse(sp.x, sp.y, this.plates[i].r, this.plates[i].r * Art.SQUASH, 0, 0, U.TAU);
+      ctx.ellipse(sp.x, sp.y, pr2, pr2 * Art.SQUASH, 0, 0, U.TAU);
       ctx.fill();
       ctx.strokeStyle = this.plates[i].filled ? '#7fe08a' : '#ffe45c';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 2;
       ctx.stroke();
     }
   };
 
   Trial.prototype.drawObjectiveOverlay = function (ctx, P) {
-    var t = this.t, sp, i;
+    var Px = V.Px, Spr = V.Spr, t = this.t, sp, i;
+    var bob = Math.round(Math.sin(t * 3) * 2);
     if (this.relic && !this.relic.taken) {
       sp = P(this.relic.x, this.relic.y);
-      Art.drawRelic(ctx, sp.x, sp.y, t);
+      Px.shadow(ctx, sp.x, sp.y, 4, 0.2);
+      Px.draw(ctx, Spr.prop('relic', 0), sp.x, sp.y - 4 + bob);
     }
     if (this.relic && this.relic.taken) {
       sp = P(this.player.x, this.player.y);
-      Art.drawRelic(ctx, sp.x, sp.y - 58, t, '#ffd66b');
+      Px.draw(ctx, Spr.prop('relic', 0), sp.x, sp.y - 30 + bob);
     }
     for (i = 0; i < this.hints.length; i++) {
+      if (this.hints[i].found) continue;
       sp = P(this.hints[i].x, this.hints[i].y);
-      if (!this.hints[i].found) Art.drawHintGlyph(ctx, sp.x, sp.y, t, false);
-    }
-    for (i = 0; i < this.pickups.length; i++) {
-      sp = P(this.pickups[i].x, this.pickups[i].y);
-      if (this.pickups[i].kind === 'coin') Art.drawCoin(ctx, sp.x, sp.y, t);
+      Px.draw(ctx, Spr.prop('hint', 0), sp.x, sp.y - 2 + bob);
     }
 
-    /* off-screen objective arrow */
     var target = null;
     if (this.relic && !this.relic.taken) target = this.relic;
     else if (this.delivery && this.relic && this.relic.taken) target = this.delivery;
@@ -891,17 +880,16 @@
 
   Trial.prototype.drawGuide = function (ctx, P, target) {
     var p = this.player;
-    var d = U.dist(p.x, p.y, target.x, target.y);
-    if (d < 330) return;
+    if (U.dist(p.x, p.y, target.x, target.y) < 330) return;
     var a = Math.atan2((target.y - p.y) * Art.SQUASH, target.x - p.x);
     var sp = P(p.x, p.y);
     ctx.save();
-    ctx.translate(sp.x + Math.cos(a) * 70, sp.y - 30 + Math.sin(a) * 70);
+    ctx.translate(sp.x + Math.cos(a) * 22, sp.y - 14 + Math.sin(a) * 22);
     ctx.rotate(a);
-    ctx.fillStyle = 'rgba(255,240,160,0.85)';
-    ctx.beginPath();
-    ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8);
-    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffe45c';
+    ctx.fillRect(0, -1, 5, 3);
+    ctx.fillRect(4, -3, 2, 7);
+    ctx.fillRect(6, -1, 2, 3);
     ctx.restore();
   };
 
@@ -912,12 +900,12 @@
       sp = P(s.x, s.y);
       var k = s.life / s.max;
       ctx.save();
-      ctx.translate(sp.x, sp.y - 26);
+      ctx.translate(sp.x, sp.y - 9);
       ctx.scale(1, Art.SQUASH);
-      ctx.strokeStyle = s.kind === 'enemy' ? 'rgba(255,120,110,' + k * 0.7 + ')' : 'rgba(255,255,255,' + k * 0.75 + ')';
-      ctx.lineWidth = 9 * k + 2;
+      ctx.strokeStyle = s.kind === 'enemy' ? 'rgba(255,120,110,' + k * 0.8 + ')' : 'rgba(255,255,255,' + k * 0.85 + ')';
+      ctx.lineWidth = Math.max(1, Math.round(3 * k + 1));
       ctx.beginPath();
-      ctx.arc(0, 0, s.range * (1.05 - k * 0.25), s.angle - s.halfArc, s.angle + s.halfArc);
+      ctx.arc(0, 0, s.range * ZOOM * (1.05 - k * 0.25), s.angle - s.halfArc, s.angle + s.halfArc);
       ctx.stroke();
       ctx.restore();
     }
@@ -926,23 +914,23 @@
       sp = P(pt.x, pt.y);
       ctx.globalAlpha = U.clamp(pt.life / pt.max, 0, 1);
       ctx.fillStyle = pt.colour;
-      Art.ellipse(ctx, sp.x, sp.y - 22, pt.r, pt.r); ctx.fill();
+      var pr = Math.max(1, Math.round(pt.r * 0.6));
+      ctx.fillRect(sp.x - pr, sp.y - 8 - pr, pr * 2, pr * 2);
     }
     ctx.globalAlpha = 1;
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
+
+    /* floating numbers are handed to the HUD so they stay crisp */
     for (i = 0; i < this.floaters.length; i++) {
       var f = this.floaters[i];
       sp = P(f.x, f.y);
-      ctx.globalAlpha = U.clamp(f.life / f.max, 0, 1);
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillText(f.text, sp.x + 1.5, sp.y + 1.5);
-      ctx.fillStyle = f.colour;
-      ctx.fillText(f.text, sp.x, sp.y);
+      this.screenFloaters.push({
+        x: sp.x, y: sp.y, text: f.text, colour: f.colour,
+        alpha: U.clamp(f.life / f.max, 0, 1)
+      });
     }
-    ctx.globalAlpha = 1;
   };
 
+  Trial.ZOOM = ZOOM;
   Trial.ARENA_R = ARENA_R;
   V.Trial = Trial;
 })(window.V = window.V || {});

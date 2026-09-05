@@ -275,6 +275,39 @@ async function main() {
   check('finishing well lands in a paying tier', botRun.outcome === 'reward' || botRun.outcome === 'neutral',
     botRun.outcome + ' at p' + botRun.percentile);
 
+  /* --- every authored sprite bakes cleanly against the locked palette --- */
+  const sprites = await page.evaluate(() => {
+    const Spr = window.V.Spr, Px = window.V.Px;
+    const problems = [];
+    let count = 0;
+    const check = (spr, name) => {
+      count++;
+      if (!spr || !spr.canvas) { problems.push(name + ': did not bake'); return; }
+      if (!spr.w || !spr.h) problems.push(name + ': zero size');
+      Px.validate(spr, name).forEach((p) => problems.push(p));
+    };
+    for (const dir of ['down', 'up', 'side']) {
+      for (const f of [0, 1, 2]) {
+        check(Spr.player(dir, f, '#3d6fa8'), `player:${dir}:${f}`);
+        check(Spr.goblin(dir, f), `goblin:${dir}:${f}`);
+        check(Spr.minotaur(dir, f), `minotaur:${dir}:${f}`);
+        check(Spr.reaper(dir, f), `reaper:${dir}:${f}`);
+      }
+    }
+    check(Spr.aurelith(0), 'aurelith:0');
+    check(Spr.aurelith(1), 'aurelith:1');
+    for (const k of ['tree', 'pine', 'cactus', 'crate', 'fence', 'wall', 'rock',
+                     'flower', 'fern', 'tuft', 'stone', 'relic', 'hint',
+                     'bush', 'snowbush', 'shrub']) {
+      check(Spr.prop(k, 1), 'prop:' + k);
+    }
+    for (const w of ['sword', 'battleaxe', 'bow', 'scythe']) check(Spr.weapon(w), 'weapon:' + w);
+    for (const e of window.V.D.ENVIRONMENTS) check(Spr.groundTile(e.id), 'ground:' + e.id);
+    return { count, problems };
+  });
+  check('every sprite bakes against the locked palette',
+    sprites.problems.length === 0, sprites.count + ' sprites; ' + sprites.problems.slice(0, 4).join(' | '));
+
   /* --- balance probe: how does a competent run rank across trial types? --- */
   const probe = await page.evaluate(() => {
     const g = window.VELTHIROS;
