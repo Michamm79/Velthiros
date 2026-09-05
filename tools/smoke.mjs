@@ -41,7 +41,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   const { server, port } = await serve();
-  const browser = await chromium.launch({ executablePath: process.env.CHROME_BIN || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
+  /* use a pre-installed Chromium when one is on disk, otherwise let Playwright
+     resolve the browser it downloaded (which is what CI does) */
+  const preinstalled = process.env.CHROME_BIN || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+  const launchOpts = { args: ['--no-sandbox'] };
+  if (fs.existsSync(preinstalled)) launchOpts.executablePath = preinstalled;
+  const browser = await chromium.launch(launchOpts);
   const page = await browser.newPage({ viewport: { width: 812, height: 400 }, deviceScaleFactor: 2 });
 
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
@@ -62,11 +67,21 @@ async function main() {
     await page.mouse.down();
     await wait(60);
     await page.mouse.up();
-    await wait(120);
+    await wait(200);
     return true;
   }
 
   const sceneName = () => page.evaluate(() => window.VELTHIROS.scene.constructor.name);
+
+  /* poll rather than sleep a fixed amount - CI runners are slower than a dev box */
+  async function waitForScene(name, timeoutMs = 10000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if ((await sceneName()) === name) return true;
+      await wait(100);
+    }
+    return false;
+  }
 
   await page.goto(`http://127.0.0.1:${port}/index.html`);
   await wait(900);
@@ -77,8 +92,7 @@ async function main() {
 
   /* --- New Game via a real tap on the drawn button --- */
   check('tapped New Game', await tapZone('newgame'));
-  await wait(400);
-  check('bedroom intro scene', (await sceneName()) === 'RoomScene', await sceneName());
+  check('bedroom intro scene', await waitForScene('RoomScene'), await sceneName());
   await shot('02-bedroom');
 
   /* walk around the bedroom with a drag on the left half (virtual joystick) */
@@ -92,20 +106,16 @@ async function main() {
 
   /* fast-forward the mood intro */
   await page.evaluate(() => { window.VELTHIROS.scene.introTimer = 0.15; });
-  await wait(500);
-  check('abduction cutscene', (await sceneName()) === 'CutsceneScene', await sceneName());
+  check('abduction cutscene', await waitForScene('CutsceneScene'), await sceneName());
   await wait(2200);
   await shot('03-cutscene');
   await tapZone('skip');
-  await wait(400);
-
-  check('gem granted', (await sceneName()) === 'GemScene', await sceneName());
+  check('gem granted', await waitForScene('GemScene'), await sceneName());
   await shot('04-gem');
   await tapZone('continue');
-  await wait(500);
 
   /* --- trial 1 --- */
-  check('entered trial', (await sceneName()) === 'TrialScene', await sceneName());
+  check('entered trial', await waitForScene('TrialScene'), await sceneName());
   await shot('05-trial-intro');
   await page.evaluate(() => { window.VELTHIROS.scene.trial.introTimer = 0.1; });
   await wait(500);
@@ -141,16 +151,13 @@ async function main() {
     t.kills = 12;
     t.finish('complete');
   });
-  await wait(500);
-  check('ranking screen', (await sceneName()) === 'RankingScene', await sceneName());
+  check('ranking screen', await waitForScene('RankingScene'), await sceneName());
   const rank = await page.evaluate(() => window.VELTHIROS.pendingResult);
   check('rank percentile in range', rank.percentile >= 1 && rank.percentile <= 99, 'p=' + rank.percentile);
   await wait(1400);
   await shot('07-ranking');
   await tapZone('continue');
-  await wait(600);
-
-  check('back in hub', (await sceneName()) === 'RoomScene', await sceneName());
+  check('back in hub', await waitForScene('RoomScene'), await sceneName());
   const hub = await page.evaluate(() => ({ mode: window.VELTHIROS.scene.mode, trial: window.VELTHIROS.save.trial, cur: window.VELTHIROS.save.currency }));
   check('hub mode + trial advanced', hub.mode === 'hub' && hub.trial === 2, JSON.stringify(hub));
   await shot('08-hub');
