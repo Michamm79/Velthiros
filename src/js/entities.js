@@ -51,6 +51,7 @@
     this.smokeTimer = 0;
     this.damageTaken = 0;
     this.kills = 0;
+    this.swingDir = 1;            /* flips each swing: left-to-right, then back */
   }
 
   Player.prototype.canAct = function () {
@@ -135,18 +136,44 @@
     return this.atkDef ? this.atkDef.windup + this.atkDef.recover : 0.3;
   };
 
+  /* Soft lock-on: on the swing, snap to the most plausible target in a wide
+     cone. There is no held lock — you still aim with the stick — but a target
+     that reads as "in front of me" now counts as in front of you. */
+  Player.prototype.aimAssist = function (def) {
+    var world = this.world;
+    var SQ = Art.SQUASH;
+    var reach = Math.min(def.range || 100, 260) + 55;
+    var fv = Math.atan2(Math.sin(this.facing) * SQ, Math.cos(this.facing));
+    var best = null, bestCost = Infinity;
+
+    for (var i = 0; i < world.enemies.length; i++) {
+      var e = world.enemies[i];
+      if (e.dead || e.hiding) continue;
+      var dx = e.x - this.x, dy = e.y - this.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d > reach + e.radius) continue;
+      var delta = Math.abs(U.angleDelta(fv, Math.atan2(dy * SQ, dx)));
+      if (delta > 1.0) continue;                 /* ~57 degrees either side */
+      var cost = delta * 90 + d * 0.35;          /* prefer aligned, then near */
+      if (cost < bestCost) { bestCost = cost; best = e; }
+    }
+    if (best) this.facing = Math.atan2(best.y - this.y, best.x - this.x);
+  };
+
   Player.prototype.tryAttack = function (special) {
     if (!this.canAct()) return false;
     var w = D.WEAPONS[this.weaponId];
     var def = special ? w.special : w;
     if (special && this.specialCd > 0) return false;
     if (this.stamina < def.stamina) { Audio.play('deny'); return false; }
+    this.aimAssist(def);
     this.stamina -= def.stamina;
     this.staminaLock = 0.55;
     this.atkDef = def;
     this.atkKind = special ? 'special' : 'primary';
     this.atkState = 'windup';
     this.atkTime = 0;
+    this.swingDir = -this.swingDir;
     if (special) this.specialCd = def.cooldown;
     Audio.play(w.kind === 'ranged' ? 'bow' : (w.id === 'battleaxe' ? 'heavy' : 'swing'));
 
@@ -182,7 +209,8 @@
     for (var e = 0; e < world.enemies.length; e++) {
       var en = world.enemies[e];
       if (en.dead) continue;
-      if (!U.inArc(this.x, this.y, this.facing, halfArc, def.range + en.radius, en.x, en.y)) continue;
+      if (!U.inArcVisual(this.x, this.y, this.facing, halfArc, def.range + en.radius,
+        en.x, en.y, Art.SQUASH)) continue;
       en.hurt(dmg, this.facing, def.knock || 120, this);
       hitAny = true;
       if (def.lifesteal) this.heal(dmg * def.lifesteal);
@@ -247,20 +275,36 @@
 
     /* weapon sits behind the body when the swing goes away from camera */
     var wpn = Spr.weapon(this.weaponId);
-    var behind = view.dir === 'up';
+    var Z = V.Trial.ZOOM, SQ = Art.SQUASH;
 
-    /* the weapon rotates through the swing so the attack reads without an arc */
-    var rot = -0.5;
+    /* The weapon travels a real arc AROUND the body: it winds back during the
+       wind-up, then whips through the full sweep, alternating direction each
+       swing. The sweep matches the weapon's hit arc, so what you see is what
+       connects. */
+    var sweepHalf = 0.55, orbit = -0.7, held = true;
     if (this.atkState && this.atkDef) {
-      var span = this.atkDef.windup + this.atkDef.recover;
-      var prog = U.clamp((this.atkState === 'windup'
-        ? this.atkTime
-        : this.atkDef.windup + this.atkTime) / Math.max(span, 0.01), 0, 1);
-      rot = U.lerp(-1.5, 1.3, prog);
+      var def = this.atkDef;
+      sweepHalf = (def.spin ? Math.PI : def.arc / 2) + 0.3;
+      var dir = this.swingDir;
+      if (this.atkState === 'windup') {
+        /* wind back past the start of the arc */
+        var wp = U.clamp(this.atkTime / Math.max(def.windup, 0.01), 0, 1);
+        orbit = -sweepHalf * dir * (0.7 + 0.3 * wp);
+      } else {
+        var rp = U.clamp(this.atkTime / Math.max(def.recover, 0.01), 0, 1);
+        orbit = U.lerp(-sweepHalf, sweepHalf, U.easeOut(rp)) * dir;
+      }
+      held = false;
     }
-    var wx = this.sx + (view.flip ? -6 : 6);
-    var wy = y - 13;
-    var wOpts = { flip: view.flip, rot: rot };
+
+    var swingAngle = this.facing + orbit;
+    var radius = held ? 7 : 12;
+    var wx = this.sx + Math.cos(swingAngle) * radius;
+    var wy = y - 13 + Math.sin(swingAngle) * radius * SQ;
+    /* point the blade outward along the arc; the sprite pivots at its grip */
+    var visual = Math.atan2(Math.sin(swingAngle) * SQ, Math.cos(swingAngle));
+    var wOpts = { rot: view.flip ? Math.PI - visual : visual, flip: view.flip };
+    var behind = Math.sin(swingAngle) < -0.15;
 
     if (behind) Px.draw(ctx, wpn, wx, wy, wOpts);
     var flash = this.hurtFlash > 0 && Math.floor(this.hurtFlash * 24) % 2 === 0;
@@ -435,7 +479,8 @@
     var w = this.world;
     var arc = this.def.boss ? 1.6 : 1.1;
     w.swipe(this.x, this.y, this.facing, this.def.attackRange, arc / 2, 'enemy');
-    if (U.inArc(this.x, this.y, this.facing, arc / 2, this.def.attackRange + p.radius, p.x, p.y)) {
+    if (U.inArcVisual(this.x, this.y, this.facing, arc / 2, this.def.attackRange + p.radius,
+      p.x, p.y, Art.SQUASH)) {
       p.hurt(this.damage, this.facing);
     }
     V.Audio.play(this.def.heavy || this.def.boss ? 'heavy' : 'swing');

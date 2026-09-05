@@ -99,6 +99,22 @@
     return Math.abs(U.angleDelta(facing, a)) <= halfArc;
   };
 
+  /* The world's Y axis is squashed on screen (3/4 view), so a target's world
+     angle is not the angle the player sees. Aiming and hit tests use this
+     visual angle instead, otherwise diagonal swings miss things that plainly
+     look like they are in front of you. */
+  U.visualAngle = function (dx, dy, squash) { return Math.atan2(dy * squash, dx); };
+
+  U.inArcVisual = function (ax, ay, facing, halfArc, range, tx, ty, squash) {
+    var dx = tx - ax, dy = ty - ay;
+    var d2 = dx * dx + dy * dy;
+    if (d2 > range * range) return false;
+    if (d2 < 1) return true;
+    var fv = Math.atan2(Math.sin(facing) * squash, Math.cos(facing));
+    var av = Math.atan2(dy * squash, dx);
+    return Math.abs(U.angleDelta(fv, av)) <= halfArc;
+  };
+
   U.roman = function (n) {
     var map = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
     return map[n] || String(n);

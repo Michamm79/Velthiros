@@ -158,9 +158,8 @@ direction — and a three-frame walk. Weapons are separate sprites pivoted at th
 rotated through the swing. The test suite bakes all 65 sprites and fails on any unknown
 palette key, which is the main defence against a typo in hand-placed pixel data.
 
-What is not yet converted: the bedroom/hub interior furniture and the title and cutscene art
-are still procedural, so they read smoother than the arena. A tiled interior is the obvious
-next art job.
+What is not yet converted: the bedroom and hub interior furniture. The title and cutscene
+now use sprites. A tiled interior is the remaining art job.
 
 **Stones are pushed on a locked axis.** Physical puzzles originally moved stones through the
 generic collision separation, which shoved them along whatever vector separated the two
@@ -200,6 +199,32 @@ hint.
 The regression guard is a test that constructs a flawless run and a scrape-through run for
 every trial type and asserts the first reaches the top 25% while the second does not. That
 is the check that would have caught this before it shipped.
+
+**Swings missed things that plainly looked in front of you.** Reported from play, and the
+cause was perspective, not tuning. The world's Y axis is squashed to 0.62 on screen for the
+3/4 view, so a target's *world* angle differs from the angle the player *sees* by up to 13.6
+degrees at around 52 degrees off-axis — 41% of the sword's 33-degree half-arc, spent before
+the swing even started. Hit tests ran in world space, so diagonal targets fell outside an
+arc that visibly contained them.
+
+Three changes. `U.inArcVisual` runs the arc test in squashed screen space for both the
+player and enemies, so what looks in front is in front. `Player.aimAssist` gives a soft
+lock-on: on the swing, facing snaps to the best target within a 57-degree cone — there is no
+held lock, you still aim with the stick, but a target that reads as yours counts as yours.
+And the melee arcs widened (sword 1.15 to 1.5 radians, scythe 1.42 to 1.75, axe 1.5 to 1.8)
+with a little more reach.
+
+**The weapon sweeps rather than pivots.** It used to rotate on the spot beside the body. It
+now travels a real arc *around* the character: winding back through the wind-up, then
+whipping through the full sweep, alternating direction each swing so consecutive attacks
+read as back-and-forth. The sweep width is taken from the weapon's own hit arc, so the
+animation and the hitbox agree.
+
+**Garatu is pixel art now.** He only appears on the title screen, in the abduction cutscene
+and on the reset screen, and was the last character still drawn as smooth vectors. Those
+screens draw him straight onto the full-resolution canvas at an integer scale rather than
+through the world buffer, which keeps the pixels square without making the surrounding text
+chunky. The bedroom and hub interior furniture is the only art still unconverted.
 
 **The scythe combo is pinned for testing.** `D.FIXED_COMBO_INDEX` is `0`, so the unlock is
 always up, up, down, down, left, right. Setting it to `null` restores the GDD behaviour of

@@ -152,7 +152,8 @@ Three deliberate departures, all reversible from one place each:
   so text stays readable. `?smooth=1` turns the pixel buffer off.
 
   Characters have three authored views (facing down, up and side, mirrored for the other
-  side) and a three-frame walk cycle. The look follows a classic top-down RPG tileset:
+  side) and a three-frame walk cycle. Weapons sweep a real arc around the body, alternating
+  direction each swing. The look follows a classic top-down RPG tileset:
   one hard dark pixel outlining every silhouette, three-tone foliage, warm dirt.
   `Grid.outline()` in `pixel.js` is what produces those outlines automatically.
 

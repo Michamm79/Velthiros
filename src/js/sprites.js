@@ -13,6 +13,12 @@
     '1': '#55632c',   /* desert scrub dark */
     '2': '#778a3d',   /* desert scrub mid */
     '3': '#9aae55',   /* desert scrub light */
+    '4': '#3a1830',   /* demon shadow */
+    '5': '#5c2b4a',   /* demon body */
+    '6': '#8c3f61',   /* demon mid */
+    '7': '#c9526a',   /* demon skin */
+    '8': '#ffd24a',   /* demon eye-glow */
+    '9': '#2a1024',   /* wing membrane */
     'M': '#332d40',   /* interior floor dark */
     'V': '#4a4356',   /* interior floor mid */
     'E': '#1d2430',   /* cave / HQ shadow */
@@ -278,6 +284,59 @@
         g.line('P', cx - 12, 44, cx - 10, 50);
         g.line('P', cx + 5, 36, cx + 12, 44);
         g.line('P', cx + 12, 44, cx + 10, 50);
+
+        g.mirrorX();
+        g.outline('K');
+      });
+    });
+  };
+
+  /* Garatu: the abductor. Only ever seen on the title screen and in the
+     opening cutscene, but he was the last thing still drawn as smooth vectors. */
+  Spr.garatu = function (frame) {
+    return cached('ga:' + frame, function () {
+      return Px.make(58, 44, function (g) {
+        var cx = 29;
+        var flap = frame ? 3 : 0;
+
+        /* one wing, then mirrored: a ribbed membrane on three fingers */
+        for (var i = 0; i < 24; i++) {
+          var span = i / 23;
+          var top = 5 + Math.round(span * 9) - Math.round((1 - span) * flap);
+          var h = Math.round(14 - span * 5 + Math.sin(span * Math.PI * 3) * 3);
+          if (h < 3) h = 3;
+          g.rect('9', cx - 9 - i, top, 1, h);
+        }
+        for (var f = 0; f < 3; f++) {                 /* finger bones */
+          var fx = cx - 12 - f * 8;
+          g.line('4', fx, 8 + f * 3, fx - 4, 20 + f * 4);
+        }
+        g.line('4', cx - 9, 6, cx - 32, 13);          /* leading edge */
+
+        /* body */
+        g.rect('5', cx - 5, 18, 10, 13);
+        g.rect('4', cx + 1, 19, 4, 12);
+        g.rect('6', cx - 4, 20, 3, 6);
+        g.rect('4', cx - 5, 30, 10, 3);               /* belt */
+        g.rect('5', cx - 4, 33, 3, 7);                /* legs */
+        g.rect('5', cx + 1, 33, 3, 7);
+        g.rect('4', cx - 4, 40, 3, 2);
+        g.rect('4', cx + 1, 40, 3, 2);
+
+        /* arms */
+        g.rect('7', cx - 8, 20, 3, 8);
+        g.rect('7', cx + 5, 20, 3, 8);
+
+        /* head with swept horns and a lit stare */
+        g.oval('7', cx, 12, 5, 5);
+        g.rect('6', cx + 2, 10, 3, 5);
+        g.set(cx - 2, 12, '8'); g.set(cx + 2, 12, '8');
+        g.set(cx - 2, 13, 'N'); g.set(cx + 2, 13, 'N');
+        g.rect('K', cx - 2, 15, 5, 1);
+        g.line('O', cx - 4, 8, cx - 7, 3);
+        g.line('O', cx - 5, 8, cx - 8, 4);
+        g.line('O', cx + 4, 8, cx + 7, 3);
+        g.line('O', cx + 5, 8, cx + 8, 4);
 
         g.mirrorX();
         g.outline('K');

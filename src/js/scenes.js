@@ -87,9 +87,12 @@
       ctx.fillStyle = '#150d22';
     }
 
-    /* Garatu drifting behind the title */
-    ctx.globalAlpha = 0.30 + 0.06 * Math.sin(t * 0.9);
-    Art.drawGaratu(ctx, cw * 0.78, ch * 0.44 + Math.sin(t * 0.7) * 10, 1.05 * s, t);
+    /* Garatu drifting behind the title, drawn at an integer scale so the
+       pixels stay square on the full-resolution canvas */
+    var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
+    ctx.globalAlpha = 0.34 + 0.06 * Math.sin(t * 0.9);
+    V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 2) % 2),
+      cw * 0.78, ch * 0.44 + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
     ctx.globalAlpha = 1;
 
     /* title */
@@ -566,12 +569,12 @@
     ctx.ellipse(gx, gy, gr * 0.55, gr * 0.95, 0, 0, U.TAU);
     ctx.stroke();
 
-    /* Garatu emerging */
+    /* Garatu emerging - sprite at an integer scale, so he matches the arena art */
+    var demonScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
     if (t > 1.4) {
       var em = U.clamp((t - 1.4) / 1.4, 0, 1);
-      ctx.globalAlpha = em;
-      Art.drawGaratu(ctx, gx, gy + 30 * s, 1.5 * s * (0.7 + em * 0.5), t);
-      ctx.globalAlpha = 1;
+      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2), gx, gy + 46 * s,
+        { scale: demonScale, alpha: em });
     }
 
     /* the player, small, being lifted */
@@ -579,12 +582,10 @@
     var pxx = U.lerp(cw * 0.28, gx - 40 * s, lift);
     var pyy = U.lerp(ch * 0.62, gy + 10 * s, lift) - lift * 20 * s;
     if (t < 10.5 || this.kind !== 'abduction') {
+      var pScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
       Art.shadow(ctx, pxx, ch * 0.62, 16 * (1 - lift * 0.7), 0.2 * (1 - lift));
-      Art.chibi(ctx, {
-        x: pxx, y: pyy, scale: 1.3 * s, phase: t * 3, moving: false,
-        body: this.game.playerTint(), skin: '#f5c9a0', hair: '#5b3d2b', legs: '#3f6ea8',
-        faceDir: 1, lean: lift * 0.5
-      });
+      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), pxx, pyy,
+        { scale: pScale, rot: lift * 0.5 });
     }
 
     /* fade out at the end */
@@ -809,8 +810,9 @@
     var s = UI.setScale(cw, ch);
     ctx.fillStyle = '#0d0710';
     ctx.fillRect(0, 0, cw, ch);
-    ctx.globalAlpha = 0.25;
-    Art.drawGaratu(ctx, cw / 2, ch * 0.42, 1.6 * s, this.t);
+    ctx.globalAlpha = 0.28;
+    V.Px.draw(ctx, V.Spr.garatu(Math.floor(this.t * 2) % 2), cw / 2, ch * 0.42,
+      { scale: Math.max(2, Math.round(Math.min(cw, ch) / 150)) });
     ctx.globalAlpha = 1;
     UI.text(ctx, 'TWENTY-FIVE', cw / 2, ch * 0.55, { size: 34, align: 'center', weight: '800', colour: '#ff5f6d' });
     UI.text(ctx, '"You bored them. Start again."', cw / 2, ch * 0.55 + 34 * s,

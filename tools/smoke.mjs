@@ -400,6 +400,44 @@ async function main() {
     tooEasy.length === 0,
     tooEasy.map((c) => c.type + ' pays at top ' + c.poor + '%').join(', '));
 
+  /* --- aiming at where an enemy LOOKS must connect.
+         The world's Y is squashed 0.62 on screen, so a diagonal target's world
+         angle differs from its on-screen angle by up to 13.6 degrees. Swings
+         used to be tested in world space and missed things plainly in front. --- */
+  const aiming = await page.evaluate(() => {
+    const g = window.VELTHIROS, D = window.V.D, SQ = window.V.Art.SQUASH;
+    const attempt = (angleDeg, distance, faceDeg) => {
+      const spec = { index: 3, type: 'defeat', boss: false, env: D.ENVIRONMENTS[0], seed: 3, label: 'aim' };
+      const t = new window.V.Trial(g, spec);
+      t.state = 'play';
+      t.enemies.length = 0;
+      const p = t.player;
+      p.x = 0; p.y = 0;
+      const th = angleDeg * Math.PI / 180;
+      const e = t.spawnEnemy('goblin', Math.cos(th) * distance, Math.sin(th) * distance, {});
+      const hpBefore = e.hp;
+      /* the player aims by what they see: push the stick toward the enemy's
+         screen position, which is the world offset with Y squashed */
+      p.facing = faceDeg == null
+        ? Math.atan2(Math.sin(th) * distance * SQ, Math.cos(th) * distance)
+        : faceDeg * Math.PI / 180;
+      p.tryAttack(false);
+      for (let i = 0; i < 30 && t.state === 'play'; i++) t.update(1 / 60);
+      return e.hp < hpBefore;
+    };
+    return {
+      straightAhead: attempt(0, 70),
+      diagonal45: attempt(45, 70),
+      diagonal52: attempt(52, 75),       /* the worst case for the squash error */
+      steepDiagonal: attempt(70, 70),
+      behind: attempt(180, 70, 0)        /* enemy behind, player facing forward: must miss */
+    };
+  });
+  check('a swing connects with an enemy wherever it looks in front of you',
+    aiming.straightAhead && aiming.diagonal45 && aiming.diagonal52 && aiming.steepDiagonal,
+    JSON.stringify(aiming));
+  check('a swing still misses an enemy behind you', !aiming.behind, 'behind hit=' + aiming.behind);
+
   /* --- the reported case: someone who knows the puzzle layout, solves it
          carefully but unhurriedly and takes no hits, should be paid. --- */
   const puzzleRuns = await page.evaluate(() => {

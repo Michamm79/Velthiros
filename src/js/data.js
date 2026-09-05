@@ -12,16 +12,16 @@
   D.WEAPONS = {
     sword: {
       id: 'sword', name: 'Sword', kind: 'melee', owned: true, price: 0,
-      damage: 15, arc: 1.15, range: 82, windup: 0.05, recover: 0.19, stamina: 9,
+      damage: 15, arc: 1.5, range: 90, windup: 0.05, recover: 0.19, stamina: 9,
       moveScale: 0.74, knock: 180,
       special: { name: 'Spin', damage: 13, arc: Math.PI, range: 96, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
       blurb: 'Balanced all-rounder. No weakness, no spike.'
     },
     battleaxe: {
       id: 'battleaxe', name: 'Battleaxe', kind: 'melee', owned: false, price: 260,
-      damage: 27, arc: 1.5, range: 98, windup: 0.26, recover: 0.36, stamina: 22,
+      damage: 27, arc: 1.8, range: 108, windup: 0.26, recover: 0.36, stamina: 22,
       moveScale: 0.5, knock: 380,
-      special: { name: 'Cleave', damage: 44, arc: 1.9, range: 112, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
+      special: { name: 'Cleave', damage: 44, arc: 2.2, range: 122, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
       blurb: 'Huge damage in a wide arc. Long wind-up, poor mobility.'
     },
     bow: {
@@ -33,9 +33,9 @@
     },
     scythe: {
       id: 'scythe', name: 'Scythe', kind: 'melee', owned: false, price: -1, secret: true,
-      damage: 21, arc: 1.42, range: 94, windup: 0.08, recover: 0.24, stamina: 14,
+      damage: 21, arc: 1.75, range: 102, windup: 0.08, recover: 0.24, stamina: 14,
       moveScale: 0.72, knock: 250,
-      special: { name: 'Reap', damage: 26, arc: 2.4, range: 108, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
+      special: { name: 'Reap', damage: 26, arc: 2.7, range: 116, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
       blurb: 'The secret. Solid damage, quick, no crippling weakness.'
     }
   };

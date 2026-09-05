@@ -205,6 +205,9 @@
     var sc = opts.scale || 1;
     var dx = Math.round(x - spr.ax * sc);
     var dy = Math.round(y - spr.ay * sc);
+    /* nearest-neighbour always: sprites stay crisp even when drawn straight
+       onto the full-resolution canvas at an integer scale */
+    ctx.imageSmoothingEnabled = false;
     if (!opts.flip && opts.alpha == null && !opts.rot) {
       ctx.drawImage(spr.canvas, dx, dy, spr.w * sc, spr.h * sc);
       return;
