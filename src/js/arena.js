@@ -4,8 +4,11 @@
 
   var U = V.U, D = V.D, Art = V.Art, E = V.E, Audio = V.Audio;
 
-  var ARENA_R = 900;            /* GDD 5: ~30s to cross at 60u/s => 1800 diameter */
-  var BARRIER_R = ARENA_R + 30;
+  /* The GDD specifies a 30s crossing. Playtesting said the game felt sluggish,
+     so the arena grew and the player got much faster: 2500u across at 140u/s
+     is ~18s edge to edge, with everything else scaled to match. */
+  var ARENA_R = 1250;
+  var BARRIER_R = ARENA_R + 40;
 
   function Trial(game, spec) {
     this.game = game;
@@ -41,7 +44,7 @@
 
     this.stats = V.Save.resolveStats(game.save);
     this.player = new E.Player(this.stats, game.save.weapon, this);
-    this.player.drawScale = 1.5;
+    this.player.drawScale = 1.8;
     this.player.tint = game.playerTint();
 
     this.consumables = game.consumableCounts();
@@ -56,7 +59,7 @@
     var r = this.rng, i, a, d;
 
     /* barrier ring (GDD 5: player cannot leave) */
-    var ringCount = 74;
+    var ringCount = 104;
     for (i = 0; i < ringCount; i++) {
       a = (i / ringCount) * U.TAU;
       var jitter = r.range(-14, 14);
@@ -76,7 +79,7 @@
     }
 
     /* cover (GDD 5 + 7.3) */
-    var bushes = 26 + r.int(0, 10);
+    var bushes = 44 + r.int(0, 16);
     for (i = 0; i < bushes; i++) {
       a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 120);
       this.cover.push({
@@ -86,11 +89,12 @@
     }
 
     /* ground litter */
-    for (i = 0; i < 90; i++) {
+    for (i = 0; i < 300; i++) {
       a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 40);
       this.props.push({
         x: Math.cos(a) * d, y: Math.sin(a) * d,
-        kind: this.env.litter, s: r.range(0.7, 1.2), seed: r.int(0, 9999)
+        kind: r.chance(0.45) ? 'tuft' : this.env.litter,
+        s: r.range(0.7, 1.3), seed: r.int(0, 9999)
       });
     }
 
@@ -158,14 +162,14 @@
           this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.remainingToSpawn = target - inField;
-        this.par = target * 22 + this.timeLimit * 1.35;
+        this.par = target * 26 + this.timeLimit * 1.1;
         break;
       }
       case 'defend': {
         this.timeLimit = 60 + Math.round(tier * 22);
-        this.zone = { x: 0, y: 0, r: 160, hp: 100, maxHp: 100 };
+        this.zone = { x: 0, y: 0, r: 210, hp: 100, maxHp: 100 };
         this.objective = { text: 'Hold the ground for ' + Math.round(this.timeLimit) + 's' };
-        this.player.x = 0; this.player.y = 90;
+        this.player.x = 0; this.player.y = 120;
         this.waveTimer = 2;
         this.par = this.timeLimit * 12 + 380;
         break;
@@ -176,7 +180,7 @@
         this.relic = { x: rp.x, y: rp.y, taken: false };
         /* delivery point roughly opposite the relic */
         var ra = Math.atan2(rp.y, rp.x) + Math.PI;
-        this.delivery = { x: Math.cos(ra) * ARENA_R * 0.6, y: Math.sin(ra) * ARENA_R * 0.6, r: 70 };
+        this.delivery = { x: Math.cos(ra) * ARENA_R * 0.6, y: Math.sin(ra) * ARENA_R * 0.6, r: 95 };
         this.objective = { text: 'Collect the relic, deliver it' };
         for (i = 0; i < 4 + Math.floor(tier * 3); i++) {
           p = this.randomPoint(220, ARENA_R - 120, 300);
@@ -191,8 +195,8 @@
         this.objective = { text: 'Push the stones onto the marks' };
         for (i = 0; i < n; i++) {
           var ang = (i / n) * U.TAU + r() * 0.6;
-          this.blocks.push({ x: Math.cos(ang) * 240, y: Math.sin(ang) * 240, r: 34, done: false });
-          this.plates.push({ x: Math.cos(ang + 0.9) * 520, y: Math.sin(ang + 0.9) * 520, r: 46, filled: false });
+          this.blocks.push({ x: Math.cos(ang) * 330, y: Math.sin(ang) * 330, r: 34, done: false });
+          this.plates.push({ x: Math.cos(ang + 0.9) * 720, y: Math.sin(ang + 0.9) * 720, r: 56, filled: false });
         }
         for (i = 0; i < 2 + Math.floor(tier); i++) {
           p = this.randomPoint(300, ARENA_R - 150, 420);
@@ -260,7 +264,7 @@
   /* ============================================================ world hooks */
   Trial.prototype.spawnEnemy = function (id, x, y, opts) {
     var e = new E.Enemy(id, x, y, this, opts || this.scaleOpts);
-    e.drawScale = 1.5;
+    e.drawScale = 1.8;
     this.enemies.push(e);
     return e;
   };
@@ -327,8 +331,8 @@
     for (var i = 0; i < this.blocks.length; i++) {
       var b = this.blocks[i];
       if (U.inArc(p.x, p.y, p.facing, halfArc, range + b.r, b.x, b.y)) {
-        b.x += Math.cos(p.facing) * 46;
-        b.y += Math.sin(p.facing) * 46;
+        b.x += Math.cos(p.facing) * 64;
+        b.y += Math.sin(p.facing) * 64;
         U.confineToCircle(b, 0, 0, ARENA_R - 60);
       }
     }
@@ -378,7 +382,7 @@
     /* ---- pickups ---- */
     for (i = this.pickups.length - 1; i >= 0; i--) {
       var pk = this.pickups[i];
-      if (U.dist2(pk.x, pk.y, p.x, p.y) < 40 * 40) {
+      if (U.dist2(pk.x, pk.y, p.x, p.y) < 54 * 54) {
         this.pickups.splice(i, 1);
         if (pk.kind === 'coin') { this.bonusCoins = (this.bonusCoins || 0) + pk.value; Audio.play('coin'); }
         else if (pk.kind === 'heal') { p.heal(30); Audio.play('pickup'); }
@@ -501,7 +505,7 @@
         break;
       }
       case 'deliver': {
-        if (!this.relic.taken && U.dist2(p.x, p.y, this.relic.x, this.relic.y) < 44 * 44) {
+        if (!this.relic.taken && U.dist2(p.x, p.y, this.relic.x, this.relic.y) < 58 * 58) {
           this.relic.taken = true;
           p.carrying = 'relic';
           Audio.play('pickup');
@@ -532,7 +536,7 @@
       case 'word': {
         for (i = 0; i < this.hints.length; i++) {
           var h = this.hints[i];
-          if (!h.found && U.dist2(p.x, p.y, h.x, h.y) < 46 * 46) {
+          if (!h.found && U.dist2(p.x, p.y, h.x, h.y) < 62 * 62) {
             h.found = true;
             this.riddle.revealed++;
             Audio.play('pickup');
@@ -608,15 +612,15 @@
     Audio.music(null);
 
     var score = 0;
-    var timeBonus = Math.max(0, this.timeLeft) * 2.2;
+    var timeBonus = Math.max(0, this.timeLeft) * 1.5;    /* retuned after the speed pass */
     var killScore = 0;
     /* the enemies list only holds the living; count kills directly */
     killScore = this.kills * 16;
-    var damagePenalty = this.player.damageTaken * 1.1;
+    var damagePenalty = this.player.damageTaken * 0.75;
 
     var completed = (reason === 'complete');
     if (completed) {
-      score += this.par * 0.62;
+      score += this.par * 0.68;
       score += timeBonus;
     }
     score += killScore;
@@ -671,7 +675,8 @@
 
   /* ================================================================= render */
   Trial.prototype.zoom = function (cw, ch) {
-    return U.clamp(Math.min(cw, ch * 1.75) / 780, 0.55, 1.35);
+    /* the arena is 2500u across, so pull the camera back enough to read it */
+    return U.clamp(Math.min(cw, ch * 1.75) / 1150, 0.42, 1.0);
   };
 
   Trial.prototype.render = function (ctx, cw, ch) {
@@ -679,11 +684,11 @@
     var zoom = this.zoom(cw, ch);
 
     /* camera lead + smoothing */
-    var lead = 60;
+    var lead = 130;
     var tx = p.x + Math.cos(p.facing) * lead * 0.35;
     var ty = p.y + Math.sin(p.facing) * lead * 0.35;
-    this.cam.x = U.lerp(this.cam.x, tx, 0.12);
-    this.cam.y = U.lerp(this.cam.y, ty, 0.12);
+    this.cam.x = U.lerp(this.cam.x, tx, 0.16);
+    this.cam.y = U.lerp(this.cam.y, ty, 0.16);
 
     var shakeX = 0, shakeY = 0;
     if (this.shakeTime > 0) {
@@ -763,6 +768,24 @@
     };
   }
 
+  /* a small tile of two-tone dither, built once per environment */
+  Trial.prototype.groundPattern = function (ctx) {
+    if (this._pat !== undefined) return this._pat;
+    if (typeof document === 'undefined') { this._pat = null; return null; }
+    var size = 24;
+    var tile = document.createElement('canvas');
+    tile.width = tile.height = size;
+    var tc = tile.getContext('2d');
+    var rr = U.rng(U.hash(this.env.id));
+    var i;
+    tc.fillStyle = this.env.ground2;
+    for (i = 0; i < size * size * 0.16; i++) tc.fillRect(rr.int(0, size - 2), rr.int(0, size - 2), 2, 2);
+    tc.fillStyle = this.env.accent;
+    for (i = 0; i < size * size * 0.05; i++) tc.fillRect(rr.int(0, size - 2), rr.int(0, size - 2), 2, 2);
+    this._pat = ctx.createPattern(tile, 'repeat');
+    return this._pat;
+  };
+
   Trial.prototype.drawGround = function (ctx, P) {
     var c = P(0, 0);
     var r = ARENA_R;
@@ -776,21 +799,16 @@
     ctx.fillStyle = this.env.ground;
     ctx.fillRect(c.x - r - 10, c.y - r - 10, r * 2 + 20, r * 2 + 20);
 
-    /* soft checker so movement reads */
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = this.env.ground2;
-    var cell = 84;
-    var x0 = Math.floor((c.x - r) / cell) * cell;
-    var y0 = Math.floor((c.y - r * Art.SQUASH) / cell) * cell;
-    for (var gx = x0; gx < c.x + r; gx += cell) {
-      for (var gy = y0; gy < c.y + r * Art.SQUASH; gy += cell) {
-        if ((Math.round(gx / cell) + Math.round(gy / cell)) % 2 === 0) {
-          ctx.fillRect(gx, gy, cell, cell * Art.SQUASH);
-        }
-      }
+    /* dithered ground texture instead of a flat checker - reads as pixel art
+       and, being anchored to the world origin, it scrolls with the map */
+    var pat = this.groundPattern(ctx);
+    if (pat) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.fillStyle = pat;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+      ctx.restore();
     }
-
-    ctx.globalAlpha = 1;
 
     /* edge vignette */
     var grd = ctx.createRadialGradient(c.x, c.y, r * 0.55, c.x, c.y, r);
@@ -874,7 +892,7 @@
   Trial.prototype.drawGuide = function (ctx, P, target) {
     var p = this.player;
     var d = U.dist(p.x, p.y, target.x, target.y);
-    if (d < 240) return;
+    if (d < 330) return;
     var a = Math.atan2((target.y - p.y) * Art.SQUASH, target.x - p.x);
     var sp = P(p.x, p.y);
     ctx.save();

@@ -69,10 +69,10 @@
     /* ------- dodge / glide ------- */
     if (this.dodgeTime > 0) {
       this.dodgeTime -= dt;
-      var dodgeSpeed = this.stats.dodgeDist / 0.24;
+      var dodgeSpeed = this.stats.dodgeDist / 0.2;
       this.x += Math.cos(this.dodgeAngle) * dodgeSpeed * dt;
       this.y += Math.sin(this.dodgeAngle) * dodgeSpeed * dt;
-      this.z = this.stats.glide ? Math.sin((1 - this.dodgeTime / 0.24) * Math.PI) * 16 : 0;
+      this.z = this.stats.glide ? Math.sin((1 - this.dodgeTime / 0.2) * Math.PI) * 18 : 0;
       this.moving = true;
       this.animPhase += dt * 18;
       w.confine(this);
@@ -189,8 +189,8 @@
     var mv = this.world.input.move;
     this.dodgeAngle = mv.mag > 0.15 ? Math.atan2(mv.y, mv.x) : this.facing;
     this.facing = this.dodgeAngle;
-    this.dodgeTime = 0.24;
-    this.dodgeCd = 0.85 * this.stats.dodgeCdMul;
+    this.dodgeTime = 0.2;
+    this.dodgeCd = 0.7 * this.stats.dodgeCdMul;
     this.invuln = Math.max(this.invuln, 0.3);
     Audio.play('dodge');
     this.world.dust(this.x, this.y, 6);
@@ -212,8 +212,8 @@
     this.damageTaken += real;
     this.hurtFlash = 0.45;
     this.invuln = 0.6;
-    this.x += Math.cos(fromAngle) * 14;
-    this.y += Math.sin(fromAngle) * 14;
+    this.x += Math.cos(fromAngle) * 20;
+    this.y += Math.sin(fromAngle) * 20;
     this.world.confine(this);
     this.world.shake(7, 0.22);
     this.world.floater(this.x, this.y - 44, '-' + Math.round(real), '#ff7a7a');
@@ -277,8 +277,8 @@
     if (this.vx || this.vy) {
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.vx *= Math.pow(0.02, dt); this.vy *= Math.pow(0.02, dt);
-      if (Math.abs(this.vx) < 4) this.vx = 0;
-      if (Math.abs(this.vy) < 4) this.vy = 0;
+      if (Math.abs(this.vx) < 6) this.vx = 0;
+      if (Math.abs(this.vy) < 6) this.vy = 0;
       w.confine(this);
     }
 
@@ -286,7 +286,7 @@
       this.moving = false;
       this.animPhase += dt * 1.5;
       /* found if the player gets very close */
-      if (U.dist2(this.x, this.y, p.x, p.y) < 92 * 92) {
+      if (U.dist2(this.x, this.y, p.x, p.y) < 118 * 118) {
         this.hiding = false;
         this.aggro = true;
         this.state = 'chase';
@@ -320,7 +320,7 @@
         this.facing = toP;
         this.moving = true;
         var chaseSpeed = this.speed;
-        if (this.def.charge && d > 150 && d < 420 && this.stateTime > 1.2) {
+        if (this.def.charge && d > 220 && d < 620 && this.stateTime > 1.0) {
           this.state = 'charge'; this.stateTime = 0;
           this.chargeAngle = toP;
           w.floater(this.x, this.y - 46, '!', '#ff6a3c');
@@ -334,12 +334,12 @@
       case 'charge': {
         this.moving = true;
         this.facing = this.chargeAngle;
-        this.step(this.chargeAngle, this.speed * 2.6, dt);
+        this.step(this.chargeAngle, this.speed * 2.3, dt);
         if (d < this.def.attackRange * 0.8) {
           if (p.hurt(this.damage * 1.2, this.chargeAngle)) w.shake(10, 0.3);
           this.state = 'recover'; this.stateTime = 0;
         }
-        if (this.stateTime > 1.1) { this.state = 'recover'; this.stateTime = 0; }
+        if (this.stateTime > 0.9) { this.state = 'recover'; this.stateTime = 0; }
         break;
       }
       case 'windup': {
@@ -398,7 +398,7 @@
       for (var i = 0; i < n; i++) {
         var a = Math.random() * U.TAU;
         w.spawnEnemy(this.def.finalBoss && i % 2 === 0 ? 'minotaur' : 'goblin',
-          this.x + Math.cos(a) * 120, this.y + Math.sin(a) * 120);
+          this.x + Math.cos(a) * 170, this.y + Math.sin(a) * 170);
       }
       w.floater(this.x, this.y - 70, 'RISE', '#ff4d5e');
       V.Audio.play('boss');
@@ -406,11 +406,11 @@
     }
 
     /* teleport out of a corner or when kited */
-    if (this.def.teleport && this.bossTimer > (this.def.finalBoss ? 4.5 : 6) && d > 240) {
+    if (this.def.teleport && this.bossTimer > (this.def.finalBoss ? 3.5 : 4.5) && d > 340) {
       this.bossTimer = 0;
       var ta = Math.atan2(this.y - p.y, this.x - p.x) + Math.PI;
-      this.x = p.x + Math.cos(ta + (Math.random() - 0.5)) * 90;
-      this.y = p.y + Math.sin(ta + (Math.random() - 0.5)) * 90;
+      this.x = p.x + Math.cos(ta + (Math.random() - 0.5)) * 130;
+      this.y = p.y + Math.sin(ta + (Math.random() - 0.5)) * 130;
       w.confine(this);
       w.burst(this.x, this.y, 18, '#9b6bff');
       V.Audio.play('warp');
@@ -424,7 +424,7 @@
         this.volleyTimer = 0;
         var shots = 8 + this.phase * 2;
         for (var s = 0; s < shots; s++) {
-          w.spawnBolt(this.x, this.y - 20, (s / shots) * U.TAU + this.bossTimer, 165, this.damage * 0.45);
+          w.spawnBolt(this.x, this.y - 20, (s / shots) * U.TAU + this.bossTimer, 280, this.damage * 0.45);
         }
         V.Audio.play('warp');
       }

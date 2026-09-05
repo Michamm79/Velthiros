@@ -22,6 +22,12 @@
     var idleOverride = parseFloat(q.get('idle'));
     this.idleUnlockSeconds = (isFinite(idleOverride) && idleOverride > 0) ? idleOverride : D.IDLE_UNLOCK_SECONDS;
     this.debug = q.get('debug') === '1';
+    /* Pixel-art presentation: the world renders into a small offscreen buffer
+       and is scaled up with no smoothing, so everything lands on a chunky
+       pixel grid. The HUD is drawn afterwards at full resolution so text stays
+       readable on a phone. ?smooth=1 falls back to the old vector look. */
+    this.pixelMode = q.get('smooth') !== '1';
+    this.pixelTargetHeight = 240;
     var startTrial = parseInt(q.get('trial'), 10);
     this.forceTrial = (isFinite(startTrial) && startTrial > 0) ? startTrial : 0;
   }
@@ -59,6 +65,39 @@
     this.dpr = dpr;
     this.cw = w; this.ch = h;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+
+  /* ------------------------------------------------------- pixel pipeline */
+  Game.prototype.worldTarget = function () {
+    if (!this.pixelMode) { this.pixScale = 1; return { ctx: this.ctx, w: this.cw, h: this.ch, direct: true }; }
+
+    var scale = Math.max(2, Math.round(this.ch / this.pixelTargetHeight));
+    var bw = Math.ceil(this.cw / scale);
+    var bh = Math.ceil(this.ch / scale);
+
+    if (!this.pixCanvas) {
+      this.pixCanvas = document.createElement('canvas');
+      this.pixCtx = this.pixCanvas.getContext('2d');
+    }
+    if (this.pixCanvas.width !== bw || this.pixCanvas.height !== bh) {
+      this.pixCanvas.width = bw;
+      this.pixCanvas.height = bh;
+    }
+    this.pixScale = scale;
+    var c = this.pixCtx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, bw, bh);
+    c.imageSmoothingEnabled = false;
+    return { ctx: c, w: bw, h: bh, direct: false };
+  };
+
+  Game.prototype.flushWorld = function (target) {
+    if (!this.pixelMode || target.direct) return;
+    var ctx = this.ctx;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.pixCanvas, 0, 0, this.pixCanvas.width, this.pixCanvas.height,
+      0, 0, this.pixCanvas.width * this.pixScale, this.pixCanvas.height * this.pixScale);
+    ctx.imageSmoothingEnabled = true;
   };
 
   Game.prototype.frame = function (now) {
@@ -342,7 +381,9 @@
     this.trial.update(dt);
   };
   TrialScene.prototype.render = function (ctx, cw, ch) {
-    this.trial.render(ctx, cw, ch);
+    var target = this.game.worldTarget();
+    this.trial.render(target.ctx, target.w, target.h);
+    this.game.flushWorld(target);
     V.HUD.draw(ctx, this.trial, cw, ch);
   };
 

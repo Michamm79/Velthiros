@@ -194,30 +194,30 @@ html, body {
   D.WEAPONS = {
     sword: {
       id: 'sword', name: 'Sword', kind: 'melee', owned: true, price: 0,
-      damage: 15, arc: 1.15, range: 74, windup: 0.07, recover: 0.26, stamina: 9,
-      moveScale: 0.62, knock: 130,
-      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 86, windup: 0.16, recover: 0.5, stamina: 30, cooldown: 3.2, knock: 200, spin: true },
+      damage: 15, arc: 1.15, range: 82, windup: 0.05, recover: 0.19, stamina: 9,
+      moveScale: 0.74, knock: 180,
+      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 96, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
       blurb: 'Balanced all-rounder. No weakness, no spike.'
     },
     battleaxe: {
       id: 'battleaxe', name: 'Battleaxe', kind: 'melee', owned: false, price: 260,
-      damage: 27, arc: 1.5, range: 88, windup: 0.34, recover: 0.5, stamina: 22,
-      moveScale: 0.34, knock: 280,
-      special: { name: 'Cleave', damage: 44, arc: 1.9, range: 100, windup: 0.55, recover: 0.6, stamina: 40, cooldown: 5.0, knock: 420, quake: true },
+      damage: 27, arc: 1.5, range: 98, windup: 0.26, recover: 0.36, stamina: 22,
+      moveScale: 0.5, knock: 380,
+      special: { name: 'Cleave', damage: 44, arc: 1.9, range: 112, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
       blurb: 'Huge damage in a wide arc. Long wind-up, poor mobility.'
     },
     bow: {
       id: 'bow', name: 'Bow', kind: 'ranged', owned: false, price: 240,
-      damage: 12, arc: 0.2, range: 620, windup: 0.3, recover: 0.24, stamina: 12,
-      moveScale: 0.5, knock: 60, projectileSpeed: 460,
-      special: { name: 'Volley', damage: 10, spread: 0.34, shots: 3, windup: 0.42, recover: 0.4, stamina: 34, cooldown: 4.2, projectileSpeed: 440 },
+      damage: 12, arc: 0.2, range: 820, windup: 0.22, recover: 0.17, stamina: 12,
+      moveScale: 0.66, knock: 80, projectileSpeed: 720,
+      special: { name: 'Volley', damage: 10, spread: 0.34, shots: 3, windup: 0.3, recover: 0.28, stamina: 34, cooldown: 3.8, projectileSpeed: 700 },
       blurb: 'Best kiting tool. Helpless once they close in.'
     },
     scythe: {
       id: 'scythe', name: 'Scythe', kind: 'melee', owned: false, price: -1, secret: true,
-      damage: 21, arc: 1.42, range: 84, windup: 0.12, recover: 0.32, stamina: 14,
-      moveScale: 0.58, knock: 190,
-      special: { name: 'Reap', damage: 26, arc: 2.4, range: 96, windup: 0.14, recover: 0.42, stamina: 32, cooldown: 3.6, knock: 240, dash: 190, lifesteal: 0.3 },
+      damage: 21, arc: 1.42, range: 94, windup: 0.08, recover: 0.24, stamina: 14,
+      moveScale: 0.72, knock: 250,
+      special: { name: 'Reap', damage: 26, arc: 2.4, range: 108, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
       blurb: 'The secret. Solid damage, quick, no crippling weakness.'
     }
   };
@@ -268,23 +268,23 @@ html, body {
   /* --------------------------------------------------------------- enemies */
   D.ENEMIES = {
     goblin: {
-      id: 'goblin', name: 'Goblin', hp: 32, speed: 54, damage: 8, sight: 300,
-      radius: 15, attackRange: 44, attackWindup: 0.42, attackRecover: 0.55,
+      id: 'goblin', name: 'Goblin', hp: 32, speed: 98, damage: 8, sight: 400,
+      radius: 15, attackRange: 52, attackWindup: 0.34, attackRecover: 0.4,
       score: 10, reward: 6, colour: '#7fbf4f', dark: '#4b8030'
     },
     minotaur: {
-      id: 'minotaur', name: 'Minotaur', hp: 130, speed: 44, damage: 20, sight: 360,
-      radius: 24, attackRange: 62, attackWindup: 0.62, attackRecover: 0.8,
+      id: 'minotaur', name: 'Minotaur', hp: 130, speed: 86, damage: 20, sight: 470,
+      radius: 24, attackRange: 72, attackWindup: 0.5, attackRecover: 0.6,
       score: 40, reward: 22, colour: '#b06a40', dark: '#733f22', charge: true, heavy: true
     },
     reaper: {
-      id: 'reaper', name: 'Reaper', hp: 420, speed: 62, damage: 26, sight: 3000,
-      radius: 26, attackRange: 96, attackWindup: 0.5, attackRecover: 0.62,
+      id: 'reaper', name: 'Reaper', hp: 420, speed: 128, damage: 26, sight: 4000,
+      radius: 26, attackRange: 110, attackWindup: 0.4, attackRecover: 0.46,
       score: 260, reward: 140, colour: '#3b3550', dark: '#1d1a2b', boss: true, teleport: true
     },
     aurelith: {
-      id: 'aurelith', name: 'Aurelith', hp: 1500, speed: 52, damage: 30, sight: 6000,
-      radius: 40, attackRange: 130, attackWindup: 0.66, attackRecover: 0.7,
+      id: 'aurelith', name: 'Aurelith', hp: 1500, speed: 110, damage: 30, sight: 8000,
+      radius: 40, attackRange: 150, attackWindup: 0.52, attackRecover: 0.54,
       score: 1200, reward: 900, colour: '#e9e2ea', dark: '#2a2331', boss: true, finalBoss: true,
       teleport: true
     }
@@ -293,21 +293,22 @@ html, body {
   /* ---------------------------------------------------------- environments
      GDD 5. Each skin recolours the arena and swaps the barrier / cover prop. */
   D.ENVIRONMENTS = [
-    { id: 'plains', name: 'Plains', ground: '#8ed15e', ground2: '#7cc44f', accent: '#5da33a',
-      barrier: 'tree', cover: 'bush', sky: '#bfe9ff', litter: 'flower' },
-    { id: 'forest', name: 'Deepwood', ground: '#5fae57', ground2: '#4f9a49', accent: '#3a7c39',
-      barrier: 'tree', cover: 'bush', sky: '#9fd8b8', litter: 'fern' },
-    { id: 'snow', name: 'Snowfield', ground: '#e8f2fb', ground2: '#d5e6f6', accent: '#b9d3ea',
-      barrier: 'pine', cover: 'snowbush', sky: '#cfe6f7', litter: 'rock' },
-    { id: 'village', name: 'Village', ground: '#c9b78b', ground2: '#bda87c', accent: '#9c8a5f',
-      barrier: 'fence', cover: 'crate', sky: '#ffe9c0', litter: 'flower' },
-    { id: 'hq', name: 'Enemy HQ', ground: '#6b6376', ground2: '#5d5668', accent: '#443f52',
-      barrier: 'wall', cover: 'crate', sky: '#4a4359', litter: 'rock' },
-    { id: 'city', name: 'City Block', ground: '#9aa0a8', ground2: '#8b9199', accent: '#6f757d',
-      barrier: 'wall', cover: 'crate', sky: '#c3d3e2', litter: 'rock' },
-    { id: 'desert', name: 'Dunes', ground: '#e8cf94', ground2: '#dcc084', accent: '#c2a466',
-      barrier: 'cactus', cover: 'shrub', sky: '#ffdfa6', litter: 'rock' }
+    { id: 'plains', name: 'Plains', ground: '#6fae4a', ground2: '#5f9c3e', accent: '#487a30',
+      barrier: 'tree', cover: 'bush', sky: '#7fb8d6', litter: 'flower' },
+    { id: 'forest', name: 'Deepwood', ground: '#3f8447', ground2: '#34713c', accent: '#255230',
+      barrier: 'tree', cover: 'bush', sky: '#4d7a63', litter: 'fern' },
+    { id: 'snow', name: 'Snowfield', ground: '#cfe0ee', ground2: '#b9cfe2', accent: '#93aec8',
+      barrier: 'pine', cover: 'snowbush', sky: '#8fb0cc', litter: 'rock' },
+    { id: 'village', name: 'Village', ground: '#b09763', ground2: '#9d8555', accent: '#7a6640',
+      barrier: 'fence', cover: 'crate', sky: '#d8b585', litter: 'flower' },
+    { id: 'hq', name: 'Enemy HQ', ground: '#4a4455', ground2: '#3e3948', accent: '#2a2634',
+      barrier: 'wall', cover: 'crate', sky: '#241f30', litter: 'rock' },
+    { id: 'city', name: 'City Block', ground: '#6e747d', ground2: '#5f656d', accent: '#464b52',
+      barrier: 'wall', cover: 'crate', sky: '#5b6b7c', litter: 'rock' },
+    { id: 'desert', name: 'Dunes', ground: '#d0ac68', ground2: '#bd9955', accent: '#9a7a3d',
+      barrier: 'cactus', cover: 'shrub', sky: '#c98f52', litter: 'rock' }
   ];
+
 
   /* -------------------------------------------------------------- trials
      GDD 6.1. `weight` biases the rotation; boss trials override every 5th. */
@@ -399,6 +400,11 @@ html, body {
   ];
   D.IDLE_UNLOCK_SECONDS = 300; /* GDD: five minutes on the Start Screen */
 
+  /* TEMPORARY (for playtesting): pin the unlock to one combo so it never
+     changes between runs. Set to null to restore the GDD behaviour of drawing
+     a fresh random combo on every reset. */
+  D.FIXED_COMBO_INDEX = 0;     /* up up down down left right */
+
   /* ------------------------------------------------------------- ranking
      GDD 6.2. Percentile is derived from score vs. the trial's par score. */
   D.RANK_TIERS = [
@@ -434,7 +440,7 @@ html, body {
       weapon: 'sword',
       weapons: { sword: true },
       scytheUnlocked: false,
-      comboIndex: Math.floor(Math.random() * D.COMBOS.length),
+      comboIndex: D.FIXED_COMBO_INDEX != null ? D.FIXED_COMBO_INDEX : Math.floor(Math.random() * D.COMBOS.length),
       owned: {},               /* shop item id -> true (or count for stackables) */
       equippedTint: null,
       decor: {},
@@ -484,6 +490,7 @@ html, body {
 
   /* pick a combo that differs from the current one */
   Save.rerollCombo = function (current) {
+    if (D.FIXED_COMBO_INDEX != null) return D.FIXED_COMBO_INDEX;   /* pinned for playtesting */
     var n = D.COMBOS.length;
     if (n <= 1) return 0;
     var next = current;
@@ -537,9 +544,9 @@ html, body {
   Save.resolveStats = function (state) {
     var s = {
       maxHp: 100, maxStamina: 100, staminaRegen: 20,
-      speed: 60,                  /* GDD 5: ~30s to cross a 1800u diameter */
+      speed: 140,                 /* ~18s to cross the 2500u arena - see arena.js */
       speedMul: 1, damageMul: 1, rangedMul: 1, defenceMul: 1,
-      dodgeCdMul: 1, dodgeDist: 150, evasion: 0, stealthMul: 1,
+      dodgeCdMul: 1, dodgeDist: 250, evasion: 0, stealthMul: 1,
       glide: false, pierce: false,
       weaponLevel: Save.weaponLevel(state),
       gemLevel: Save.gemLevel(state)
@@ -998,88 +1005,109 @@ html, body {
   /* ------------------------------------------------------------ characters
      Every character is built from the same chibi rig so the cast reads as
      one family: big head, stubby limbs, heavy outline, single highlight. */
+  /* Proportions live here. The GDD asked for Mario-ish chibi; playtesting
+     pushed toward a taller, more grounded sprite that survives being drawn at
+     pixel-buffer resolution. Head is ~a third of total height. */
+  Art.RIG = {
+    head: 9,      /* head radius */
+    bodyW: 14,
+    bodyH: 21,
+    legH: 20,
+    legW: 5.5,
+    armW: 4.6,
+    armH: 13
+  };
+
   function chibi(ctx, o) {
     var s = o.scale;
-    var bob = Math.sin(o.phase) * 1.6 * s;
+    var R = Art.RIG;
+    var bob = Math.sin(o.phase) * 1.5 * s * (o.moving ? 1 : 0.45);
     var lean = o.lean || 0;
-    var headR = 12 * s;
-    var bodyW = 15 * s, bodyH = 14 * s;
+    var headR = R.head * s;
+    var bodyW = R.bodyW * s, bodyH = R.bodyH * s;
+    var legH = R.legH * s, legW = R.legW * s;
     var footY = 0;
-    var bodyY = footY - 8 * s - bodyH + bob;
-    var headY = bodyY - headR * 0.75;
+    /* torso overlaps the legs slightly so the bob never opens a gap */
+    var bodyY = footY - legH - bodyH + bob + 3 * s;
+    var headY = bodyY - headR * 0.72;
 
     ctx.save();
     ctx.translate(o.x, o.y);
-    if (o.flash) { ctx.globalAlpha = 0.9; }
     ctx.rotate(lean);
 
-    /* legs */
-    var stride = Math.sin(o.phase) * 5 * s * (o.moving ? 1 : 0);
+    /* legs - feet stay planted, only the body bobs */
+    var stride = Math.sin(o.phase) * 5.5 * s * (o.moving ? 1 : 0);
     ctx.fillStyle = o.legs || Art.shade(o.body, -40);
-    Art.roundRect(ctx, -6 * s - stride * 0.5, footY - 10 * s, 6 * s, 11 * s, 2.5 * s); ctx.fill(); Art.outline(ctx, 1.6 * s);
-    Art.roundRect(ctx, 0.6 * s + stride * 0.5, footY - 10 * s, 6 * s, 11 * s, 2.5 * s); ctx.fill(); Art.outline(ctx, 1.6 * s);
+    Art.roundRect(ctx, -legW - 0.7 * s - stride * 0.5, footY - legH, legW, legH, 2 * s);
+    ctx.fill(); Art.outline(ctx, 1.7 * s);
+    Art.roundRect(ctx, 0.7 * s + stride * 0.5, footY - legH, legW, legH, 2 * s);
+    ctx.fill(); Art.outline(ctx, 1.7 * s);
 
     /* torso */
     ctx.fillStyle = o.body;
-    Art.roundRect(ctx, -bodyW / 2, bodyY, bodyW, bodyH + 4 * s, 5 * s); ctx.fill(); Art.outline(ctx, 1.8 * s);
-    /* torso highlight */
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    Art.roundRect(ctx, -bodyW / 2 + 2 * s, bodyY + 2 * s, bodyW * 0.34, bodyH * 0.6, 2 * s); ctx.fill();
+    Art.roundRect(ctx, -bodyW / 2, bodyY, bodyW, bodyH, 4 * s); ctx.fill(); Art.outline(ctx, 1.9 * s);
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    Art.roundRect(ctx, -bodyW / 2 + 2 * s, bodyY + 2 * s, bodyW * 0.32, bodyH * 0.55, 2 * s); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    Art.roundRect(ctx, bodyW / 2 - 3.4 * s, bodyY + 2 * s, 2.6 * s, bodyH * 0.8, 1.4 * s); ctx.fill();
 
     /* arms */
-    var armSwing = Math.sin(o.phase + Math.PI) * 4 * s * (o.moving ? 1 : 0);
+    var armSwing = Math.sin(o.phase + Math.PI) * 4.5 * s * (o.moving ? 1 : 0);
+    var armW = R.armW * s, armH = R.armH * s;
     ctx.fillStyle = o.skin;
-    Art.roundRect(ctx, -bodyW / 2 - 4.2 * s, bodyY + 3 * s + armSwing, 5 * s, 9 * s, 2.4 * s); ctx.fill(); Art.outline(ctx, 1.5 * s);
+    Art.roundRect(ctx, -bodyW / 2 - armW + 0.8 * s, bodyY + 3 * s + armSwing, armW, armH, 2.1 * s);
+    ctx.fill(); Art.outline(ctx, 1.5 * s);
     if (!o.hideRightArm) {
-      Art.roundRect(ctx, bodyW / 2 - 0.8 * s, bodyY + 3 * s - armSwing, 5 * s, 9 * s, 2.4 * s); ctx.fill(); Art.outline(ctx, 1.5 * s);
+      Art.roundRect(ctx, bodyW / 2 - 0.8 * s, bodyY + 3 * s - armSwing, armW, armH, 2.1 * s);
+      ctx.fill(); Art.outline(ctx, 1.5 * s);
     }
 
-    /* head */
+    /* neck + head */
+    ctx.fillStyle = Art.shade(o.skin, -18);
+    Art.roundRect(ctx, -2.4 * s, bodyY - 3 * s, 4.8 * s, 5 * s, 1.6 * s); ctx.fill();
     ctx.fillStyle = o.skin;
-    Art.ellipse(ctx, 0, headY, headR, headR * 0.96); ctx.fill(); Art.outline(ctx, 2 * s);
+    Art.ellipse(ctx, 0, headY, headR, headR * 1.02); ctx.fill(); Art.outline(ctx, 1.9 * s);
 
-    /* hair / cap */
     if (o.hair) {
       ctx.fillStyle = o.hair;
       ctx.beginPath();
-      ctx.ellipse(0, headY - headR * 0.32, headR * 1.02, headR * 0.72, 0, Math.PI, U.TAU);
+      ctx.ellipse(0, headY - headR * 0.3, headR * 1.04, headR * 0.76, 0, Math.PI, U.TAU);
       ctx.closePath();
-      ctx.fill(); Art.outline(ctx, 1.6 * s);
+      ctx.fill(); Art.outline(ctx, 1.5 * s);
     }
     if (o.horns) {
       ctx.fillStyle = '#efe3c8';
       [-1, 1].forEach(function (sgn) {
         ctx.beginPath();
-        ctx.moveTo(sgn * headR * 0.72, headY - headR * 0.25);
-        ctx.quadraticCurveTo(sgn * headR * 1.5, headY - headR * 0.9, sgn * headR * 1.05, headY - headR * 1.25);
-        ctx.quadraticCurveTo(sgn * headR * 1.0, headY - headR * 0.55, sgn * headR * 0.6, headY - headR * 0.35);
-        ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.4 * s);
+        ctx.moveTo(sgn * headR * 0.74, headY - headR * 0.2);
+        ctx.quadraticCurveTo(sgn * headR * 1.6, headY - headR * 0.95, sgn * headR * 1.1, headY - headR * 1.35);
+        ctx.quadraticCurveTo(sgn * headR * 1.05, headY - headR * 0.55, sgn * headR * 0.6, headY - headR * 0.3);
+        ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.3 * s);
       });
     }
     if (o.hood) {
       ctx.fillStyle = o.hood;
       ctx.beginPath();
-      ctx.ellipse(0, headY - headR * 0.1, headR * 1.12, headR * 1.05, 0, Math.PI * 0.92, Math.PI * 2.08);
+      ctx.ellipse(0, headY - headR * 0.06, headR * 1.18, headR * 1.12, 0, Math.PI * 0.9, Math.PI * 2.1);
       ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.8 * s);
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      Art.ellipse(ctx, 0, headY + headR * 0.16, headR * 0.72, headR * 0.62); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      Art.ellipse(ctx, 0, headY + headR * 0.2, headR * 0.74, headR * 0.66); ctx.fill();
     }
 
-    /* face - only when facing the camera-ish */
     if (!o.hood && o.faceDir !== 0) {
-      var fx = o.faceDir * 2.2 * s;
+      var fx = o.faceDir * 1.8 * s;
       ctx.fillStyle = '#2b2231';
-      Art.ellipse(ctx, fx - 4.2 * s, headY + 0.5 * s, 1.7 * s, 2.3 * s); ctx.fill();
-      Art.ellipse(ctx, fx + 4.2 * s, headY + 0.5 * s, 1.7 * s, 2.3 * s); ctx.fill();
+      Art.ellipse(ctx, fx - 3.2 * s, headY + 0.6 * s, 1.5 * s, 2 * s); ctx.fill();
+      Art.ellipse(ctx, fx + 3.2 * s, headY + 0.6 * s, 1.5 * s, 2 * s); ctx.fill();
       if (o.eyeGlow) {
         ctx.fillStyle = o.eyeGlow;
-        Art.ellipse(ctx, fx - 4.2 * s, headY + 0.5 * s, 1.1 * s, 1.5 * s); ctx.fill();
-        Art.ellipse(ctx, fx + 4.2 * s, headY + 0.5 * s, 1.1 * s, 1.5 * s); ctx.fill();
+        Art.ellipse(ctx, fx - 3.2 * s, headY + 0.6 * s, 1 * s, 1.4 * s); ctx.fill();
+        Art.ellipse(ctx, fx + 3.2 * s, headY + 0.6 * s, 1 * s, 1.4 * s); ctx.fill();
       }
     } else if (o.hood && o.eyeGlow) {
       ctx.fillStyle = o.eyeGlow;
-      Art.ellipse(ctx, -3.4 * s, headY + 1.5 * s, 1.5 * s, 1.5 * s); ctx.fill();
-      Art.ellipse(ctx, 3.4 * s, headY + 1.5 * s, 1.5 * s, 1.5 * s); ctx.fill();
+      Art.ellipse(ctx, -2.8 * s, headY + 1.6 * s, 1.4 * s, 1.4 * s); ctx.fill();
+      Art.ellipse(ctx, 2.8 * s, headY + 1.6 * s, 1.4 * s, 1.4 * s); ctx.fill();
     }
 
     ctx.restore();
@@ -1110,7 +1138,7 @@ html, body {
       ctx.quadraticCurveTo(29 * s, 16 * s, 15 * s, 3 * s);
       ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.8 * s);
     } else if (id === 'bow') {
-      var br = 21 * s;
+      var br = 17 * s;
       ctx.strokeStyle = '#3a2a1a';
       ctx.lineWidth = 6 * s;
       ctx.beginPath();
@@ -1155,8 +1183,8 @@ html, body {
     var wpnBehind = Math.sin(p.facing) < -0.1;
     var swingT = p.attackTimer > 0 ? 1 - (p.attackTimer / Math.max(p.attackDuration, 0.01)) : 0;
     var wAngle = p.facing + (p.attacking ? U.lerp(-0.9, 1.1, swingT) : 0.5);
-    var wx = p.sx + Math.cos(p.facing) * 13 * s;
-    var wy = yy - 16 * s + Math.sin(p.facing) * 5 * s;
+    var wx = p.sx + Math.cos(p.facing) * 12 * s;
+    var wy = yy - 25 * s + Math.sin(p.facing) * 5 * s;
 
     if (wpnBehind) Art.drawWeapon(ctx, p.weaponId, wx, wy, s, wAngle, p.drawT || 0);
 
@@ -1172,7 +1200,7 @@ html, body {
 
     if (p.hidden) {
       ctx.fillStyle = 'rgba(120,200,140,0.28)';
-      Art.ellipse(ctx, p.sx, yy - 18 * s, 22 * s, 24 * s); ctx.fill();
+      Art.ellipse(ctx, p.sx, yy - 30 * s, 24 * s, 30 * s); ctx.fill();
     }
     if (p.invuln > 0) {
       ctx.strokeStyle = 'rgba(255,255,255,' + (0.25 + 0.2 * Math.sin(t * 22)) + ')';
@@ -1198,7 +1226,7 @@ html, body {
     /* crude club */
     var wa = e.facing + (alert ? -0.9 : 0.6);
     ctx.save();
-    ctx.translate(e.sx + Math.cos(e.facing) * 11 * s, yy - 17 * s);
+    ctx.translate(e.sx + Math.cos(e.facing) * 10 * s, yy - 28 * s);
     ctx.rotate(wa);
     ctx.fillStyle = '#6b4a2c';
     Art.roundRect(ctx, 0, -2 * s, 17 * s, 4 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.4 * s);
@@ -1219,7 +1247,7 @@ html, body {
       lean: e.state === 'charge' ? 0.14 * Math.sign(Math.cos(e.facing) || 1) : 0
     });
     ctx.globalAlpha = 1;
-    Art.drawWeapon(ctx, 'battleaxe', e.sx + Math.cos(e.facing) * 15 * s, yy - 22 * s, s * 0.8,
+    Art.drawWeapon(ctx, 'battleaxe', e.sx + Math.cos(e.facing) * 13 * s, yy - 36 * s, s * 0.8,
       e.facing + (alert ? -1.1 : 0.5), 0);
   };
 
@@ -1233,9 +1261,9 @@ html, body {
     /* trailing cloak */
     ctx.fillStyle = 'rgba(30,26,44,0.9)';
     ctx.beginPath();
-    ctx.moveTo(e.sx - 16 * s, yy - 20 * s);
+    ctx.moveTo(e.sx - 16 * s, yy - 34 * s);
     ctx.quadraticCurveTo(e.sx - 22 * s, yy + 6, e.sx, yy + 4);
-    ctx.quadraticCurveTo(e.sx + 22 * s, yy + 6, e.sx + 16 * s, yy - 20 * s);
+    ctx.quadraticCurveTo(e.sx + 22 * s, yy + 6, e.sx + 16 * s, yy - 34 * s);
     ctx.closePath(); ctx.fill(); Art.outline(ctx, 2);
 
     chibi(ctx, {
@@ -1244,7 +1272,7 @@ html, body {
       hood: '#2a2438', eyeGlow: alert ? '#ff4d5e' : '#9b6bff', faceDir: 1
     });
     ctx.globalAlpha = 1;
-    Art.drawWeapon(ctx, 'scythe', e.sx + Math.cos(e.facing) * 16 * s, yy - 24 * s, s,
+    Art.drawWeapon(ctx, 'scythe', e.sx + Math.cos(e.facing) * 14 * s, yy - 40 * s, s,
       e.facing + (alert ? -1.2 : 0.4), 0);
   };
 
@@ -1426,15 +1454,20 @@ html, body {
         break;
       }
       case 'bush': case 'snowbush': case 'shrub': {
-        var base = kind === 'snowbush' ? '#cfe4ef' : (kind === 'shrub' ? '#9db35c' : '#4fa85a');
-        var top = kind === 'snowbush' ? '#eef7fc' : (kind === 'shrub' ? '#b3c76e' : '#63c46c');
-        ctx.fillStyle = 'rgba(20,26,18,0.2)';
-        Art.ellipse(ctx, x, y, 20 * s, 7 * s); ctx.fill();
+        var base = kind === 'snowbush' ? '#b9d3e4' : (kind === 'shrub' ? '#7f9448' : '#3d8a48');
+        var mid = kind === 'snowbush' ? '#d9eaf4' : (kind === 'shrub' ? '#9db35c' : '#4fa85a');
+        var top = kind === 'snowbush' ? '#f2f9fd' : (kind === 'shrub' ? '#bdd07a' : '#6cd074');
+        ctx.fillStyle = 'rgba(20,26,18,0.26)';
+        Art.ellipse(ctx, x, y, 22 * s, 8 * s); ctx.fill();
+        /* three stacked lobes give it volume at low resolution */
         ctx.fillStyle = base;
-        Art.ellipse(ctx, x, y - 12 * s, 22 * s, 16 * s); ctx.fill(); Art.outline(ctx, 2);
+        Art.ellipse(ctx, x, y - 9 * s, 23 * s, 15 * s); ctx.fill(); Art.outline(ctx, 2.4);
+        ctx.fillStyle = mid;
+        Art.ellipse(ctx, x - 7 * s, y - 16 * s, 13 * s, 11 * s); ctx.fill(); Art.outline(ctx, 2);
+        Art.ellipse(ctx, x + 8 * s, y - 14 * s, 11 * s, 9 * s); ctx.fill(); Art.outline(ctx, 2);
         ctx.fillStyle = top;
-        Art.ellipse(ctx, x - 6 * s, y - 18 * s, 11 * s, 8 * s); ctx.fill();
-        Art.ellipse(ctx, x + 7 * s, y - 15 * s, 8 * s, 6 * s); ctx.fill();
+        Art.ellipse(ctx, x - 6 * s, y - 20 * s, 7 * s, 5 * s); ctx.fill();
+        Art.ellipse(ctx, x + 6 * s, y - 17 * s, 5 * s, 4 * s); ctx.fill();
         break;
       }
       case 'crate': {
@@ -1461,6 +1494,18 @@ html, body {
         }
         ctx.fillStyle = '#ffe98a';
         Art.ellipse(ctx, x, y - 10 * s, 1.8 * s, 1.8 * s); ctx.fill();
+        break;
+      }
+      case 'tuft': {
+        ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+        ctx.lineWidth = 2.4 * s;
+        for (var q = 0; q < 3; q++) {
+          var qa = -Math.PI / 2 + (q - 1) * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(x + (q - 1) * 3 * s, y);
+          ctx.lineTo(x + (q - 1) * 3 * s + Math.cos(qa) * 5 * s, y + Math.sin(qa) * 7 * s);
+          ctx.stroke();
+        }
         break;
       }
       case 'fern': {
@@ -1633,10 +1678,10 @@ html, body {
     /* ------- dodge / glide ------- */
     if (this.dodgeTime > 0) {
       this.dodgeTime -= dt;
-      var dodgeSpeed = this.stats.dodgeDist / 0.24;
+      var dodgeSpeed = this.stats.dodgeDist / 0.2;
       this.x += Math.cos(this.dodgeAngle) * dodgeSpeed * dt;
       this.y += Math.sin(this.dodgeAngle) * dodgeSpeed * dt;
-      this.z = this.stats.glide ? Math.sin((1 - this.dodgeTime / 0.24) * Math.PI) * 16 : 0;
+      this.z = this.stats.glide ? Math.sin((1 - this.dodgeTime / 0.2) * Math.PI) * 18 : 0;
       this.moving = true;
       this.animPhase += dt * 18;
       w.confine(this);
@@ -1753,8 +1798,8 @@ html, body {
     var mv = this.world.input.move;
     this.dodgeAngle = mv.mag > 0.15 ? Math.atan2(mv.y, mv.x) : this.facing;
     this.facing = this.dodgeAngle;
-    this.dodgeTime = 0.24;
-    this.dodgeCd = 0.85 * this.stats.dodgeCdMul;
+    this.dodgeTime = 0.2;
+    this.dodgeCd = 0.7 * this.stats.dodgeCdMul;
     this.invuln = Math.max(this.invuln, 0.3);
     Audio.play('dodge');
     this.world.dust(this.x, this.y, 6);
@@ -1776,8 +1821,8 @@ html, body {
     this.damageTaken += real;
     this.hurtFlash = 0.45;
     this.invuln = 0.6;
-    this.x += Math.cos(fromAngle) * 14;
-    this.y += Math.sin(fromAngle) * 14;
+    this.x += Math.cos(fromAngle) * 20;
+    this.y += Math.sin(fromAngle) * 20;
     this.world.confine(this);
     this.world.shake(7, 0.22);
     this.world.floater(this.x, this.y - 44, '-' + Math.round(real), '#ff7a7a');
@@ -1841,8 +1886,8 @@ html, body {
     if (this.vx || this.vy) {
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.vx *= Math.pow(0.02, dt); this.vy *= Math.pow(0.02, dt);
-      if (Math.abs(this.vx) < 4) this.vx = 0;
-      if (Math.abs(this.vy) < 4) this.vy = 0;
+      if (Math.abs(this.vx) < 6) this.vx = 0;
+      if (Math.abs(this.vy) < 6) this.vy = 0;
       w.confine(this);
     }
 
@@ -1850,7 +1895,7 @@ html, body {
       this.moving = false;
       this.animPhase += dt * 1.5;
       /* found if the player gets very close */
-      if (U.dist2(this.x, this.y, p.x, p.y) < 92 * 92) {
+      if (U.dist2(this.x, this.y, p.x, p.y) < 118 * 118) {
         this.hiding = false;
         this.aggro = true;
         this.state = 'chase';
@@ -1884,7 +1929,7 @@ html, body {
         this.facing = toP;
         this.moving = true;
         var chaseSpeed = this.speed;
-        if (this.def.charge && d > 150 && d < 420 && this.stateTime > 1.2) {
+        if (this.def.charge && d > 220 && d < 620 && this.stateTime > 1.0) {
           this.state = 'charge'; this.stateTime = 0;
           this.chargeAngle = toP;
           w.floater(this.x, this.y - 46, '!', '#ff6a3c');
@@ -1898,12 +1943,12 @@ html, body {
       case 'charge': {
         this.moving = true;
         this.facing = this.chargeAngle;
-        this.step(this.chargeAngle, this.speed * 2.6, dt);
+        this.step(this.chargeAngle, this.speed * 2.3, dt);
         if (d < this.def.attackRange * 0.8) {
           if (p.hurt(this.damage * 1.2, this.chargeAngle)) w.shake(10, 0.3);
           this.state = 'recover'; this.stateTime = 0;
         }
-        if (this.stateTime > 1.1) { this.state = 'recover'; this.stateTime = 0; }
+        if (this.stateTime > 0.9) { this.state = 'recover'; this.stateTime = 0; }
         break;
       }
       case 'windup': {
@@ -1962,7 +2007,7 @@ html, body {
       for (var i = 0; i < n; i++) {
         var a = Math.random() * U.TAU;
         w.spawnEnemy(this.def.finalBoss && i % 2 === 0 ? 'minotaur' : 'goblin',
-          this.x + Math.cos(a) * 120, this.y + Math.sin(a) * 120);
+          this.x + Math.cos(a) * 170, this.y + Math.sin(a) * 170);
       }
       w.floater(this.x, this.y - 70, 'RISE', '#ff4d5e');
       V.Audio.play('boss');
@@ -1970,11 +2015,11 @@ html, body {
     }
 
     /* teleport out of a corner or when kited */
-    if (this.def.teleport && this.bossTimer > (this.def.finalBoss ? 4.5 : 6) && d > 240) {
+    if (this.def.teleport && this.bossTimer > (this.def.finalBoss ? 3.5 : 4.5) && d > 340) {
       this.bossTimer = 0;
       var ta = Math.atan2(this.y - p.y, this.x - p.x) + Math.PI;
-      this.x = p.x + Math.cos(ta + (Math.random() - 0.5)) * 90;
-      this.y = p.y + Math.sin(ta + (Math.random() - 0.5)) * 90;
+      this.x = p.x + Math.cos(ta + (Math.random() - 0.5)) * 130;
+      this.y = p.y + Math.sin(ta + (Math.random() - 0.5)) * 130;
       w.confine(this);
       w.burst(this.x, this.y, 18, '#9b6bff');
       V.Audio.play('warp');
@@ -1988,7 +2033,7 @@ html, body {
         this.volleyTimer = 0;
         var shots = 8 + this.phase * 2;
         for (var s = 0; s < shots; s++) {
-          w.spawnBolt(this.x, this.y - 20, (s / shots) * U.TAU + this.bossTimer, 165, this.damage * 0.45);
+          w.spawnBolt(this.x, this.y - 20, (s / shots) * U.TAU + this.bossTimer, 280, this.damage * 0.45);
         }
         V.Audio.play('warp');
       }
@@ -2136,8 +2181,11 @@ html, body {
 
   var U = V.U, D = V.D, Art = V.Art, E = V.E, Audio = V.Audio;
 
-  var ARENA_R = 900;            /* GDD 5: ~30s to cross at 60u/s => 1800 diameter */
-  var BARRIER_R = ARENA_R + 30;
+  /* The GDD specifies a 30s crossing. Playtesting said the game felt sluggish,
+     so the arena grew and the player got much faster: 2500u across at 140u/s
+     is ~18s edge to edge, with everything else scaled to match. */
+  var ARENA_R = 1250;
+  var BARRIER_R = ARENA_R + 40;
 
   function Trial(game, spec) {
     this.game = game;
@@ -2173,7 +2221,7 @@ html, body {
 
     this.stats = V.Save.resolveStats(game.save);
     this.player = new E.Player(this.stats, game.save.weapon, this);
-    this.player.drawScale = 1.5;
+    this.player.drawScale = 1.8;
     this.player.tint = game.playerTint();
 
     this.consumables = game.consumableCounts();
@@ -2188,7 +2236,7 @@ html, body {
     var r = this.rng, i, a, d;
 
     /* barrier ring (GDD 5: player cannot leave) */
-    var ringCount = 74;
+    var ringCount = 104;
     for (i = 0; i < ringCount; i++) {
       a = (i / ringCount) * U.TAU;
       var jitter = r.range(-14, 14);
@@ -2208,7 +2256,7 @@ html, body {
     }
 
     /* cover (GDD 5 + 7.3) */
-    var bushes = 26 + r.int(0, 10);
+    var bushes = 44 + r.int(0, 16);
     for (i = 0; i < bushes; i++) {
       a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 120);
       this.cover.push({
@@ -2218,11 +2266,12 @@ html, body {
     }
 
     /* ground litter */
-    for (i = 0; i < 90; i++) {
+    for (i = 0; i < 300; i++) {
       a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 40);
       this.props.push({
         x: Math.cos(a) * d, y: Math.sin(a) * d,
-        kind: this.env.litter, s: r.range(0.7, 1.2), seed: r.int(0, 9999)
+        kind: r.chance(0.45) ? 'tuft' : this.env.litter,
+        s: r.range(0.7, 1.3), seed: r.int(0, 9999)
       });
     }
 
@@ -2290,14 +2339,14 @@ html, body {
           this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.remainingToSpawn = target - inField;
-        this.par = target * 22 + this.timeLimit * 1.35;
+        this.par = target * 26 + this.timeLimit * 1.1;
         break;
       }
       case 'defend': {
         this.timeLimit = 60 + Math.round(tier * 22);
-        this.zone = { x: 0, y: 0, r: 160, hp: 100, maxHp: 100 };
+        this.zone = { x: 0, y: 0, r: 210, hp: 100, maxHp: 100 };
         this.objective = { text: 'Hold the ground for ' + Math.round(this.timeLimit) + 's' };
-        this.player.x = 0; this.player.y = 90;
+        this.player.x = 0; this.player.y = 120;
         this.waveTimer = 2;
         this.par = this.timeLimit * 12 + 380;
         break;
@@ -2308,7 +2357,7 @@ html, body {
         this.relic = { x: rp.x, y: rp.y, taken: false };
         /* delivery point roughly opposite the relic */
         var ra = Math.atan2(rp.y, rp.x) + Math.PI;
-        this.delivery = { x: Math.cos(ra) * ARENA_R * 0.6, y: Math.sin(ra) * ARENA_R * 0.6, r: 70 };
+        this.delivery = { x: Math.cos(ra) * ARENA_R * 0.6, y: Math.sin(ra) * ARENA_R * 0.6, r: 95 };
         this.objective = { text: 'Collect the relic, deliver it' };
         for (i = 0; i < 4 + Math.floor(tier * 3); i++) {
           p = this.randomPoint(220, ARENA_R - 120, 300);
@@ -2323,8 +2372,8 @@ html, body {
         this.objective = { text: 'Push the stones onto the marks' };
         for (i = 0; i < n; i++) {
           var ang = (i / n) * U.TAU + r() * 0.6;
-          this.blocks.push({ x: Math.cos(ang) * 240, y: Math.sin(ang) * 240, r: 34, done: false });
-          this.plates.push({ x: Math.cos(ang + 0.9) * 520, y: Math.sin(ang + 0.9) * 520, r: 46, filled: false });
+          this.blocks.push({ x: Math.cos(ang) * 330, y: Math.sin(ang) * 330, r: 34, done: false });
+          this.plates.push({ x: Math.cos(ang + 0.9) * 720, y: Math.sin(ang + 0.9) * 720, r: 56, filled: false });
         }
         for (i = 0; i < 2 + Math.floor(tier); i++) {
           p = this.randomPoint(300, ARENA_R - 150, 420);
@@ -2392,7 +2441,7 @@ html, body {
   /* ============================================================ world hooks */
   Trial.prototype.spawnEnemy = function (id, x, y, opts) {
     var e = new E.Enemy(id, x, y, this, opts || this.scaleOpts);
-    e.drawScale = 1.5;
+    e.drawScale = 1.8;
     this.enemies.push(e);
     return e;
   };
@@ -2459,8 +2508,8 @@ html, body {
     for (var i = 0; i < this.blocks.length; i++) {
       var b = this.blocks[i];
       if (U.inArc(p.x, p.y, p.facing, halfArc, range + b.r, b.x, b.y)) {
-        b.x += Math.cos(p.facing) * 46;
-        b.y += Math.sin(p.facing) * 46;
+        b.x += Math.cos(p.facing) * 64;
+        b.y += Math.sin(p.facing) * 64;
         U.confineToCircle(b, 0, 0, ARENA_R - 60);
       }
     }
@@ -2510,7 +2559,7 @@ html, body {
     /* ---- pickups ---- */
     for (i = this.pickups.length - 1; i >= 0; i--) {
       var pk = this.pickups[i];
-      if (U.dist2(pk.x, pk.y, p.x, p.y) < 40 * 40) {
+      if (U.dist2(pk.x, pk.y, p.x, p.y) < 54 * 54) {
         this.pickups.splice(i, 1);
         if (pk.kind === 'coin') { this.bonusCoins = (this.bonusCoins || 0) + pk.value; Audio.play('coin'); }
         else if (pk.kind === 'heal') { p.heal(30); Audio.play('pickup'); }
@@ -2633,7 +2682,7 @@ html, body {
         break;
       }
       case 'deliver': {
-        if (!this.relic.taken && U.dist2(p.x, p.y, this.relic.x, this.relic.y) < 44 * 44) {
+        if (!this.relic.taken && U.dist2(p.x, p.y, this.relic.x, this.relic.y) < 58 * 58) {
           this.relic.taken = true;
           p.carrying = 'relic';
           Audio.play('pickup');
@@ -2664,7 +2713,7 @@ html, body {
       case 'word': {
         for (i = 0; i < this.hints.length; i++) {
           var h = this.hints[i];
-          if (!h.found && U.dist2(p.x, p.y, h.x, h.y) < 46 * 46) {
+          if (!h.found && U.dist2(p.x, p.y, h.x, h.y) < 62 * 62) {
             h.found = true;
             this.riddle.revealed++;
             Audio.play('pickup');
@@ -2740,15 +2789,15 @@ html, body {
     Audio.music(null);
 
     var score = 0;
-    var timeBonus = Math.max(0, this.timeLeft) * 2.2;
+    var timeBonus = Math.max(0, this.timeLeft) * 1.5;    /* retuned after the speed pass */
     var killScore = 0;
     /* the enemies list only holds the living; count kills directly */
     killScore = this.kills * 16;
-    var damagePenalty = this.player.damageTaken * 1.1;
+    var damagePenalty = this.player.damageTaken * 0.75;
 
     var completed = (reason === 'complete');
     if (completed) {
-      score += this.par * 0.62;
+      score += this.par * 0.68;
       score += timeBonus;
     }
     score += killScore;
@@ -2803,7 +2852,8 @@ html, body {
 
   /* ================================================================= render */
   Trial.prototype.zoom = function (cw, ch) {
-    return U.clamp(Math.min(cw, ch * 1.75) / 780, 0.55, 1.35);
+    /* the arena is 2500u across, so pull the camera back enough to read it */
+    return U.clamp(Math.min(cw, ch * 1.75) / 1150, 0.42, 1.0);
   };
 
   Trial.prototype.render = function (ctx, cw, ch) {
@@ -2811,11 +2861,11 @@ html, body {
     var zoom = this.zoom(cw, ch);
 
     /* camera lead + smoothing */
-    var lead = 60;
+    var lead = 130;
     var tx = p.x + Math.cos(p.facing) * lead * 0.35;
     var ty = p.y + Math.sin(p.facing) * lead * 0.35;
-    this.cam.x = U.lerp(this.cam.x, tx, 0.12);
-    this.cam.y = U.lerp(this.cam.y, ty, 0.12);
+    this.cam.x = U.lerp(this.cam.x, tx, 0.16);
+    this.cam.y = U.lerp(this.cam.y, ty, 0.16);
 
     var shakeX = 0, shakeY = 0;
     if (this.shakeTime > 0) {
@@ -2895,6 +2945,24 @@ html, body {
     };
   }
 
+  /* a small tile of two-tone dither, built once per environment */
+  Trial.prototype.groundPattern = function (ctx) {
+    if (this._pat !== undefined) return this._pat;
+    if (typeof document === 'undefined') { this._pat = null; return null; }
+    var size = 24;
+    var tile = document.createElement('canvas');
+    tile.width = tile.height = size;
+    var tc = tile.getContext('2d');
+    var rr = U.rng(U.hash(this.env.id));
+    var i;
+    tc.fillStyle = this.env.ground2;
+    for (i = 0; i < size * size * 0.16; i++) tc.fillRect(rr.int(0, size - 2), rr.int(0, size - 2), 2, 2);
+    tc.fillStyle = this.env.accent;
+    for (i = 0; i < size * size * 0.05; i++) tc.fillRect(rr.int(0, size - 2), rr.int(0, size - 2), 2, 2);
+    this._pat = ctx.createPattern(tile, 'repeat');
+    return this._pat;
+  };
+
   Trial.prototype.drawGround = function (ctx, P) {
     var c = P(0, 0);
     var r = ARENA_R;
@@ -2908,21 +2976,16 @@ html, body {
     ctx.fillStyle = this.env.ground;
     ctx.fillRect(c.x - r - 10, c.y - r - 10, r * 2 + 20, r * 2 + 20);
 
-    /* soft checker so movement reads */
-    ctx.globalAlpha = 0.45;
-    ctx.fillStyle = this.env.ground2;
-    var cell = 84;
-    var x0 = Math.floor((c.x - r) / cell) * cell;
-    var y0 = Math.floor((c.y - r * Art.SQUASH) / cell) * cell;
-    for (var gx = x0; gx < c.x + r; gx += cell) {
-      for (var gy = y0; gy < c.y + r * Art.SQUASH; gy += cell) {
-        if ((Math.round(gx / cell) + Math.round(gy / cell)) % 2 === 0) {
-          ctx.fillRect(gx, gy, cell, cell * Art.SQUASH);
-        }
-      }
+    /* dithered ground texture instead of a flat checker - reads as pixel art
+       and, being anchored to the world origin, it scrolls with the map */
+    var pat = this.groundPattern(ctx);
+    if (pat) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.fillStyle = pat;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+      ctx.restore();
     }
-
-    ctx.globalAlpha = 1;
 
     /* edge vignette */
     var grd = ctx.createRadialGradient(c.x, c.y, r * 0.55, c.x, c.y, r);
@@ -3006,7 +3069,7 @@ html, body {
   Trial.prototype.drawGuide = function (ctx, P, target) {
     var p = this.player;
     var d = U.dist(p.x, p.y, target.x, target.y);
-    if (d < 240) return;
+    if (d < 330) return;
     var a = Math.atan2((target.y - p.y) * Art.SQUASH, target.x - p.x);
     var sp = P(p.x, p.y);
     ctx.save();
@@ -3692,7 +3755,16 @@ html, body {
   };
 
   RoomScene.prototype.render = function (ctx, cw, ch) {
+    var target = this.game.worldTarget();
+    this.renderWorld(target.ctx, target.w, target.h);
+    this.game.flushWorld(target);
+    this.renderUI(ctx, cw, ch);
+  };
+
+  /* the room itself - drawn into the pixel buffer when pixel mode is on */
+  RoomScene.prototype.renderWorld = function (ctx, cw, ch) {
     var s = UI.setScale(cw, ch), t = this.t;
+    this._labels = [];
     /* the room is 460 wide and spans -219..+99 vertically once projected */
     var zoom = U.clamp(Math.min(cw / (this.W + 60), (ch - 26) / 372), 0.4, 1.5);
 
@@ -3702,8 +3774,12 @@ html, body {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, cw, ch);
 
+    this._originX = cw / 2;
+    this._originY = ch / 2 + 60 * zoom;
+    this._zoom = zoom;
+
     ctx.save();
-    ctx.translate(cw / 2, ch / 2 + 60 * zoom);
+    ctx.translate(this._originX, this._originY);
     ctx.scale(zoom, zoom);
     var SQ = Art.SQUASH;
     function P(x, y) { return { x: x, y: y * SQ }; }
@@ -3789,12 +3865,28 @@ html, body {
     var pp = P(this.px, this.py);
     Art.shadow(ctx, pp.x, pp.y, 16);
     Art.chibi(ctx, {
-      x: pp.x, y: pp.y, scale: 1.3, phase: this.animPhase, moving: this.moving,
+      x: pp.x, y: pp.y, scale: 1.5, phase: this.animPhase, moving: this.moving,
       body: this.game.playerTint(), skin: '#f5c9a0', hair: '#5b3d2b', legs: '#3f6ea8',
       faceDir: Math.cos(this.pfacing) > 0.25 ? 1 : (Math.cos(this.pfacing) < -0.25 ? -1 : 0)
     });
 
     ctx.restore();
+  };
+
+  /* HUD and prompts - always full resolution so text stays crisp */
+  RoomScene.prototype.renderUI = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch), t = this.t;
+    var sv = this.game.save;
+
+    /* labels from the world pass, drawn here so they stay crisp */
+    var ps = this.game.pixScale || 1;
+    for (var li = 0; li < (this._labels || []).length; li++) {
+      var lb = this._labels[li];
+      UI.text(ctx, lb.text,
+        (this._originX + lb.x * this._zoom) * ps,
+        (this._originY + lb.y * this._zoom) * ps,
+        { size: lb.size, align: 'center', weight: '800', colour: lb.colour });
+    }
 
     /* ---- overlay UI ---- */
     Input.stickEnabled = true;
@@ -3859,7 +3951,7 @@ html, body {
     Art.roundRect(ctx, x - 48, yy - 30, 96, 50, 8); ctx.fill(); Art.outline(ctx, 3);
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     Art.roundRect(ctx, x - 42, yy - 24, 84, 14, 5); ctx.fill();
-    UI.text(ctx, label, x, yy + 34, { size: 11, align: 'center', weight: '800', colour: 'rgba(255,255,255,0.85)' });
+    this._labels.push({ x: x, y: yy + 34, text: label, size: 11, colour: 'rgba(255,255,255,0.85)' });
   };
 
   RoomScene.prototype.drawGate = function (ctx, x, y, t) {
@@ -3874,7 +3966,7 @@ html, body {
     ctx.beginPath();
     ctx.ellipse(x, yy - 20, 34, 46, 0, 0, U.TAU);
     ctx.stroke();
-    UI.text(ctx, 'THE GATE', x, yy - 82, { size: 12, align: 'center', weight: '800', colour: '#e0ccff' });
+    this._labels.push({ x: x, y: yy - 82, text: 'THE GATE', size: 12, colour: '#e0ccff' });
   };
 
   /* ================================================================ CUTSCENE
@@ -4253,6 +4345,12 @@ html, body {
     var idleOverride = parseFloat(q.get('idle'));
     this.idleUnlockSeconds = (isFinite(idleOverride) && idleOverride > 0) ? idleOverride : D.IDLE_UNLOCK_SECONDS;
     this.debug = q.get('debug') === '1';
+    /* Pixel-art presentation: the world renders into a small offscreen buffer
+       and is scaled up with no smoothing, so everything lands on a chunky
+       pixel grid. The HUD is drawn afterwards at full resolution so text stays
+       readable on a phone. ?smooth=1 falls back to the old vector look. */
+    this.pixelMode = q.get('smooth') !== '1';
+    this.pixelTargetHeight = 240;
     var startTrial = parseInt(q.get('trial'), 10);
     this.forceTrial = (isFinite(startTrial) && startTrial > 0) ? startTrial : 0;
   }
@@ -4290,6 +4388,39 @@ html, body {
     this.dpr = dpr;
     this.cw = w; this.ch = h;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+
+  /* ------------------------------------------------------- pixel pipeline */
+  Game.prototype.worldTarget = function () {
+    if (!this.pixelMode) { this.pixScale = 1; return { ctx: this.ctx, w: this.cw, h: this.ch, direct: true }; }
+
+    var scale = Math.max(2, Math.round(this.ch / this.pixelTargetHeight));
+    var bw = Math.ceil(this.cw / scale);
+    var bh = Math.ceil(this.ch / scale);
+
+    if (!this.pixCanvas) {
+      this.pixCanvas = document.createElement('canvas');
+      this.pixCtx = this.pixCanvas.getContext('2d');
+    }
+    if (this.pixCanvas.width !== bw || this.pixCanvas.height !== bh) {
+      this.pixCanvas.width = bw;
+      this.pixCanvas.height = bh;
+    }
+    this.pixScale = scale;
+    var c = this.pixCtx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, bw, bh);
+    c.imageSmoothingEnabled = false;
+    return { ctx: c, w: bw, h: bh, direct: false };
+  };
+
+  Game.prototype.flushWorld = function (target) {
+    if (!this.pixelMode || target.direct) return;
+    var ctx = this.ctx;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.pixCanvas, 0, 0, this.pixCanvas.width, this.pixCanvas.height,
+      0, 0, this.pixCanvas.width * this.pixScale, this.pixCanvas.height * this.pixScale);
+    ctx.imageSmoothingEnabled = true;
   };
 
   Game.prototype.frame = function (now) {
@@ -4573,7 +4704,9 @@ html, body {
     this.trial.update(dt);
   };
   TrialScene.prototype.render = function (ctx, cw, ch) {
-    this.trial.render(ctx, cw, ch);
+    var target = this.game.worldTarget();
+    this.trial.render(target.ctx, target.w, target.h);
+    this.game.flushWorld(target);
     V.HUD.draw(ctx, this.trial, cw, ch);
   };
 

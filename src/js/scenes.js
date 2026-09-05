@@ -294,7 +294,16 @@
   };
 
   RoomScene.prototype.render = function (ctx, cw, ch) {
+    var target = this.game.worldTarget();
+    this.renderWorld(target.ctx, target.w, target.h);
+    this.game.flushWorld(target);
+    this.renderUI(ctx, cw, ch);
+  };
+
+  /* the room itself - drawn into the pixel buffer when pixel mode is on */
+  RoomScene.prototype.renderWorld = function (ctx, cw, ch) {
     var s = UI.setScale(cw, ch), t = this.t;
+    this._labels = [];
     /* the room is 460 wide and spans -219..+99 vertically once projected */
     var zoom = U.clamp(Math.min(cw / (this.W + 60), (ch - 26) / 372), 0.4, 1.5);
 
@@ -304,8 +313,12 @@
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, cw, ch);
 
+    this._originX = cw / 2;
+    this._originY = ch / 2 + 60 * zoom;
+    this._zoom = zoom;
+
     ctx.save();
-    ctx.translate(cw / 2, ch / 2 + 60 * zoom);
+    ctx.translate(this._originX, this._originY);
     ctx.scale(zoom, zoom);
     var SQ = Art.SQUASH;
     function P(x, y) { return { x: x, y: y * SQ }; }
@@ -391,12 +404,28 @@
     var pp = P(this.px, this.py);
     Art.shadow(ctx, pp.x, pp.y, 16);
     Art.chibi(ctx, {
-      x: pp.x, y: pp.y, scale: 1.3, phase: this.animPhase, moving: this.moving,
+      x: pp.x, y: pp.y, scale: 1.5, phase: this.animPhase, moving: this.moving,
       body: this.game.playerTint(), skin: '#f5c9a0', hair: '#5b3d2b', legs: '#3f6ea8',
       faceDir: Math.cos(this.pfacing) > 0.25 ? 1 : (Math.cos(this.pfacing) < -0.25 ? -1 : 0)
     });
 
     ctx.restore();
+  };
+
+  /* HUD and prompts - always full resolution so text stays crisp */
+  RoomScene.prototype.renderUI = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch), t = this.t;
+    var sv = this.game.save;
+
+    /* labels from the world pass, drawn here so they stay crisp */
+    var ps = this.game.pixScale || 1;
+    for (var li = 0; li < (this._labels || []).length; li++) {
+      var lb = this._labels[li];
+      UI.text(ctx, lb.text,
+        (this._originX + lb.x * this._zoom) * ps,
+        (this._originY + lb.y * this._zoom) * ps,
+        { size: lb.size, align: 'center', weight: '800', colour: lb.colour });
+    }
 
     /* ---- overlay UI ---- */
     Input.stickEnabled = true;
@@ -461,7 +490,7 @@
     Art.roundRect(ctx, x - 48, yy - 30, 96, 50, 8); ctx.fill(); Art.outline(ctx, 3);
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     Art.roundRect(ctx, x - 42, yy - 24, 84, 14, 5); ctx.fill();
-    UI.text(ctx, label, x, yy + 34, { size: 11, align: 'center', weight: '800', colour: 'rgba(255,255,255,0.85)' });
+    this._labels.push({ x: x, y: yy + 34, text: label, size: 11, colour: 'rgba(255,255,255,0.85)' });
   };
 
   RoomScene.prototype.drawGate = function (ctx, x, y, t) {
@@ -476,7 +505,7 @@
     ctx.beginPath();
     ctx.ellipse(x, yy - 20, 34, 46, 0, 0, U.TAU);
     ctx.stroke();
-    UI.text(ctx, 'THE GATE', x, yy - 82, { size: 12, align: 'center', weight: '800', colour: '#e0ccff' });
+    this._labels.push({ x: x, y: yy - 82, text: 'THE GATE', size: 12, colour: '#e0ccff' });
   };
 
   /* ================================================================ CUTSCENE

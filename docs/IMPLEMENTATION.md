@@ -120,7 +120,35 @@ rather than automatic. It is also the number most likely to need moving once rea
 
 ---
 
-## 5. Where the risk is
+## 5. Post-playtest changes
+
+The first round of feedback produced three changes that knowingly depart from the document.
+
+**Movement speed and arena scale.** §5 specifies ~30 seconds to cross the arena. In play
+that read as sluggish, so the player moves at 140 u/s instead of 60 and the arena is 2500
+units across instead of 1800 — about 18 seconds edge to edge. Enemy speeds, attack
+wind-ups, recovery frames, projectile speeds, dodge distance and knockback were all scaled
+to match, and cover and ground detail were made denser so the larger map does not read as
+empty. If the original pacing is wanted back, `speed` in `save.js` `resolveStats` and
+`ARENA_R` in `arena.js` are the two numbers.
+
+**Pixel-art presentation.** The world now renders into a small offscreen buffer (about 240
+pixels tall) and is scaled up with image smoothing off, so every edge lands on a pixel
+grid. The HUD is drawn afterwards at full resolution, so text stays readable on a phone
+while the world stays chunky. `?smooth=1` restores the previous vector look for comparison.
+Ground is a dithered two-tone tile anchored to the world origin rather than a flat checker,
+and the environment palettes were deepened to suit the harder edges.
+
+**Character proportions.** §11 asks for Mario-ish chibi. At buffer resolution that read as
+unclear, so the rig moved to roughly a third head to total height — still stylised, but it
+holds up small. Every proportion is in `Art.RIG` in `art.js`; restoring the chibi look is a
+matter of changing those six numbers.
+
+**The scythe combo is pinned for testing.** `D.FIXED_COMBO_INDEX` is `0`, so the unlock is
+always up, up, down, down, left, right. Setting it to `null` restores the GDD behaviour of
+drawing a fresh combo from ten presets on every reset — the test suite covers both paths.
+
+## 6. Where the risk is
 
 - **Balance is unplayed by humans.** Every number came from a bot and my judgement.
 - **The scythe unlock is undiscoverable by design.** Five minutes of idling on a title screen is a

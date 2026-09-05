@@ -53,6 +53,7 @@ Useful URL flags while developing:
 |---|---|
 | `?idle=10` | shortens the 5-minute scythe idle timer to 10 seconds |
 | `?trial=23` | New Game drops you straight into the hub at trial 23 |
+| `?smooth=1` | turns off pixel rendering, back to the smooth vector look |
 | `?debug=1` | shows an FPS counter |
 
 ### Layout
@@ -90,7 +91,7 @@ Everything in the design document that the demo scope implies, minus the open qu
 - Start screen, bedroom intro, abduction cutscene, ranking screen, hub, both shops
 - 50 trials, a Reaper every 5th, then a 3-wave endgame and a final boss
 - All 7 trial types (Defeat, Defend, Collect & Deliver, physical Puzzle, Word puzzle, Hide, Seek)
-- All 7 environment skins on a circular arena you cross in ~30 seconds
+- All 7 environment skins on a circular arena you cross in ~18 seconds (see the deviations below)
 - 4 weapons with distinct feel and specials; the scythe hidden behind the 5-minute idle unlock
 - All 6 power gems, granted at random once and levelling with you
 - Ranking tiers exactly as specified, debuffs on failure, 25 deaths wipes the run
@@ -99,6 +100,23 @@ Everything in the design document that the demo scope implies, minus the open qu
 
 A section-by-section map of GDD to code, plus the ambiguities I had to resolve, is in
 [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md).
+
+### Playtest changes that deviate from the GDD
+
+Three deliberate departures, all reversible from one place each:
+
+- **The scythe combo is pinned.** `D.FIXED_COMBO_INDEX` in `src/js/data.js` is set to `0`
+  (up, up, down, down, left, right) so it never changes between runs while the game is
+  being tested. Set it to `null` to restore the GDD's random draw from ten presets.
+- **Everything moves much faster.** The GDD's 30-second arena crossing felt sluggish in
+  play, so the player went from 60 to 140 units/sec, the arena from 1800 to 2500 units
+  across (~18s edge to edge), and every enemy speed, attack wind-up and projectile was
+  scaled to match.
+- **The art is pixel-rendered, and characters are less chibi.** The world draws into a
+  low-resolution buffer that is scaled up with no smoothing; the HUD stays full
+  resolution so text is readable. Character proportions moved from roughly 1:2 head-to-body
+  to about 1:3, which survives being drawn at buffer resolution. `Art.RIG` in
+  `src/js/art.js` holds every proportion in one object.
 
 ### Not in this version
 

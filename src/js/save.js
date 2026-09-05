@@ -21,7 +21,7 @@
       weapon: 'sword',
       weapons: { sword: true },
       scytheUnlocked: false,
-      comboIndex: Math.floor(Math.random() * D.COMBOS.length),
+      comboIndex: D.FIXED_COMBO_INDEX != null ? D.FIXED_COMBO_INDEX : Math.floor(Math.random() * D.COMBOS.length),
       owned: {},               /* shop item id -> true (or count for stackables) */
       equippedTint: null,
       decor: {},
@@ -71,6 +71,7 @@
 
   /* pick a combo that differs from the current one */
   Save.rerollCombo = function (current) {
+    if (D.FIXED_COMBO_INDEX != null) return D.FIXED_COMBO_INDEX;   /* pinned for playtesting */
     var n = D.COMBOS.length;
     if (n <= 1) return 0;
     var next = current;
@@ -124,9 +125,9 @@
   Save.resolveStats = function (state) {
     var s = {
       maxHp: 100, maxStamina: 100, staminaRegen: 20,
-      speed: 60,                  /* GDD 5: ~30s to cross a 1800u diameter */
+      speed: 140,                 /* ~18s to cross the 2500u arena - see arena.js */
       speedMul: 1, damageMul: 1, rangedMul: 1, defenceMul: 1,
-      dodgeCdMul: 1, dodgeDist: 150, evasion: 0, stealthMul: 1,
+      dodgeCdMul: 1, dodgeDist: 250, evasion: 0, stealthMul: 1,
       glide: false, pierce: false,
       weaponLevel: Save.weaponLevel(state),
       gemLevel: Save.gemLevel(state)

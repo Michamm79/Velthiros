@@ -380,14 +380,30 @@ async function main() {
   /* --- reset rules (GDD 9) --- */
   const reset = await page.evaluate(() => {
     const g = window.VELTHIROS;
-    const before = g.save.comboIndex;
+    const D = window.V.D;
     g.save.currency = 999; g.save.deaths = 25;
     g.save = window.V.Save.fullReset(g.save);
-    return { currency: g.save.currency, deaths: g.save.deaths, scythe: g.save.scytheUnlocked,
-             comboChanged: g.save.comboIndex !== before, resets: g.save.resets };
+    const wiped = { currency: g.save.currency, deaths: g.save.deaths,
+                    scythe: g.save.scytheUnlocked, resets: g.save.resets };
+
+    /* the combo is pinned for playtesting; check it holds, then check the
+       GDD's reroll still works with the pin lifted */
+    const pinned = D.FIXED_COMBO_INDEX != null;
+    const heldPin = !pinned || g.save.comboIndex === D.FIXED_COMBO_INDEX;
+    const saved = D.FIXED_COMBO_INDEX;
+    D.FIXED_COMBO_INDEX = null;
+    let rerolled = true;
+    for (let i = 0; i < 12 && rerolled; i++) {
+      const before = g.save.comboIndex;
+      g.save = window.V.Save.fullReset(g.save);
+      rerolled = g.save.comboIndex !== before;
+    }
+    D.FIXED_COMBO_INDEX = saved;
+    return Object.assign(wiped, { pinned, heldPin, rerolled });
   });
-  check('25 deaths wipes the run and rerolls the combo',
-    reset.currency === 0 && reset.deaths === 0 && !reset.scythe && reset.comboChanged, JSON.stringify(reset));
+  check('25 deaths wipes the run; combo pin holds and the random reroll works',
+    reset.currency === 0 && reset.deaths === 0 && !reset.scythe && reset.heldPin && reset.rerolled,
+    JSON.stringify(reset));
 
   /* --- ranking tier boundaries match GDD 6.2 --- */
   const tiers = await page.evaluate(() => {

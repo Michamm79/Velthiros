@@ -12,30 +12,30 @@
   D.WEAPONS = {
     sword: {
       id: 'sword', name: 'Sword', kind: 'melee', owned: true, price: 0,
-      damage: 15, arc: 1.15, range: 74, windup: 0.07, recover: 0.26, stamina: 9,
-      moveScale: 0.62, knock: 130,
-      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 86, windup: 0.16, recover: 0.5, stamina: 30, cooldown: 3.2, knock: 200, spin: true },
+      damage: 15, arc: 1.15, range: 82, windup: 0.05, recover: 0.19, stamina: 9,
+      moveScale: 0.74, knock: 180,
+      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 96, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
       blurb: 'Balanced all-rounder. No weakness, no spike.'
     },
     battleaxe: {
       id: 'battleaxe', name: 'Battleaxe', kind: 'melee', owned: false, price: 260,
-      damage: 27, arc: 1.5, range: 88, windup: 0.34, recover: 0.5, stamina: 22,
-      moveScale: 0.34, knock: 280,
-      special: { name: 'Cleave', damage: 44, arc: 1.9, range: 100, windup: 0.55, recover: 0.6, stamina: 40, cooldown: 5.0, knock: 420, quake: true },
+      damage: 27, arc: 1.5, range: 98, windup: 0.26, recover: 0.36, stamina: 22,
+      moveScale: 0.5, knock: 380,
+      special: { name: 'Cleave', damage: 44, arc: 1.9, range: 112, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
       blurb: 'Huge damage in a wide arc. Long wind-up, poor mobility.'
     },
     bow: {
       id: 'bow', name: 'Bow', kind: 'ranged', owned: false, price: 240,
-      damage: 12, arc: 0.2, range: 620, windup: 0.3, recover: 0.24, stamina: 12,
-      moveScale: 0.5, knock: 60, projectileSpeed: 460,
-      special: { name: 'Volley', damage: 10, spread: 0.34, shots: 3, windup: 0.42, recover: 0.4, stamina: 34, cooldown: 4.2, projectileSpeed: 440 },
+      damage: 12, arc: 0.2, range: 820, windup: 0.22, recover: 0.17, stamina: 12,
+      moveScale: 0.66, knock: 80, projectileSpeed: 720,
+      special: { name: 'Volley', damage: 10, spread: 0.34, shots: 3, windup: 0.3, recover: 0.28, stamina: 34, cooldown: 3.8, projectileSpeed: 700 },
       blurb: 'Best kiting tool. Helpless once they close in.'
     },
     scythe: {
       id: 'scythe', name: 'Scythe', kind: 'melee', owned: false, price: -1, secret: true,
-      damage: 21, arc: 1.42, range: 84, windup: 0.12, recover: 0.32, stamina: 14,
-      moveScale: 0.58, knock: 190,
-      special: { name: 'Reap', damage: 26, arc: 2.4, range: 96, windup: 0.14, recover: 0.42, stamina: 32, cooldown: 3.6, knock: 240, dash: 190, lifesteal: 0.3 },
+      damage: 21, arc: 1.42, range: 94, windup: 0.08, recover: 0.24, stamina: 14,
+      moveScale: 0.72, knock: 250,
+      special: { name: 'Reap', damage: 26, arc: 2.4, range: 108, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
       blurb: 'The secret. Solid damage, quick, no crippling weakness.'
     }
   };
@@ -86,23 +86,23 @@
   /* --------------------------------------------------------------- enemies */
   D.ENEMIES = {
     goblin: {
-      id: 'goblin', name: 'Goblin', hp: 32, speed: 54, damage: 8, sight: 300,
-      radius: 15, attackRange: 44, attackWindup: 0.42, attackRecover: 0.55,
+      id: 'goblin', name: 'Goblin', hp: 32, speed: 98, damage: 8, sight: 400,
+      radius: 15, attackRange: 52, attackWindup: 0.34, attackRecover: 0.4,
       score: 10, reward: 6, colour: '#7fbf4f', dark: '#4b8030'
     },
     minotaur: {
-      id: 'minotaur', name: 'Minotaur', hp: 130, speed: 44, damage: 20, sight: 360,
-      radius: 24, attackRange: 62, attackWindup: 0.62, attackRecover: 0.8,
+      id: 'minotaur', name: 'Minotaur', hp: 130, speed: 86, damage: 20, sight: 470,
+      radius: 24, attackRange: 72, attackWindup: 0.5, attackRecover: 0.6,
       score: 40, reward: 22, colour: '#b06a40', dark: '#733f22', charge: true, heavy: true
     },
     reaper: {
-      id: 'reaper', name: 'Reaper', hp: 420, speed: 62, damage: 26, sight: 3000,
-      radius: 26, attackRange: 96, attackWindup: 0.5, attackRecover: 0.62,
+      id: 'reaper', name: 'Reaper', hp: 420, speed: 128, damage: 26, sight: 4000,
+      radius: 26, attackRange: 110, attackWindup: 0.4, attackRecover: 0.46,
       score: 260, reward: 140, colour: '#3b3550', dark: '#1d1a2b', boss: true, teleport: true
     },
     aurelith: {
-      id: 'aurelith', name: 'Aurelith', hp: 1500, speed: 52, damage: 30, sight: 6000,
-      radius: 40, attackRange: 130, attackWindup: 0.66, attackRecover: 0.7,
+      id: 'aurelith', name: 'Aurelith', hp: 1500, speed: 110, damage: 30, sight: 8000,
+      radius: 40, attackRange: 150, attackWindup: 0.52, attackRecover: 0.54,
       score: 1200, reward: 900, colour: '#e9e2ea', dark: '#2a2331', boss: true, finalBoss: true,
       teleport: true
     }
@@ -111,21 +111,22 @@
   /* ---------------------------------------------------------- environments
      GDD 5. Each skin recolours the arena and swaps the barrier / cover prop. */
   D.ENVIRONMENTS = [
-    { id: 'plains', name: 'Plains', ground: '#8ed15e', ground2: '#7cc44f', accent: '#5da33a',
-      barrier: 'tree', cover: 'bush', sky: '#bfe9ff', litter: 'flower' },
-    { id: 'forest', name: 'Deepwood', ground: '#5fae57', ground2: '#4f9a49', accent: '#3a7c39',
-      barrier: 'tree', cover: 'bush', sky: '#9fd8b8', litter: 'fern' },
-    { id: 'snow', name: 'Snowfield', ground: '#e8f2fb', ground2: '#d5e6f6', accent: '#b9d3ea',
-      barrier: 'pine', cover: 'snowbush', sky: '#cfe6f7', litter: 'rock' },
-    { id: 'village', name: 'Village', ground: '#c9b78b', ground2: '#bda87c', accent: '#9c8a5f',
-      barrier: 'fence', cover: 'crate', sky: '#ffe9c0', litter: 'flower' },
-    { id: 'hq', name: 'Enemy HQ', ground: '#6b6376', ground2: '#5d5668', accent: '#443f52',
-      barrier: 'wall', cover: 'crate', sky: '#4a4359', litter: 'rock' },
-    { id: 'city', name: 'City Block', ground: '#9aa0a8', ground2: '#8b9199', accent: '#6f757d',
-      barrier: 'wall', cover: 'crate', sky: '#c3d3e2', litter: 'rock' },
-    { id: 'desert', name: 'Dunes', ground: '#e8cf94', ground2: '#dcc084', accent: '#c2a466',
-      barrier: 'cactus', cover: 'shrub', sky: '#ffdfa6', litter: 'rock' }
+    { id: 'plains', name: 'Plains', ground: '#6fae4a', ground2: '#5f9c3e', accent: '#487a30',
+      barrier: 'tree', cover: 'bush', sky: '#7fb8d6', litter: 'flower' },
+    { id: 'forest', name: 'Deepwood', ground: '#3f8447', ground2: '#34713c', accent: '#255230',
+      barrier: 'tree', cover: 'bush', sky: '#4d7a63', litter: 'fern' },
+    { id: 'snow', name: 'Snowfield', ground: '#cfe0ee', ground2: '#b9cfe2', accent: '#93aec8',
+      barrier: 'pine', cover: 'snowbush', sky: '#8fb0cc', litter: 'rock' },
+    { id: 'village', name: 'Village', ground: '#b09763', ground2: '#9d8555', accent: '#7a6640',
+      barrier: 'fence', cover: 'crate', sky: '#d8b585', litter: 'flower' },
+    { id: 'hq', name: 'Enemy HQ', ground: '#4a4455', ground2: '#3e3948', accent: '#2a2634',
+      barrier: 'wall', cover: 'crate', sky: '#241f30', litter: 'rock' },
+    { id: 'city', name: 'City Block', ground: '#6e747d', ground2: '#5f656d', accent: '#464b52',
+      barrier: 'wall', cover: 'crate', sky: '#5b6b7c', litter: 'rock' },
+    { id: 'desert', name: 'Dunes', ground: '#d0ac68', ground2: '#bd9955', accent: '#9a7a3d',
+      barrier: 'cactus', cover: 'shrub', sky: '#c98f52', litter: 'rock' }
   ];
+
 
   /* -------------------------------------------------------------- trials
      GDD 6.1. `weight` biases the rotation; boss trials override every 5th. */
@@ -216,6 +217,11 @@
     ['down', 'up', 'right', 'right', 'left']
   ];
   D.IDLE_UNLOCK_SECONDS = 300; /* GDD: five minutes on the Start Screen */
+
+  /* TEMPORARY (for playtesting): pin the unlock to one combo so it never
+     changes between runs. Set to null to restore the GDD behaviour of drawing
+     a fresh random combo on every reset. */
+  D.FIXED_COMBO_INDEX = 0;     /* up up down down left right */
 
   /* ------------------------------------------------------------- ranking
      GDD 6.2. Percentile is derived from score vs. the trial's par score. */

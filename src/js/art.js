@@ -56,88 +56,109 @@
   /* ------------------------------------------------------------ characters
      Every character is built from the same chibi rig so the cast reads as
      one family: big head, stubby limbs, heavy outline, single highlight. */
+  /* Proportions live here. The GDD asked for Mario-ish chibi; playtesting
+     pushed toward a taller, more grounded sprite that survives being drawn at
+     pixel-buffer resolution. Head is ~a third of total height. */
+  Art.RIG = {
+    head: 9,      /* head radius */
+    bodyW: 14,
+    bodyH: 21,
+    legH: 20,
+    legW: 5.5,
+    armW: 4.6,
+    armH: 13
+  };
+
   function chibi(ctx, o) {
     var s = o.scale;
-    var bob = Math.sin(o.phase) * 1.6 * s;
+    var R = Art.RIG;
+    var bob = Math.sin(o.phase) * 1.5 * s * (o.moving ? 1 : 0.45);
     var lean = o.lean || 0;
-    var headR = 12 * s;
-    var bodyW = 15 * s, bodyH = 14 * s;
+    var headR = R.head * s;
+    var bodyW = R.bodyW * s, bodyH = R.bodyH * s;
+    var legH = R.legH * s, legW = R.legW * s;
     var footY = 0;
-    var bodyY = footY - 8 * s - bodyH + bob;
-    var headY = bodyY - headR * 0.75;
+    /* torso overlaps the legs slightly so the bob never opens a gap */
+    var bodyY = footY - legH - bodyH + bob + 3 * s;
+    var headY = bodyY - headR * 0.72;
 
     ctx.save();
     ctx.translate(o.x, o.y);
-    if (o.flash) { ctx.globalAlpha = 0.9; }
     ctx.rotate(lean);
 
-    /* legs */
-    var stride = Math.sin(o.phase) * 5 * s * (o.moving ? 1 : 0);
+    /* legs - feet stay planted, only the body bobs */
+    var stride = Math.sin(o.phase) * 5.5 * s * (o.moving ? 1 : 0);
     ctx.fillStyle = o.legs || Art.shade(o.body, -40);
-    Art.roundRect(ctx, -6 * s - stride * 0.5, footY - 10 * s, 6 * s, 11 * s, 2.5 * s); ctx.fill(); Art.outline(ctx, 1.6 * s);
-    Art.roundRect(ctx, 0.6 * s + stride * 0.5, footY - 10 * s, 6 * s, 11 * s, 2.5 * s); ctx.fill(); Art.outline(ctx, 1.6 * s);
+    Art.roundRect(ctx, -legW - 0.7 * s - stride * 0.5, footY - legH, legW, legH, 2 * s);
+    ctx.fill(); Art.outline(ctx, 1.7 * s);
+    Art.roundRect(ctx, 0.7 * s + stride * 0.5, footY - legH, legW, legH, 2 * s);
+    ctx.fill(); Art.outline(ctx, 1.7 * s);
 
     /* torso */
     ctx.fillStyle = o.body;
-    Art.roundRect(ctx, -bodyW / 2, bodyY, bodyW, bodyH + 4 * s, 5 * s); ctx.fill(); Art.outline(ctx, 1.8 * s);
-    /* torso highlight */
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
-    Art.roundRect(ctx, -bodyW / 2 + 2 * s, bodyY + 2 * s, bodyW * 0.34, bodyH * 0.6, 2 * s); ctx.fill();
+    Art.roundRect(ctx, -bodyW / 2, bodyY, bodyW, bodyH, 4 * s); ctx.fill(); Art.outline(ctx, 1.9 * s);
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    Art.roundRect(ctx, -bodyW / 2 + 2 * s, bodyY + 2 * s, bodyW * 0.32, bodyH * 0.55, 2 * s); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    Art.roundRect(ctx, bodyW / 2 - 3.4 * s, bodyY + 2 * s, 2.6 * s, bodyH * 0.8, 1.4 * s); ctx.fill();
 
     /* arms */
-    var armSwing = Math.sin(o.phase + Math.PI) * 4 * s * (o.moving ? 1 : 0);
+    var armSwing = Math.sin(o.phase + Math.PI) * 4.5 * s * (o.moving ? 1 : 0);
+    var armW = R.armW * s, armH = R.armH * s;
     ctx.fillStyle = o.skin;
-    Art.roundRect(ctx, -bodyW / 2 - 4.2 * s, bodyY + 3 * s + armSwing, 5 * s, 9 * s, 2.4 * s); ctx.fill(); Art.outline(ctx, 1.5 * s);
+    Art.roundRect(ctx, -bodyW / 2 - armW + 0.8 * s, bodyY + 3 * s + armSwing, armW, armH, 2.1 * s);
+    ctx.fill(); Art.outline(ctx, 1.5 * s);
     if (!o.hideRightArm) {
-      Art.roundRect(ctx, bodyW / 2 - 0.8 * s, bodyY + 3 * s - armSwing, 5 * s, 9 * s, 2.4 * s); ctx.fill(); Art.outline(ctx, 1.5 * s);
+      Art.roundRect(ctx, bodyW / 2 - 0.8 * s, bodyY + 3 * s - armSwing, armW, armH, 2.1 * s);
+      ctx.fill(); Art.outline(ctx, 1.5 * s);
     }
 
-    /* head */
+    /* neck + head */
+    ctx.fillStyle = Art.shade(o.skin, -18);
+    Art.roundRect(ctx, -2.4 * s, bodyY - 3 * s, 4.8 * s, 5 * s, 1.6 * s); ctx.fill();
     ctx.fillStyle = o.skin;
-    Art.ellipse(ctx, 0, headY, headR, headR * 0.96); ctx.fill(); Art.outline(ctx, 2 * s);
+    Art.ellipse(ctx, 0, headY, headR, headR * 1.02); ctx.fill(); Art.outline(ctx, 1.9 * s);
 
-    /* hair / cap */
     if (o.hair) {
       ctx.fillStyle = o.hair;
       ctx.beginPath();
-      ctx.ellipse(0, headY - headR * 0.32, headR * 1.02, headR * 0.72, 0, Math.PI, U.TAU);
+      ctx.ellipse(0, headY - headR * 0.3, headR * 1.04, headR * 0.76, 0, Math.PI, U.TAU);
       ctx.closePath();
-      ctx.fill(); Art.outline(ctx, 1.6 * s);
+      ctx.fill(); Art.outline(ctx, 1.5 * s);
     }
     if (o.horns) {
       ctx.fillStyle = '#efe3c8';
       [-1, 1].forEach(function (sgn) {
         ctx.beginPath();
-        ctx.moveTo(sgn * headR * 0.72, headY - headR * 0.25);
-        ctx.quadraticCurveTo(sgn * headR * 1.5, headY - headR * 0.9, sgn * headR * 1.05, headY - headR * 1.25);
-        ctx.quadraticCurveTo(sgn * headR * 1.0, headY - headR * 0.55, sgn * headR * 0.6, headY - headR * 0.35);
-        ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.4 * s);
+        ctx.moveTo(sgn * headR * 0.74, headY - headR * 0.2);
+        ctx.quadraticCurveTo(sgn * headR * 1.6, headY - headR * 0.95, sgn * headR * 1.1, headY - headR * 1.35);
+        ctx.quadraticCurveTo(sgn * headR * 1.05, headY - headR * 0.55, sgn * headR * 0.6, headY - headR * 0.3);
+        ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.3 * s);
       });
     }
     if (o.hood) {
       ctx.fillStyle = o.hood;
       ctx.beginPath();
-      ctx.ellipse(0, headY - headR * 0.1, headR * 1.12, headR * 1.05, 0, Math.PI * 0.92, Math.PI * 2.08);
+      ctx.ellipse(0, headY - headR * 0.06, headR * 1.18, headR * 1.12, 0, Math.PI * 0.9, Math.PI * 2.1);
       ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.8 * s);
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      Art.ellipse(ctx, 0, headY + headR * 0.16, headR * 0.72, headR * 0.62); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      Art.ellipse(ctx, 0, headY + headR * 0.2, headR * 0.74, headR * 0.66); ctx.fill();
     }
 
-    /* face - only when facing the camera-ish */
     if (!o.hood && o.faceDir !== 0) {
-      var fx = o.faceDir * 2.2 * s;
+      var fx = o.faceDir * 1.8 * s;
       ctx.fillStyle = '#2b2231';
-      Art.ellipse(ctx, fx - 4.2 * s, headY + 0.5 * s, 1.7 * s, 2.3 * s); ctx.fill();
-      Art.ellipse(ctx, fx + 4.2 * s, headY + 0.5 * s, 1.7 * s, 2.3 * s); ctx.fill();
+      Art.ellipse(ctx, fx - 3.2 * s, headY + 0.6 * s, 1.5 * s, 2 * s); ctx.fill();
+      Art.ellipse(ctx, fx + 3.2 * s, headY + 0.6 * s, 1.5 * s, 2 * s); ctx.fill();
       if (o.eyeGlow) {
         ctx.fillStyle = o.eyeGlow;
-        Art.ellipse(ctx, fx - 4.2 * s, headY + 0.5 * s, 1.1 * s, 1.5 * s); ctx.fill();
-        Art.ellipse(ctx, fx + 4.2 * s, headY + 0.5 * s, 1.1 * s, 1.5 * s); ctx.fill();
+        Art.ellipse(ctx, fx - 3.2 * s, headY + 0.6 * s, 1 * s, 1.4 * s); ctx.fill();
+        Art.ellipse(ctx, fx + 3.2 * s, headY + 0.6 * s, 1 * s, 1.4 * s); ctx.fill();
       }
     } else if (o.hood && o.eyeGlow) {
       ctx.fillStyle = o.eyeGlow;
-      Art.ellipse(ctx, -3.4 * s, headY + 1.5 * s, 1.5 * s, 1.5 * s); ctx.fill();
-      Art.ellipse(ctx, 3.4 * s, headY + 1.5 * s, 1.5 * s, 1.5 * s); ctx.fill();
+      Art.ellipse(ctx, -2.8 * s, headY + 1.6 * s, 1.4 * s, 1.4 * s); ctx.fill();
+      Art.ellipse(ctx, 2.8 * s, headY + 1.6 * s, 1.4 * s, 1.4 * s); ctx.fill();
     }
 
     ctx.restore();
@@ -168,7 +189,7 @@
       ctx.quadraticCurveTo(29 * s, 16 * s, 15 * s, 3 * s);
       ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.8 * s);
     } else if (id === 'bow') {
-      var br = 21 * s;
+      var br = 17 * s;
       ctx.strokeStyle = '#3a2a1a';
       ctx.lineWidth = 6 * s;
       ctx.beginPath();
@@ -213,8 +234,8 @@
     var wpnBehind = Math.sin(p.facing) < -0.1;
     var swingT = p.attackTimer > 0 ? 1 - (p.attackTimer / Math.max(p.attackDuration, 0.01)) : 0;
     var wAngle = p.facing + (p.attacking ? U.lerp(-0.9, 1.1, swingT) : 0.5);
-    var wx = p.sx + Math.cos(p.facing) * 13 * s;
-    var wy = yy - 16 * s + Math.sin(p.facing) * 5 * s;
+    var wx = p.sx + Math.cos(p.facing) * 12 * s;
+    var wy = yy - 25 * s + Math.sin(p.facing) * 5 * s;
 
     if (wpnBehind) Art.drawWeapon(ctx, p.weaponId, wx, wy, s, wAngle, p.drawT || 0);
 
@@ -230,7 +251,7 @@
 
     if (p.hidden) {
       ctx.fillStyle = 'rgba(120,200,140,0.28)';
-      Art.ellipse(ctx, p.sx, yy - 18 * s, 22 * s, 24 * s); ctx.fill();
+      Art.ellipse(ctx, p.sx, yy - 30 * s, 24 * s, 30 * s); ctx.fill();
     }
     if (p.invuln > 0) {
       ctx.strokeStyle = 'rgba(255,255,255,' + (0.25 + 0.2 * Math.sin(t * 22)) + ')';
@@ -256,7 +277,7 @@
     /* crude club */
     var wa = e.facing + (alert ? -0.9 : 0.6);
     ctx.save();
-    ctx.translate(e.sx + Math.cos(e.facing) * 11 * s, yy - 17 * s);
+    ctx.translate(e.sx + Math.cos(e.facing) * 10 * s, yy - 28 * s);
     ctx.rotate(wa);
     ctx.fillStyle = '#6b4a2c';
     Art.roundRect(ctx, 0, -2 * s, 17 * s, 4 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.4 * s);
@@ -277,7 +298,7 @@
       lean: e.state === 'charge' ? 0.14 * Math.sign(Math.cos(e.facing) || 1) : 0
     });
     ctx.globalAlpha = 1;
-    Art.drawWeapon(ctx, 'battleaxe', e.sx + Math.cos(e.facing) * 15 * s, yy - 22 * s, s * 0.8,
+    Art.drawWeapon(ctx, 'battleaxe', e.sx + Math.cos(e.facing) * 13 * s, yy - 36 * s, s * 0.8,
       e.facing + (alert ? -1.1 : 0.5), 0);
   };
 
@@ -291,9 +312,9 @@
     /* trailing cloak */
     ctx.fillStyle = 'rgba(30,26,44,0.9)';
     ctx.beginPath();
-    ctx.moveTo(e.sx - 16 * s, yy - 20 * s);
+    ctx.moveTo(e.sx - 16 * s, yy - 34 * s);
     ctx.quadraticCurveTo(e.sx - 22 * s, yy + 6, e.sx, yy + 4);
-    ctx.quadraticCurveTo(e.sx + 22 * s, yy + 6, e.sx + 16 * s, yy - 20 * s);
+    ctx.quadraticCurveTo(e.sx + 22 * s, yy + 6, e.sx + 16 * s, yy - 34 * s);
     ctx.closePath(); ctx.fill(); Art.outline(ctx, 2);
 
     chibi(ctx, {
@@ -302,7 +323,7 @@
       hood: '#2a2438', eyeGlow: alert ? '#ff4d5e' : '#9b6bff', faceDir: 1
     });
     ctx.globalAlpha = 1;
-    Art.drawWeapon(ctx, 'scythe', e.sx + Math.cos(e.facing) * 16 * s, yy - 24 * s, s,
+    Art.drawWeapon(ctx, 'scythe', e.sx + Math.cos(e.facing) * 14 * s, yy - 40 * s, s,
       e.facing + (alert ? -1.2 : 0.4), 0);
   };
 
@@ -484,15 +505,20 @@
         break;
       }
       case 'bush': case 'snowbush': case 'shrub': {
-        var base = kind === 'snowbush' ? '#cfe4ef' : (kind === 'shrub' ? '#9db35c' : '#4fa85a');
-        var top = kind === 'snowbush' ? '#eef7fc' : (kind === 'shrub' ? '#b3c76e' : '#63c46c');
-        ctx.fillStyle = 'rgba(20,26,18,0.2)';
-        Art.ellipse(ctx, x, y, 20 * s, 7 * s); ctx.fill();
+        var base = kind === 'snowbush' ? '#b9d3e4' : (kind === 'shrub' ? '#7f9448' : '#3d8a48');
+        var mid = kind === 'snowbush' ? '#d9eaf4' : (kind === 'shrub' ? '#9db35c' : '#4fa85a');
+        var top = kind === 'snowbush' ? '#f2f9fd' : (kind === 'shrub' ? '#bdd07a' : '#6cd074');
+        ctx.fillStyle = 'rgba(20,26,18,0.26)';
+        Art.ellipse(ctx, x, y, 22 * s, 8 * s); ctx.fill();
+        /* three stacked lobes give it volume at low resolution */
         ctx.fillStyle = base;
-        Art.ellipse(ctx, x, y - 12 * s, 22 * s, 16 * s); ctx.fill(); Art.outline(ctx, 2);
+        Art.ellipse(ctx, x, y - 9 * s, 23 * s, 15 * s); ctx.fill(); Art.outline(ctx, 2.4);
+        ctx.fillStyle = mid;
+        Art.ellipse(ctx, x - 7 * s, y - 16 * s, 13 * s, 11 * s); ctx.fill(); Art.outline(ctx, 2);
+        Art.ellipse(ctx, x + 8 * s, y - 14 * s, 11 * s, 9 * s); ctx.fill(); Art.outline(ctx, 2);
         ctx.fillStyle = top;
-        Art.ellipse(ctx, x - 6 * s, y - 18 * s, 11 * s, 8 * s); ctx.fill();
-        Art.ellipse(ctx, x + 7 * s, y - 15 * s, 8 * s, 6 * s); ctx.fill();
+        Art.ellipse(ctx, x - 6 * s, y - 20 * s, 7 * s, 5 * s); ctx.fill();
+        Art.ellipse(ctx, x + 6 * s, y - 17 * s, 5 * s, 4 * s); ctx.fill();
         break;
       }
       case 'crate': {
@@ -519,6 +545,18 @@
         }
         ctx.fillStyle = '#ffe98a';
         Art.ellipse(ctx, x, y - 10 * s, 1.8 * s, 1.8 * s); ctx.fill();
+        break;
+      }
+      case 'tuft': {
+        ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+        ctx.lineWidth = 2.4 * s;
+        for (var q = 0; q < 3; q++) {
+          var qa = -Math.PI / 2 + (q - 1) * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(x + (q - 1) * 3 * s, y);
+          ctx.lineTo(x + (q - 1) * 3 * s + Math.cos(qa) * 5 * s, y + Math.sin(qa) * 7 * s);
+          ctx.stroke();
+        }
         break;
       }
       case 'fern': {
