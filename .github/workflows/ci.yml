@@ -1,8 +1,10 @@
 name: CI
 
+# `pull_request` already covers every branch that has a PR open, so `push` is
+# scoped to main - otherwise each push to a PR branch runs this job twice.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
 
 jobs:
