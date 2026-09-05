@@ -1,3 +1,8 @@
 node_modules/
 .DS_Store
 *.log
+
+# Diagnostic output from `npm test` - regenerated on every run, and CI
+# uploads it as a build artifact. dist/ is deliberately NOT ignored: it is
+# the file people actually open.
+tests/shots/
