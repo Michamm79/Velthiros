@@ -1,0 +1,64 @@
+# Publishes the game to GitHub Pages as a plain static site.
+#
+# No WebAssembly involved: the game is JavaScript and canvas, which browsers
+# run natively. All Pages has to do is serve one HTML file.
+#
+# Two things must be true before this can serve a public URL:
+#   1. the repository is public (GitHub Pages sites from private repos are a
+#      paid feature), and
+#   2. Settings -> Pages -> Source is set to "GitHub Actions".
+# The configure-pages step below tries to do (2) automatically.
+
+name: Publish to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:          # lets you publish by hand from any branch
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# never let two deploys race; always finish the newest one
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # the bundler only uses node builtins, so there is nothing to install
+      - name: Bundle the game
+        run: node tools/build.mjs
+
+      - name: Assemble the site
+        run: |
+          mkdir -p site
+          cp dist/velthiros.html site/index.html
+          cp docs/game-design-document.md site/design-document.md
+          echo "Velthiros - open site/index.html" > site/README.txt
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

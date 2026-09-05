@@ -35,6 +35,33 @@ Progress saves automatically to the browser, so **Continue** works across sessio
 
 ---
 
+## Publishing it publicly
+
+The game is JavaScript and canvas, so **no WebAssembly is involved** — browsers run it
+natively. Publishing is just static file hosting: one HTML file on a web server.
+
+`.github/workflows/pages.yml` builds the bundle and deploys it to GitHub Pages on every
+push to `main`, or on demand from the Actions tab. Two switches have to be flipped first,
+and both are yours:
+
+1. **Make the repository public.** Pages sites served from private repositories are a paid
+   GitHub feature. A public repo gets it free.
+2. **Settings → Pages → Source → "GitHub Actions".** The workflow tries to set this itself,
+   but it may need doing by hand the first time.
+
+The site then lives at `https://michamm79.github.io/Velthiros/` and anyone with the link can
+play — no account, no install.
+
+Other options, if GitHub Pages does not suit:
+
+| Where | How | Notes |
+|---|---|---|
+| **itch.io** | Zip `dist/velthiros.html` (renamed `index.html`) and upload as an HTML5 project | Built for games; gives you a play page, a comments thread and download stats |
+| **Netlify / Vercel / Cloudflare Pages** | Drag the `dist/` folder onto their dashboard | Free tier, custom domain, no repo needs to be public |
+| **Anywhere at all** | Email or AirDrop `dist/velthiros.html` | It is one self-contained file and runs from disk |
+
+---
+
 ## Working on it
 
 ```bash
