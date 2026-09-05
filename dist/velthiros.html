@@ -491,6 +491,9 @@ html, body {
       /* fill in anything a newer build added */
       var base = Save.blank();
       for (var k in base) if (!(k in data)) data[k] = base[k];
+      /* an in-progress run keeps the combo it was created with, which is
+         confusing while the combo is pinned for testing - apply the pin on load */
+      if (D.FIXED_COMBO_INDEX != null) data.comboIndex = D.FIXED_COMBO_INDEX;
       return data;
     } catch (e) {
       return Save.blank();

@@ -556,6 +556,19 @@ async function main() {
     for (const dir of start.combo) start.pressDir(dir);
     return { shown, unlocked: g.save.scytheUnlocked, weapon: g.save.weapon, comboLen: start.combo.length };
   });
+  const oldSave = await page.evaluate(() => {
+    const D = window.V.D, Save = window.V.Save;
+    /* simulate a run created before the combo was pinned */
+    const stale = Save.blank();
+    stale.started = true;
+    stale.comboIndex = (D.FIXED_COMBO_INDEX + 3) % D.COMBOS.length;
+    Save.write(stale);
+    const loaded = Save.load();
+    return { stored: stale.comboIndex, loaded: loaded.comboIndex, pinned: D.FIXED_COMBO_INDEX };
+  });
+  check('an existing save picks up the pinned combo on load',
+    oldSave.loaded === oldSave.pinned, JSON.stringify(oldSave));
+
   check('scythe unlock prompt + combo', scythe.shown && scythe.unlocked && scythe.weapon === 'scythe', JSON.stringify(scythe));
 
   await page.evaluate(() => {
