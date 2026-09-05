@@ -11,7 +11,7 @@ How the design document maps onto the code, what I had to decide, and what is st
 | 2. Story, opening, abduction | `scenes.js` `RoomScene('intro')`, `CutsceneScene` | Bedroom is walkable and non-interactive, exactly as specified. Garatu's line is verbatim. |
 | 3. Core loop | `game.js` `enterTrial` → `onTrialFinished` → `leaveRanking` | Hub → shops → trial → ranking → hub. Reaper on every 5th. |
 | 4. Screen list | `scenes.js` | All 8 screens exist. |
-| 5. World | `arena.js` `build()` | Circular arena, radius 900 units. Player moves 60 u/s, so edge-to-edge is 1800/60 = **30 seconds** as specified. Tree ring is impassable, bushes are scattered cover. |
+| 5. World | `arena.js` `build()` | Circular arena, radius 1250 units. Player moves 140 u/s, so edge-to-edge is ~18 seconds — see §5 below for why this departs from the GDD's 30. Tree ring is impassable, bushes are scattered cover. |
 | 6.1 Trial types | `arena.js` `setupObjective()` | All 5 types; Hide & Seek is split into its two stated variants (`hide` and `seek`), and Puzzles into `puzzle` (physical) and `word`. |
 | 6.2 Ranking | `arena.js` `finish()`, `data.js` `RANK_TIERS` | See "Ranking maths" below. |
 | 7.1 Weapons | `data.js` `WEAPONS` | Four weapons with the stated strengths and weaknesses expressed as real numbers. |
@@ -22,7 +22,7 @@ How the design document maps onto the code, what I had to decide, and what is st
 | 9. Economy | `data.js` shops, `game.js` `buy()` | One shared currency. Five business investments pay out on every survived trial. |
 | 9. Full reset | `save.js` `fullReset()` | 25 deaths wipes currency, gems, purchases and weapons, and rerolls the scythe combo. |
 | 10. Endgame | `game.js` `makeSpec()`, `arena.js` | Three escalating waves, then the final boss, drawn from the reference image. |
-| 11. Art style | `art.js` | Chibi proportions, heavy outlines, bright palette, 3/4 view (world Y squashed to 0.62). |
+| 11. Art style | `pixel.js`, `sprites.js` | Hand-authored pixel art on a locked palette, heavy dark outlines, 3/4 view (world Y squashed to 0.62). `art.js` still covers menus, the cutscene and the hub interior. |
 | 12. UI | `ui.js` `HUD.draw` | Timer top-middle, health and stamina top-left, attack + smaller special bottom-right, joystick bottom-left. |
 
 ---
@@ -56,7 +56,7 @@ and Wingshard grants a glide, so a dodge action has to exist. It is the small th
 **Consumables use one context-sensitive button** rather than an inventory screen — it uses a
 potion if you are hurt, a tonic if you are winded, otherwise a smoke bomb.
 
-**Enemies "hiding" in Seek trials are found by proximity**, within about 90 units. There is no
+**Enemies "hiding" in Seek trials are found by proximity**, within about 118 units. There is no
 separate search input.
 
 ---
@@ -91,28 +91,30 @@ point of it being secret.
 ## 4. Ranking maths, in full
 
 ```
-score  = objective bonus (0.62 × par if completed)
-       + time remaining × 2.2
+score  = objective bonus (0.68 × par if completed)
+       + time remaining × 1.5
        + kills × 16
        + type-specific bonuses
-       - damage taken × 1.1
+       - damage taken × 0.75
 
 ratio      = score / par
 percentile = clamp(100 - 75 × ratio, 1, 99)
 ```
 
 A death floors your percentile at 62 (always a failure), and a timeout or blown objective caps
-your score at 55% of par.
+your score at 55% of par. All of these coefficients are in `Trial.prototype.finish` in
+`arena.js`, alongside the per-type `this.par =` lines that set the bar for each trial.
 
 Measured against a scripted bot playing competently, this currently produces roughly:
 
 | Situation | Result |
 |---|---|
-| Clean Defeat trial, no damage | top 6% |
-| Same, taking 45 damage | top 17% |
+| Clean Defeat trial, no damage | top 2% |
+| Same, taking 45 damage | top 7% |
 | Unhurried Collect & Deliver | top 36% (no reward) |
-| Seek, all found | top 20% |
-| Defend, ground held | top 24% |
+| Seek, all found | top 18% |
+| Defend, ground held | top 20% |
+| A bot that never dodges, playing a full Defeat trial | top 27% |
 
 That spread is deliberate: a good run pays, a sloppy one does not, and the 25% line is real
 rather than automatic. It is also the number most likely to need moving once real people play it —
@@ -122,7 +124,7 @@ rather than automatic. It is also the number most likely to need moving once rea
 
 ## 5. Post-playtest changes
 
-The first round of feedback produced three changes that knowingly depart from the document.
+The first round of feedback produced four changes that knowingly depart from the document.
 
 **Movement speed and arena scale.** §5 specifies ~30 seconds to cross the arena. In play
 that read as sluggish, so the player moves at 140 u/s instead of 60 and the arena is 2500
