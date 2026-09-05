@@ -141,6 +141,10 @@ Three deliberate departures, all reversible from one place each:
   play, so the player went from 60 to 190 units/sec and the arena from 1800 to 2500 units
   across (~13s edge to edge), with every enemy speed, attack wind-up and projectile scaled
   to match.
+- **Scoring is per trial type, not one formula.** Combat trials reward speed and kills;
+  puzzles reward completing them cleanly, with a bonus for taking no damage and only a
+  small time component. `SCORE` in `src/js/arena.js` holds the four weights per type.
+
 - **The art is hand-authored pixel art.** Every character, prop, weapon and ground tile
   is drawn pixel by pixel against a locked ~35-colour palette in `src/js/sprites.js`,
   baked once into offscreen canvases, and blitted at exactly one sprite pixel per buffer

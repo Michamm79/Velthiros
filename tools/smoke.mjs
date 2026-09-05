@@ -351,6 +351,84 @@ async function main() {
     JSON.stringify(push));
   check('brushing past a stone does not move it', push.brushShift === 0, 'shift=' + push.brushShift);
 
+  /* --- the top tier must be REACHABLE on every trial type.
+         Puzzle trials once had a ceiling of top 31%, so a perfect solve still
+         read as a failure. This asserts no type is unwinnable by construction. --- */
+  const ceilings = await page.evaluate(() => {
+    const g = window.VELTHIROS, D = window.V.D;
+    const out = [];
+    const types = ['defeat', 'defend', 'deliver', 'puzzle', 'word', 'hide', 'seek'];
+    for (const type of types) {
+      const spec = { index: 8, type, boss: false, env: D.ENVIRONMENTS[0], seed: 99, label: type };
+      const t = new window.V.Trial(g, spec);
+
+      /* What a perfect run of THIS type actually looks like. Defend and Hide
+         are survival trials, so they always end with the clock at zero — using
+         "finished early" for them would model something impossible. */
+      const timed = (type === 'defend' || type === 'hide');
+      t.player.damageTaken = 0;
+      t.kills = timed ? Math.round(t.timeLimit / 3) : t.enemies.length;
+      t.timeLeft = timed ? 0 : t.timeLimit * 0.75;
+      t.spottedTime = 0;
+      if (t.zone) t.zone.hp = t.zone.maxHp;
+      if (t.plates) t.plates.forEach((p) => { p.filled = true; });
+      if (t.riddle) { t.riddle.revealed = 3; t.riddle.correct = true; }
+      t.finish('complete');
+      const good = t.result.percentile;
+
+      /* and a scrape-through: slow, battered, barely holding on */
+      const t2 = new window.V.Trial(g, spec);
+      t2.player.damageTaken = 90;
+      t2.kills = timed ? Math.round(t2.timeLimit / 12) : 0;
+      t2.timeLeft = timed ? 0 : t2.timeLimit * 0.05;
+      t2.spottedTime = t2.timeLimit * 0.7;
+      if (t2.zone) t2.zone.hp = t2.zone.maxHp * 0.25;
+      if (t2.plates) t2.plates.forEach((p) => { p.filled = true; });
+      if (t2.riddle) { t2.riddle.revealed = 3; t2.riddle.correct = true; }
+      t2.finish('complete');
+      out.push({ type, best: good, poor: t2.result.percentile });
+    }
+    return out;
+  });
+  const unreachable = ceilings.filter((c) => c.best > 25);
+  const tooEasy = ceilings.filter((c) => c.poor <= 25);
+  console.log('      ceilings: ' + ceilings.map((c) => `${c.type} ${c.best}/${c.poor}`).join('  '));
+  check('a flawless run reaches the top 25% on every trial type',
+    unreachable.length === 0,
+    unreachable.map((c) => c.type + ' caps at top ' + c.best + '%').join(', '));
+  check('a sloppy run does not reach the top 25% on any trial type',
+    tooEasy.length === 0,
+    tooEasy.map((c) => c.type + ' pays at top ' + c.poor + '%').join(', '));
+
+  /* --- the reported case: someone who knows the puzzle layout, solves it
+         carefully but unhurriedly and takes no hits, should be paid. --- */
+  const puzzleRuns = await page.evaluate(() => {
+    const g = window.VELTHIROS, D = window.V.D;
+    const run = (opts) => {
+      const spec = { index: 4, type: 'puzzle', boss: false, env: D.ENVIRONMENTS[0], seed: 21, label: 'puzzle' };
+      const t = new window.V.Trial(g, spec);
+      t.plates.forEach((p) => { p.filled = opts.solved !== false; });
+      t.kills = opts.kills || 0;
+      t.player.damageTaken = opts.damage || 0;
+      t.timeLeft = t.timeLimit * (opts.timeFrac == null ? 0.2 : opts.timeFrac);
+      t.finish(opts.solved === false ? 'timeout' : 'complete');
+      return t.result.percentile;
+    };
+    return {
+      unhurriedClean: run({ timeFrac: 0.2, kills: 0, damage: 0 }),
+      unhurriedFought: run({ timeFrac: 0.2, kills: 3, damage: 0 }),
+      fastClean: run({ timeFrac: 0.7, kills: 3, damage: 0 }),
+      battered: run({ timeFrac: 0.2, kills: 1, damage: 120 }),
+      timedOutPartial: run({ solved: false, timeFrac: 0, kills: 1, damage: 40 })
+    };
+  });
+  console.log('      puzzle: ' + Object.entries(puzzleRuns).map(([k, v]) => `${k}=top${v}%`).join('  '));
+  check('an unhurried, undamaged puzzle solve is paid',
+    puzzleRuns.unhurriedClean <= 25, 'top ' + puzzleRuns.unhurriedClean + '%');
+  check('a battered puzzle solve is not paid, and a timeout fails',
+    puzzleRuns.battered > 25 && puzzleRuns.timedOutPartial > 40,
+    `battered=${puzzleRuns.battered} timeout=${puzzleRuns.timedOutPartial}`);
+
   /* --- balance probe: how does a competent run rank across trial types? --- */
   const probe = await page.evaluate(() => {
     const g = window.VELTHIROS;

@@ -299,23 +299,27 @@
     var w = Math.min(cw - 40 * s, 420 * s);
     var x = cw / 2 - w / 2;
     var lines = UI.wrap(ctx, r.q, w - 28 * s, 14);
-    var h = 40 * s + lines.length * 18 * s + (r.revealed >= 3 ? 4 * 34 * s : 24 * s);
+    var h = 62 * s + lines.length * 18 * s + 4 * 32 * s;
     var y = ch * 0.5 - h / 2;
 
     UI.panel(ctx, x, y, w, h);
     for (var i = 0; i < lines.length; i++) {
       UI.text(ctx, lines[i], cw / 2, y + 22 * s + i * 18 * s, { size: 14, align: 'center' });
     }
-    var oy = y + 30 * s + lines.length * 18 * s;
-    if (r.revealed < 3) {
-      UI.text(ctx, 'Find ' + (3 - r.revealed) + ' more hint' + (3 - r.revealed === 1 ? '' : 's') + ' in the arena',
-        cw / 2, oy, { size: 13, align: 'center', colour: 'rgba(255,255,255,0.6)' });
-    } else {
-      for (var o = 0; o < r.options.length; o++) {
-        var by = oy + o * 32 * s;
-        if (UI.button(ctx, 'ans' + o, x + 14 * s, by, w - 28 * s, 27 * s, r.options[o], { size: 14 })) {
-          trial.answerRiddle(r.options[o]);
-        }
+
+    /* You may answer at any point. Every hint left unfound is worth more score,
+       so this is a real gamble rather than a checklist. */
+    var oy = y + 32 * s + lines.length * 18 * s;
+    var left = 3 - r.revealed;
+    UI.text(ctx, left > 0
+      ? r.revealed + '/3 hints found - answering now scores higher, if you are right'
+      : 'all 3 hints found',
+      cw / 2, oy, { size: 11, align: 'center', colour: left > 0 ? '#ffe45c' : 'rgba(255,255,255,0.55)' });
+
+    for (var o = 0; o < r.options.length; o++) {
+      var by = oy + 16 * s + o * 32 * s;
+      if (UI.button(ctx, 'ans' + o, x + 14 * s, by, w - 28 * s, 27 * s, r.options[o], { size: 14 })) {
+        trial.answerRiddle(r.options[o]);
       }
     }
   };

@@ -144,7 +144,7 @@
         p = this.randomPoint(200, ARENA_R - 150, 340);
         this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
       }
-      this.par = boss.maxHp * 1.5 + 220;
+      this.par = boss.maxHp * 1.35 + 180;
       this.timeLeft = this.timeLimit;
       return;
     }
@@ -187,7 +187,7 @@
           p = this.randomPoint(220, ARENA_R - 120, 300);
           this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
-        this.par = 560 + this.timeLimit * 2.2;
+        this.par = 380 + this.timeLimit * 1.6;
         break;
       }
       case 'puzzle': {
@@ -203,7 +203,7 @@
           p = this.randomPoint(300, ARENA_R - 150, 420);
           this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
         }
-        this.par = 520 + this.timeLimit * 2.4;
+        this.par = 430 + this.timeLimit * 1.5;
         break;
       }
       case 'word': {
@@ -212,7 +212,7 @@
         var q = pool[this.spec.seed % pool.length];
         var opts = r.shuffle([q.a].concat(q.wrong.slice(0, 3)));
         this.riddle = { q: q.q, answer: q.a, options: opts, revealed: 0, answered: false, correct: false };
-        this.objective = { text: 'Find 3 hints, then answer' };
+        this.objective = { text: 'Answer the riddle - hints are hidden in the arena' };
         for (i = 0; i < 3; i++) {
           p = this.randomPoint(300, ARENA_R - 150, 300);
           this.hints.push({ x: p.x, y: p.y, found: false });
@@ -221,7 +221,7 @@
           p = this.randomPoint(300, ARENA_R - 150, 420);
           this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
         }
-        this.par = 540 + this.timeLimit * 2.3;
+        this.par = 420 + this.timeLimit * 1.4;
         break;
       }
       case 'hide': {
@@ -235,7 +235,7 @@
           h.def = Object.create(h.def);
           h.def.sight = h.def.sight * 1.3;
         }
-        this.par = this.timeLimit * 9 + 200;
+        this.par = this.timeLimit * 8 + 150;
         break;
       }
       case 'seek': {
@@ -249,7 +249,7 @@
           this.spawnEnemy(this.pickEnemy(tier, r), sp.x + r.range(-14, 14), sp.y + r.range(-14, 14),
             Object.assign({ hiding: true }, scaleOpts));
         }
-        this.par = hidden * 46 + this.timeLimit * 2.2;
+        this.par = hidden * 38 + this.timeLimit * 1.7;
         break;
       }
     }
@@ -651,38 +651,64 @@
     Audio.play(this.riddle.correct ? 'confirm' : 'deny');
   };
 
-  Trial.prototype.nearAnswerPad = function () { return this.riddle && this.riddle.revealed >= 3; };
+  Trial.prototype.nearAnswerPad = function () { return !!this.riddle; };
 
   /* ================================================================ scoring */
+  /* Per-type scoring weights. Puzzles deliberately lean on completing cleanly
+     rather than on raw speed: `time` is small and `flawless` rewards taking no
+     damage, so knowing the layout and doing it carefully beats sprinting. */
+  var SCORE = {
+    defeat:  { complete: 0.68, time: 1.15, kill: 16, damage: 0.75 },
+    defend:  { complete: 0.68, time: 1.15, kill: 16, damage: 0.75 },
+    deliver: { complete: 0.68, time: 1.15, kill: 16, damage: 0.75 },
+    seek:    { complete: 0.68, time: 1.15, kill: 16, damage: 0.75 },
+    hide:    { complete: 0.68, time: 1.15, kill: 16, damage: 0.75 },
+    boss:    { complete: 0.68, time: 1.15, kill: 16, damage: 0.75 },
+    puzzle:  { complete: 0.92, time: 0.50, kill: 16, damage: 0.90, flawless: 0.10 },
+    word:    { complete: 0.92, time: 0.45, kill: 16, damage: 0.90, flawless: 0.10 }
+  };
+
   Trial.prototype.finish = function (reason) {
     if (this.state === 'done') return;
     this.state = 'done';
     Audio.music(null);
 
+    var w = SCORE[this.type] || SCORE.defeat;
     var score = 0;
-    var timeBonus = Math.max(0, this.timeLeft) * 1.15;   /* retuned after the speed pass */
-    var killScore = 0;
-    /* the enemies list only holds the living; count kills directly */
-    killScore = this.kills * 16;
-    var damagePenalty = this.player.damageTaken * 0.75;
+    var timeBonus = Math.max(0, this.timeLeft) * w.time;
+    var killScore = this.kills * w.kill;
+    var damagePenalty = this.player.damageTaken * w.damage;
 
     var completed = (reason === 'complete');
     if (completed) {
-      score += this.par * 0.68;
+      score += this.par * w.complete;
       score += timeBonus;
+      /* care, not speed: finishing untouched is worth as much as a fast run */
+      if (w.flawless && this.player.damageTaken <= 0) score += this.par * w.flawless;
     }
     score += killScore;
 
     if (this.type === 'hide') {
       /* rewarded for staying unseen, not for kills */
       var unseen = Math.max(0, this.timeLimit - this.spottedTime);
-      score = (completed ? this.par * 0.5 : 0) + unseen * 5 + killScore * 0.5;
+      score = (completed ? this.par * 0.62 : 0) + unseen * 5 + killScore * 0.5;
     }
     if (this.type === 'defend' && completed) {
       score += (this.zone.hp / this.zone.maxHp) * this.par * 0.22;
     }
-    if (this.type === 'word' && completed) {
-      score += (3 - this.riddle.revealed) * 40; /* answering on fewer hints scores higher */
+    if (this.type === 'puzzle') {
+      /* stones already set count even if the clock beats you */
+      var set = 0;
+      for (var pl = 0; pl < this.plates.length; pl++) if (this.plates[pl].filled) set++;
+      if (!completed) score += (set / Math.max(1, this.plates.length)) * this.par * 0.35;
+    }
+    if (this.type === 'word') {
+      if (completed) {
+        /* answering on fewer hints is a real gamble, and pays for it */
+        score += (3 - this.riddle.revealed) * this.par * 0.06;
+      } else {
+        score += (this.riddle.revealed / 3) * this.par * 0.2;
+      }
     }
     if (this.type === 'boss' && completed) {
       score += this.boss ? this.boss.maxHp * 0.3 : 0;

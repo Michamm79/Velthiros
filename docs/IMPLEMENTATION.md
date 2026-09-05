@@ -91,11 +91,15 @@ point of it being secret.
 ## 4. Ranking maths, in full
 
 ```
-score  = objective bonus (0.68 × par if completed)
-       + time remaining × 1.5
-       + kills × 16
-       + type-specific bonuses
-       - damage taken × 0.75
+score  = objective bonus (complete × par, if completed)
+       + time remaining × time
+       + kills × kill
+       + type-specific bonuses (flawless, zone held, hints unused, partial progress)
+       - damage taken × damage
+
+/* the four weights are per trial type - see SCORE in arena.js.
+   Combat trials: complete 0.68, time 1.15, kill 16, damage 0.75
+   Puzzles:       complete 0.92, time 0.50, kill 16, damage 0.90, flawless 0.10 */
 
 ratio      = score / par
 percentile = clamp(100 - 75 × ratio, 1, 99)
@@ -172,6 +176,30 @@ melee no longer knocks them around, so a swing near a solved plate can't undo it
 (~13 seconds to cross the arena), dodge reaches 310 units on a 0.58s cooldown, enemies rose
 about 20% so they remain a threat without matching the player, and the camera leads further
 and catches up faster. The walk cycle animates faster to match.
+
+**Puzzle scoring was unwinnable, and speed was the only lever.** Reported from play: a
+puzzle solved with full knowledge of the layout still landed below 40%. It was not
+difficulty — the maths made the top tier unreachable. Puzzle par was 832 while the best
+score the formula could produce, with an instant solve and every guard killed, was 763:
+a ceiling of top 31%. A realistic 75-second solve scored top 39%, right on the failure line.
+
+Two things changed. Scoring weights are now per trial type rather than one global formula
+(`SCORE` in `arena.js`): puzzles weight completion at 0.92 of par, cut the time bonus to a
+third of its old value, and add a `flawless` bonus worth 10% of par for finishing untouched.
+Care now outscores speed, which is what the trial is actually about. Par for puzzle, word,
+hide, deliver, seek and boss came down to put the ceiling back in reach.
+
+Partial credit was added so progress is never worth nothing: stones already on their marks
+score even on a timeout, and hints found score even if the riddle goes unanswered.
+
+The word puzzle also had dead code — a bonus for answering on fewer hints that could never
+trigger, because the UI hid the answer buttons until all three were found. The buttons are
+now always available, so answering early is a real gamble that pays 6% of par per unfound
+hint.
+
+The regression guard is a test that constructs a flawless run and a scrape-through run for
+every trial type and asserts the first reaches the top 25% while the second does not. That
+is the check that would have caught this before it shipped.
 
 **The scythe combo is pinned for testing.** `D.FIXED_COMBO_INDEX` is `0`, so the unlock is
 always up, up, down, down, left, right. Setting it to `null` restores the GDD behaviour of
