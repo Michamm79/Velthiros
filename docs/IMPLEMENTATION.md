@@ -139,10 +139,22 @@ while the world stays chunky. `?smooth=1` restores the previous vector look for 
 Ground is a dithered two-tone tile anchored to the world origin rather than a flat checker,
 and the environment palettes were deepened to suit the harder edges.
 
-**Character proportions.** §11 asks for Mario-ish chibi. At buffer resolution that read as
-unclear, so the rig moved to roughly a third head to total height — still stylised, but it
-holds up small. Every proportion is in `Art.RIG` in `art.js`; restoring the chibi look is a
-matter of changing those six numbers.
+**Hand-authored pixel art.** The procedural vector drawing was replaced with a real sprite
+sheet. `pixel.js` holds a locked palette of about 35 colours and a small authoring grid
+(`rect`, `oval`, `line`, `speckle`, `mirrorX`, `outline`); `sprites.js` draws every
+character, prop, weapon and ground tile against it, pixel by pixel. Sprites bake once into
+offscreen canvases and are blitted at exactly one sprite pixel per buffer pixel, which is
+what keeps pixel art from shimmering when the camera moves. The arena's world zoom is fixed
+at 0.26 buffer pixels per world unit to hold that relationship.
+
+Characters have three authored views — down, up and side, with side mirrored for the other
+direction — and a three-frame walk. Weapons are separate sprites pivoted at the grip and
+rotated through the swing. The test suite bakes all 65 sprites and fails on any unknown
+palette key, which is the main defence against a typo in hand-placed pixel data.
+
+What is not yet converted: the bedroom/hub interior furniture and the title and cutscene art
+are still procedural, so they read smoother than the arena. A tiled interior is the obvious
+next art job.
 
 **The scythe combo is pinned for testing.** `D.FIXED_COMBO_INDEX` is `0`, so the unlock is
 always up, up, down, down, left, right. Setting it to `null` restores the GDD behaviour of
