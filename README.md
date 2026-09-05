@@ -93,7 +93,7 @@ Everything in the design document that the demo scope implies, minus the open qu
 - Start screen, bedroom intro, abduction cutscene, ranking screen, hub, both shops
 - 50 trials, a Reaper every 5th, then a 3-wave endgame and a final boss
 - All 7 trial types (Defeat, Defend, Collect & Deliver, physical Puzzle, Word puzzle, Hide, Seek)
-- All 7 environment skins on a circular arena you cross in ~18 seconds (see the deviations below)
+- All 7 environment skins on a circular arena you cross in ~13 seconds (see the deviations below)
 - 4 weapons with distinct feel and specials; the scythe hidden behind the 5-minute idle unlock
 - All 6 power gems, granted at random once and levelling with you
 - Ranking tiers exactly as specified, debuffs on failure, 25 deaths wipes the run
@@ -111,9 +111,9 @@ Three deliberate departures, all reversible from one place each:
   (up, up, down, down, left, right) so it never changes between runs while the game is
   being tested. Set it to `null` to restore the GDD's random draw from ten presets.
 - **Everything moves much faster.** The GDD's 30-second arena crossing felt sluggish in
-  play, so the player went from 60 to 140 units/sec, the arena from 1800 to 2500 units
-  across (~18s edge to edge), and every enemy speed, attack wind-up and projectile was
-  scaled to match.
+  play, so the player went from 60 to 190 units/sec and the arena from 1800 to 2500 units
+  across (~13s edge to edge), with every enemy speed, attack wind-up and projectile scaled
+  to match.
 - **The art is hand-authored pixel art.** Every character, prop, weapon and ground tile
   is drawn pixel by pixel against a locked ~35-colour palette in `src/js/sprites.js`,
   baked once into offscreen canvases, and blitted at exactly one sprite pixel per buffer

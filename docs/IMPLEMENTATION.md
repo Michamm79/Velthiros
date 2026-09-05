@@ -11,7 +11,7 @@ How the design document maps onto the code, what I had to decide, and what is st
 | 2. Story, opening, abduction | `scenes.js` `RoomScene('intro')`, `CutsceneScene` | Bedroom is walkable and non-interactive, exactly as specified. Garatu's line is verbatim. |
 | 3. Core loop | `game.js` `enterTrial` → `onTrialFinished` → `leaveRanking` | Hub → shops → trial → ranking → hub. Reaper on every 5th. |
 | 4. Screen list | `scenes.js` | All 8 screens exist. |
-| 5. World | `arena.js` `build()` | Circular arena, radius 1250 units. Player moves 140 u/s, so edge-to-edge is ~18 seconds — see §5 below for why this departs from the GDD's 30. Tree ring is impassable, bushes are scattered cover. |
+| 5. World | `arena.js` `build()` | Circular arena, radius 1250 units. Player moves 190 u/s, so edge-to-edge is ~13 seconds — see §5 below for why this departs from the GDD's 30. Tree ring is impassable, bushes are scattered cover. |
 | 6.1 Trial types | `arena.js` `setupObjective()` | All 5 types; Hide & Seek is split into its two stated variants (`hide` and `seek`), and Puzzles into `puzzle` (physical) and `word`. |
 | 6.2 Ranking | `arena.js` `finish()`, `data.js` `RANK_TIERS` | See "Ranking maths" below. |
 | 7.1 Weapons | `data.js` `WEAPONS` | Four weapons with the stated strengths and weaknesses expressed as real numbers. |
@@ -124,11 +124,11 @@ rather than automatic. It is also the number most likely to need moving once rea
 
 ## 5. Post-playtest changes
 
-The first round of feedback produced four changes that knowingly depart from the document.
+Playtest feedback produced these changes, several of which knowingly depart from the document.
 
 **Movement speed and arena scale.** §5 specifies ~30 seconds to cross the arena. In play
 that read as sluggish, so the player moves at 140 u/s instead of 60 and the arena is 2500
-units across instead of 1800 — about 18 seconds edge to edge. Enemy speeds, attack
+units across instead of 1800 — about 13 seconds edge to edge after a second pass. Enemy speeds, attack
 wind-ups, recovery frames, projectile speeds, dodge distance and knockback were all scaled
 to match, and cover and ground detail were made denser so the larger map does not read as
 empty. If the original pacing is wanted back, `speed` in `save.js` `resolveStats` and
@@ -157,6 +157,21 @@ palette key, which is the main defence against a typo in hand-placed pixel data.
 What is not yet converted: the bedroom/hub interior furniture and the title and cutscene art
 are still procedural, so they read smoother than the arena. A tiled interior is the obvious
 next art job.
+
+**Stones are pushed on a locked axis.** Physical puzzles originally moved stones through the
+generic collision separation, which shoved them along whatever vector separated the two
+bodies — so approaching with the joystick even slightly off-centre sent the stone diagonally
+and the player slid past it. Pushing is now explicit: contact plus movement into the stone
+acquires a lock on the nearest cardinal axis, the stone travels at a fixed 115 u/s, and the
+player is pinned square behind it and eased onto its centre line until they stop or turn
+away. Stones are otherwise solid — brushing one moves the player, never the stone — and
+melee no longer knocks them around, so a swing near a solved plate can't undo it.
+`Trial.prototype.updatePush` in `arena.js`.
+
+**A second speed increase.** 140 u/s still read as sluggish, so the player is now 190 u/s
+(~13 seconds to cross the arena), dodge reaches 310 units on a 0.58s cooldown, enemies rose
+about 20% so they remain a threat without matching the player, and the camera leads further
+and catches up faster. The walk cycle animates faster to match.
 
 **The scythe combo is pinned for testing.** `D.FIXED_COMBO_INDEX` is `0`, so the unlock is
 always up, up, down, down, left, right. Setting it to `null` restores the GDD behaviour of

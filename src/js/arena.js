@@ -40,6 +40,7 @@
     this.objectiveDone = false;
     this.objectiveFailed = false;
     this.spawnQueue = [];
+    this.push = null;              /* the stone currently being pushed, if any */
     this.message = null; this.messageTime = 0;
 
     this.stats = V.Save.resolveStats(game.save);
@@ -326,18 +327,6 @@
     this.swipes.push({ x: x, y: y, angle: angle, range: range, halfArc: halfArc, kind: kind, life: 0.18, max: 0.18 });
   };
 
-  Trial.prototype.meleeProps = function (p, halfArc, range) {
-    /* melee shoves puzzle blocks */
-    for (var i = 0; i < this.blocks.length; i++) {
-      var b = this.blocks[i];
-      if (U.inArc(p.x, p.y, p.facing, halfArc, range + b.r, b.x, b.y)) {
-        b.x += Math.cos(p.facing) * 64;
-        b.y += Math.sin(p.facing) * 64;
-        U.confineToCircle(b, 0, 0, ARENA_R - 60);
-      }
-    }
-  };
-
   Trial.prototype.onEnemyKilled = function (e) {
     this.kills++;
     if (this.type === 'seek') this.foundCount = (this.foundCount || 0) + 1;
@@ -368,6 +357,7 @@
     if (In.wasPressed('item')) this.useConsumable();
 
     p.update(dt, In);
+    this.updatePush(dt);
 
     /* ---- entities ---- */
     for (i = 0; i < this.enemies.length; i++) this.enemies[i].update(dt);
@@ -445,19 +435,77 @@
         b.x += ux * push; b.y += uy * push;
       }
     }
-    /* blocks push against the player */
-    for (var k = 0; k < this.blocks.length; k++) {
-      var bl = this.blocks[k], p = this.player;
-      var ddx = bl.x - p.x, ddy = bl.y - p.y;
-      var dd = Math.sqrt(ddx * ddx + ddy * ddy);
-      var need = bl.r + p.radius;
-      if (dd < need && dd > 0.001) {
-        var over = need - dd;
-        bl.x += (ddx / dd) * over;
-        bl.y += (ddy / dd) * over;
-        U.confineToCircle(bl, 0, 0, ARENA_R - 60);
+    /* stones are solid: brushing one moves the player, never the stone.
+       Deliberate pushing is handled by updatePush(). */
+    if (!this.push) {
+      for (var k = 0; k < this.blocks.length; k++) {
+        var bl = this.blocks[k], p = this.player;
+        var ddx = p.x - bl.x, ddy = p.y - bl.y;
+        var dd = Math.sqrt(ddx * ddx + ddy * ddy);
+        var need = bl.r + p.radius;
+        if (dd < need && dd > 0.001) {
+          var over = need - dd;
+          p.x += (ddx / dd) * over;
+          p.y += (ddy / dd) * over;
+          this.confine(p);
+        }
       }
     }
+  };
+
+  /* ------------------------------------------------------------ pushing
+     Pushing locks to one cardinal axis and pins the player square behind the
+     stone, so an off-centre joystick can no longer slide you past it. */
+  Trial.prototype.updatePush = function (dt) {
+    if (!this.blocks.length) return;
+    var p = this.player;
+    var mv = this.input.move;
+    var PUSH_SPEED = 115;
+    var i;
+
+    /* release the lock when you stop, turn away, or get separated */
+    if (this.push) {
+      var pb = this.push.block;
+      var held = this.push.axis === 'x' ? mv.x : mv.y;
+      var stillOn = mv.mag > 0.2 && held * this.push.dir > 0.3;
+      var near = U.dist(p.x, p.y, pb.x, pb.y) < pb.r + p.radius + 30;
+      if (!stillOn || !near || p.atkState || p.dodgeTime > 0) this.push = null;
+    }
+
+    /* acquire: must be touching the stone and moving into it */
+    if (!this.push && mv.mag > 0.25 && !p.atkState && p.dodgeTime <= 0) {
+      for (i = 0; i < this.blocks.length; i++) {
+        var b = this.blocks[i];
+        if (U.dist(p.x, p.y, b.x, b.y) > b.r + p.radius + 6) continue;
+        var toBlock = Math.atan2(b.y - p.y, b.x - p.x);
+        if (Math.abs(U.angleDelta(Math.atan2(mv.y, mv.x), toBlock)) > 1.0) continue;
+        var axis = Math.abs(b.x - p.x) > Math.abs(b.y - p.y) ? 'x' : 'y';
+        var dir = axis === 'x' ? (b.x > p.x ? 1 : -1) : (b.y > p.y ? 1 : -1);
+        this.push = { block: b, axis: axis, dir: dir };
+        break;
+      }
+    }
+    if (!this.push) return;
+
+    var blk = this.push.block, ax = this.push.axis, dr = this.push.dir;
+    var gap = blk.r + p.radius;
+
+    if (ax === 'x') blk.x += dr * PUSH_SPEED * dt;
+    else blk.y += dr * PUSH_SPEED * dt;
+    U.confineToCircle(blk, 0, 0, ARENA_R - 60);
+
+    /* pin the player square behind the stone and slide them onto its centre line */
+    if (ax === 'x') {
+      p.x = blk.x - dr * gap;
+      p.y = U.approach(p.y, blk.y, 260 * dt);
+      p.facing = dr > 0 ? 0 : Math.PI;
+    } else {
+      p.y = blk.y - dr * gap;
+      p.x = U.approach(p.x, blk.x, 260 * dt);
+      p.facing = dr > 0 ? Math.PI / 2 : -Math.PI / 2;
+    }
+    p.moving = true;
+    this.confine(p);
   };
 
   Trial.prototype.setMessage = function (txt, time) {
@@ -612,7 +660,7 @@
     Audio.music(null);
 
     var score = 0;
-    var timeBonus = Math.max(0, this.timeLeft) * 1.5;    /* retuned after the speed pass */
+    var timeBonus = Math.max(0, this.timeLeft) * 1.15;   /* retuned after the speed pass */
     var killScore = 0;
     /* the enemies list only holds the living; count kills directly */
     killScore = this.kills * 16;
@@ -684,11 +732,11 @@
     var Px = V.Px, Spr = V.Spr;
 
     /* camera lead + smoothing, in world units */
-    var lead = 130;
+    var lead = 175;
     var tx = p.x + Math.cos(p.facing) * lead * 0.35;
     var ty = p.y + Math.sin(p.facing) * lead * 0.35;
-    this.cam.x = U.lerp(this.cam.x, tx, 0.16);
-    this.cam.y = U.lerp(this.cam.y, ty, 0.16);
+    this.cam.x = U.lerp(this.cam.x, tx, 0.2);
+    this.cam.y = U.lerp(this.cam.y, ty, 0.2);
 
     var shakeX = 0, shakeY = 0;
     if (this.shakeTime > 0) {

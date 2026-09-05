@@ -86,22 +86,22 @@
   /* --------------------------------------------------------------- enemies */
   D.ENEMIES = {
     goblin: {
-      id: 'goblin', name: 'Goblin', hp: 32, speed: 98, damage: 8, sight: 400,
+      id: 'goblin', name: 'Goblin', hp: 32, speed: 122, damage: 8, sight: 430,
       radius: 15, attackRange: 52, attackWindup: 0.34, attackRecover: 0.4,
       score: 10, reward: 6, colour: '#7fbf4f', dark: '#4b8030'
     },
     minotaur: {
-      id: 'minotaur', name: 'Minotaur', hp: 130, speed: 86, damage: 20, sight: 470,
+      id: 'minotaur', name: 'Minotaur', hp: 130, speed: 104, damage: 20, sight: 510,
       radius: 24, attackRange: 72, attackWindup: 0.5, attackRecover: 0.6,
       score: 40, reward: 22, colour: '#b06a40', dark: '#733f22', charge: true, heavy: true
     },
     reaper: {
-      id: 'reaper', name: 'Reaper', hp: 420, speed: 128, damage: 26, sight: 4000,
+      id: 'reaper', name: 'Reaper', hp: 420, speed: 156, damage: 26, sight: 4000,
       radius: 26, attackRange: 110, attackWindup: 0.4, attackRecover: 0.46,
       score: 260, reward: 140, colour: '#3b3550', dark: '#1d1a2b', boss: true, teleport: true
     },
     aurelith: {
-      id: 'aurelith', name: 'Aurelith', hp: 1500, speed: 110, damage: 30, sight: 8000,
+      id: 'aurelith', name: 'Aurelith', hp: 1500, speed: 134, damage: 30, sight: 8000,
       radius: 40, attackRange: 150, attackWindup: 0.52, attackRecover: 0.54,
       score: 1200, reward: 900, colour: '#e9e2ea', dark: '#2a2331', boss: true, finalBoss: true,
       teleport: true

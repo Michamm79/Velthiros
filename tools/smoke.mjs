@@ -308,6 +308,49 @@ async function main() {
   check('every sprite bakes against the locked palette',
     sprites.problems.length === 0, sprites.count + ' sprites; ' + sprites.problems.slice(0, 4).join(' | '));
 
+  /* --- pushing a stone with the joystick off-centre must not slide you past --- */
+  const push = await page.evaluate(() => {
+    const g = window.VELTHIROS, D = window.V.D, In = window.V.Input;
+    const spec = { index: 6, type: 'puzzle', boss: false, env: D.ENVIRONMENTS[0], seed: 5, label: 'push test' };
+    const t = new window.V.Trial(g, spec);
+    t.state = 'play';
+    t.enemies.length = 0;                       /* isolate the mechanic */
+    const b = t.blocks[0];
+    const p = t.player;
+
+    /* stone due east; the player approaches it 22 units off the centre line */
+    b.x = 300; b.y = 0;
+    p.x = 300 - (b.r + p.radius) - 8;
+    p.y = 22;
+    const startX = b.x, startY = b.y;
+
+    In.move.x = 1; In.move.y = 0.28; In.move.mag = 1;   /* joystick slightly off, as reported */
+    for (let i = 0; i < 120; i++) t.update(1 / 60);
+    const pushed = {
+      travelled: Math.round(b.x - startX),
+      drift: Math.round(Math.abs(b.y - startY)),
+      behind: p.x < b.x,
+      offCentre: Math.round(Math.abs(p.y - b.y)),
+      locked: !!t.push
+    };
+
+    /* and brushing past a stone sideways must not move it at all */
+    t.push = null;
+    b.x = 300; b.y = 0;
+    p.x = 300 - (b.r + p.radius) + 2;
+    p.y = 0;
+    const brushFrom = b.x;
+    In.move.x = 0; In.move.y = 1; In.move.mag = 1;      /* moving perpendicular, grazing it */
+    for (let j = 0; j < 60; j++) t.update(1 / 60);
+    In.move.x = 0; In.move.y = 0; In.move.mag = 0;
+    pushed.brushShift = Math.round(Math.abs(b.x - brushFrom));
+    return pushed;
+  });
+  check('an off-centre push moves the stone straight and keeps the player behind it',
+    push.travelled > 100 && push.drift <= 2 && push.behind && push.offCentre <= 4 && push.locked,
+    JSON.stringify(push));
+  check('brushing past a stone does not move it', push.brushShift === 0, 'shift=' + push.brushShift);
+
   /* --- balance probe: how does a competent run rank across trial types? --- */
   const probe = await page.evaluate(() => {
     const g = window.VELTHIROS;

@@ -125,9 +125,9 @@
   Save.resolveStats = function (state) {
     var s = {
       maxHp: 100, maxStamina: 100, staminaRegen: 20,
-      speed: 140,                 /* ~18s to cross the 2500u arena - see arena.js */
+      speed: 190,                 /* ~13s to cross the 2500u arena - see arena.js */
       speedMul: 1, damageMul: 1, rangedMul: 1, defenceMul: 1,
-      dodgeCdMul: 1, dodgeDist: 250, evasion: 0, stealthMul: 1,
+      dodgeCdMul: 1, dodgeDist: 310, evasion: 0, stealthMul: 1,
       glide: false, pierce: false,
       weaponLevel: Save.weaponLevel(state),
       gemLevel: Save.gemLevel(state)

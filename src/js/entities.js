@@ -103,7 +103,7 @@
       this.y += mv.y * sp * dt;
       this.moving = true;
       if (!this.atkState) this.facing = Math.atan2(mv.y, mv.x);
-      this.animPhase += dt * (6 + 9 * mv.mag);
+      this.animPhase += dt * (9 + 14 * mv.mag);
     } else {
       this.moving = false;
       this.animPhase += dt * 2.2;
@@ -204,7 +204,7 @@
     this.dodgeAngle = mv.mag > 0.15 ? Math.atan2(mv.y, mv.x) : this.facing;
     this.facing = this.dodgeAngle;
     this.dodgeTime = 0.2;
-    this.dodgeCd = 0.7 * this.stats.dodgeCdMul;
+    this.dodgeCd = 0.58 * this.stats.dodgeCdMul;
     this.invuln = Math.max(this.invuln, 0.3);
     Audio.play('dodge');
     this.world.dust(this.x, this.y, 6);
@@ -421,7 +421,7 @@
         break;
       }
     }
-    this.animPhase += dt * (this.moving ? 11 : 2);
+    this.animPhase += dt * (this.moving ? 15 : 2);
   };
 
   Enemy.prototype.step = function (angle, speed, dt) {
