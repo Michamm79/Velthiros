@@ -1,0 +1,4603 @@
+<title>Velthiros</title>
+<style>
+/* Velthiros - the page is a frame around a single full-bleed canvas */
+:root {
+  color-scheme: dark;
+  --ink: #f2ecff;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0d0916;
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#game {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  touch-action: none;
+  cursor: default;
+}
+/* shown until the first frame paints */
+#boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  text-align: center;
+  background: #0d0916;
+  z-index: 10;
+  transition: opacity 0.4s ease;
+}
+#boot.gone { opacity: 0; pointer-events: none; }
+#boot h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: 0.16em;
+  color: #ffe9c9;
+}
+#boot p { margin: 0; font-size: 12px; opacity: 0.5; }
+/* nudge for portrait phones - the game plays best in landscape */
+#rotate {
+  position: fixed;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  opacity: 0.4;
+  pointer-events: none;
+  display: none;
+  z-index: 5;
+}
+@media (orientation: portrait) and (max-width: 560px) {
+  #rotate { display: block; }
+}
+</style>
+<canvas id="game"></canvas>
+<div id="rotate">turn sideways for the full arena</div>
+<div id="boot"><h1>VELTHIROS</h1><p>loading the arena</p></div>
+<script>
+/* ===== src/js/util.js ===== */
+/* Velthiros - shared math, rng and helpers */
+(function (V) {
+  'use strict';
+
+  var U = {};
+
+  U.TAU = Math.PI * 2;
+
+  U.clamp = function (v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); };
+  U.lerp = function (a, b, t) { return a + (b - a) * t; };
+  U.dist = function (ax, ay, bx, by) { var dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy); };
+  U.dist2 = function (ax, ay, bx, by) { var dx = bx - ax, dy = by - ay; return dx * dx + dy * dy; };
+
+  /* shortest signed angular difference b - a, wrapped to [-PI, PI] */
+  U.angleDelta = function (a, b) {
+    var d = (b - a) % U.TAU;
+    if (d > Math.PI) d -= U.TAU;
+    if (d < -Math.PI) d += U.TAU;
+    return d;
+  };
+
+  U.approach = function (v, target, step) {
+    if (v < target) return Math.min(v + step, target);
+    if (v > target) return Math.max(v - step, target);
+    return target;
+  };
+
+  U.easeOut = function (t) { return 1 - (1 - t) * (1 - t); };
+  U.easeIn = function (t) { return t * t; };
+  U.easeInOut = function (t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; };
+
+  /* Mulberry32 - small deterministic PRNG so a trial seed rebuilds the same arena */
+  U.rng = function (seed) {
+    var a = seed >>> 0;
+    var r = function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    r.range = function (lo, hi) { return lo + r() * (hi - lo); };
+    r.int = function (lo, hi) { return Math.floor(lo + r() * (hi - lo + 1)); };
+    r.pick = function (arr) { return arr[Math.floor(r() * arr.length)]; };
+    r.chance = function (p) { return r() < p; };
+    r.shuffle = function (arr) {
+      var out = arr.slice();
+      for (var i = out.length - 1; i > 0; i--) {
+        var j = Math.floor(r() * (i + 1));
+        var t = out[i]; out[i] = out[j]; out[j] = t;
+      }
+      return out;
+    };
+    return r;
+  };
+
+  /* string -> 32 bit hash, used to derive stable seeds from names */
+  U.hash = function (str) {
+    var h = 2166136261 >>> 0;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  };
+
+  U.fmtTime = function (sec) {
+    if (sec < 0) sec = 0;
+    var m = Math.floor(sec / 60);
+    var s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  };
+
+  U.fmtNum = function (n) {
+    n = Math.floor(n);
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
+  /* point inside a circle */
+  U.inCircle = function (px, py, cx, cy, r) { return U.dist2(px, py, cx, cy) <= r * r; };
+
+  /* push a point back inside a circular boundary, returns true if it moved */
+  U.confineToCircle = function (p, cx, cy, r) {
+    var dx = p.x - cx, dy = p.y - cy;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d <= r) return false;
+    if (d === 0) { p.x = cx + r; return true; }
+    p.x = cx + (dx / d) * r;
+    p.y = cy + (dy / d) * r;
+    return true;
+  };
+
+  /* is target inside a cone centred on `facing`? */
+  U.inArc = function (ax, ay, facing, halfArc, range, tx, ty) {
+    var dx = tx - ax, dy = ty - ay;
+    var d2 = dx * dx + dy * dy;
+    if (d2 > range * range) return false;
+    if (d2 < 1) return true;
+    var a = Math.atan2(dy, dx);
+    return Math.abs(U.angleDelta(facing, a)) <= halfArc;
+  };
+
+  U.roman = function (n) {
+    var map = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+    return map[n] || String(n);
+  };
+
+  V.U = U;
+})(window.V = window.V || {});
+
+/* ===== src/js/data.js ===== */
+/* Velthiros - static design data (weapons, gems, enemies, environments, shops, trials) */
+(function (V) {
+  'use strict';
+
+  var D = {};
+
+  /* ---------------------------------------------------------------- currency */
+  D.CURRENCY = { name: 'Vel', symbol: '◆' };
+
+  /* --------------------------------------------------------------- weapons
+     GDD 7.1. Numbers are the first-pass tuning pass for open question #4. */
+  D.WEAPONS = {
+    sword: {
+      id: 'sword', name: 'Sword', kind: 'melee', owned: true, price: 0,
+      damage: 15, arc: 1.15, range: 74, windup: 0.07, recover: 0.26, stamina: 9,
+      moveScale: 0.62, knock: 130,
+      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 86, windup: 0.16, recover: 0.5, stamina: 30, cooldown: 3.2, knock: 200, spin: true },
+      blurb: 'Balanced all-rounder. No weakness, no spike.'
+    },
+    battleaxe: {
+      id: 'battleaxe', name: 'Battleaxe', kind: 'melee', owned: false, price: 260,
+      damage: 27, arc: 1.5, range: 88, windup: 0.34, recover: 0.5, stamina: 22,
+      moveScale: 0.34, knock: 280,
+      special: { name: 'Cleave', damage: 44, arc: 1.9, range: 100, windup: 0.55, recover: 0.6, stamina: 40, cooldown: 5.0, knock: 420, quake: true },
+      blurb: 'Huge damage in a wide arc. Long wind-up, poor mobility.'
+    },
+    bow: {
+      id: 'bow', name: 'Bow', kind: 'ranged', owned: false, price: 240,
+      damage: 12, arc: 0.2, range: 620, windup: 0.3, recover: 0.24, stamina: 12,
+      moveScale: 0.5, knock: 60, projectileSpeed: 460,
+      special: { name: 'Volley', damage: 10, spread: 0.34, shots: 3, windup: 0.42, recover: 0.4, stamina: 34, cooldown: 4.2, projectileSpeed: 440 },
+      blurb: 'Best kiting tool. Helpless once they close in.'
+    },
+    scythe: {
+      id: 'scythe', name: 'Scythe', kind: 'melee', owned: false, price: -1, secret: true,
+      damage: 21, arc: 1.42, range: 84, windup: 0.12, recover: 0.32, stamina: 14,
+      moveScale: 0.58, knock: 190,
+      special: { name: 'Reap', damage: 26, arc: 2.4, range: 96, windup: 0.14, recover: 0.42, stamina: 32, cooldown: 3.6, knock: 240, dash: 190, lifesteal: 0.3 },
+      blurb: 'The secret. Solid damage, quick, no crippling weakness.'
+    }
+  };
+  D.WEAPON_ORDER = ['sword', 'battleaxe', 'bow', 'scythe'];
+
+  /* ----------------------------------------------------------------- gems
+     GDD 8. One is granted at random during the first trial and levels up. */
+  D.GEMS = {
+    emberstone: {
+      id: 'emberstone', name: 'Emberstone', colour: '#ff7a3c', glow: '#ffcf9a',
+      role: 'Attack / Defense',
+      desc: function (l) { return '+' + (8 * l) + '% damage dealt, -' + (5 * l) + '% damage taken'; },
+      apply: function (s, l) { s.damageMul *= 1 + 0.08 * l; s.defenceMul *= 1 - 0.05 * l; }
+    },
+    rootstone: {
+      id: 'rootstone', name: 'Rootstone', colour: '#5fd07a', glow: '#c6f7ce',
+      role: 'Health / Stamina',
+      desc: function (l) { return '+' + (12 * l) + ' max health, +' + (10 * l) + ' max stamina'; },
+      apply: function (s, l) { s.maxHp += 12 * l; s.maxStamina += 10 * l; }
+    },
+    galeshard: {
+      id: 'galeshard', name: 'Galeshard', colour: '#57c6ff', glow: '#cdefff',
+      role: 'Dodge / Movement',
+      desc: function (l) { return '+' + (6 * l) + '% move speed, dodge cooldown -' + (10 * l) + '%'; },
+      apply: function (s, l) { s.speedMul *= 1 + 0.06 * l; s.dodgeCdMul *= 1 - 0.1 * l; }
+    },
+    wingshard: {
+      id: 'wingshard', name: 'Wingshard', colour: '#f0e6ff', glow: '#ffffff',
+      role: 'Jump / Glide',
+      desc: function (l) { return 'Dodge becomes a glide: +' + (30 * l) + ' distance, vaults bushes'; },
+      apply: function (s, l) { s.glide = true; s.dodgeDist += 30 * l; }
+    },
+    stormshard: {
+      id: 'stormshard', name: 'Stormshard', colour: '#ffe45c', glow: '#fff7c2',
+      role: 'Ranged power',
+      desc: function (l) { return '+' + (15 * l) + '% ranged damage, arrows pierce at level 3+'; },
+      apply: function (s, l) { s.rangedMul *= 1 + 0.15 * l; if (l >= 3) s.pierce = true; }
+    },
+    duskveil: {
+      id: 'duskveil', name: 'Duskveil', colour: '#a077ff', glow: '#ded0ff',
+      role: 'Evasion',
+      desc: function (l) { return (7 * l) + '% chance to be missed entirely, quieter in cover'; },
+      apply: function (s, l) { s.evasion += 0.07 * l; s.stealthMul *= 1 - 0.08 * l; }
+    }
+  };
+  D.GEM_IDS = ['emberstone', 'rootstone', 'galeshard', 'wingshard', 'stormshard', 'duskveil'];
+
+  /* --------------------------------------------------------------- enemies */
+  D.ENEMIES = {
+    goblin: {
+      id: 'goblin', name: 'Goblin', hp: 32, speed: 54, damage: 8, sight: 300,
+      radius: 15, attackRange: 44, attackWindup: 0.42, attackRecover: 0.55,
+      score: 10, reward: 6, colour: '#7fbf4f', dark: '#4b8030'
+    },
+    minotaur: {
+      id: 'minotaur', name: 'Minotaur', hp: 130, speed: 44, damage: 20, sight: 360,
+      radius: 24, attackRange: 62, attackWindup: 0.62, attackRecover: 0.8,
+      score: 40, reward: 22, colour: '#b06a40', dark: '#733f22', charge: true, heavy: true
+    },
+    reaper: {
+      id: 'reaper', name: 'Reaper', hp: 420, speed: 62, damage: 26, sight: 3000,
+      radius: 26, attackRange: 96, attackWindup: 0.5, attackRecover: 0.62,
+      score: 260, reward: 140, colour: '#3b3550', dark: '#1d1a2b', boss: true, teleport: true
+    },
+    aurelith: {
+      id: 'aurelith', name: 'Aurelith', hp: 1500, speed: 52, damage: 30, sight: 6000,
+      radius: 40, attackRange: 130, attackWindup: 0.66, attackRecover: 0.7,
+      score: 1200, reward: 900, colour: '#e9e2ea', dark: '#2a2331', boss: true, finalBoss: true,
+      teleport: true
+    }
+  };
+
+  /* ---------------------------------------------------------- environments
+     GDD 5. Each skin recolours the arena and swaps the barrier / cover prop. */
+  D.ENVIRONMENTS = [
+    { id: 'plains', name: 'Plains', ground: '#8ed15e', ground2: '#7cc44f', accent: '#5da33a',
+      barrier: 'tree', cover: 'bush', sky: '#bfe9ff', litter: 'flower' },
+    { id: 'forest', name: 'Deepwood', ground: '#5fae57', ground2: '#4f9a49', accent: '#3a7c39',
+      barrier: 'tree', cover: 'bush', sky: '#9fd8b8', litter: 'fern' },
+    { id: 'snow', name: 'Snowfield', ground: '#e8f2fb', ground2: '#d5e6f6', accent: '#b9d3ea',
+      barrier: 'pine', cover: 'snowbush', sky: '#cfe6f7', litter: 'rock' },
+    { id: 'village', name: 'Village', ground: '#c9b78b', ground2: '#bda87c', accent: '#9c8a5f',
+      barrier: 'fence', cover: 'crate', sky: '#ffe9c0', litter: 'flower' },
+    { id: 'hq', name: 'Enemy HQ', ground: '#6b6376', ground2: '#5d5668', accent: '#443f52',
+      barrier: 'wall', cover: 'crate', sky: '#4a4359', litter: 'rock' },
+    { id: 'city', name: 'City Block', ground: '#9aa0a8', ground2: '#8b9199', accent: '#6f757d',
+      barrier: 'wall', cover: 'crate', sky: '#c3d3e2', litter: 'rock' },
+    { id: 'desert', name: 'Dunes', ground: '#e8cf94', ground2: '#dcc084', accent: '#c2a466',
+      barrier: 'cactus', cover: 'shrub', sky: '#ffdfa6', litter: 'rock' }
+  ];
+
+  /* -------------------------------------------------------------- trials
+     GDD 6.1. `weight` biases the rotation; boss trials override every 5th. */
+  D.TRIAL_TYPES = [
+    { id: 'defeat',  name: 'Defeat Enemies', brief: 'Cull the arena.' },
+    { id: 'defend',  name: 'Defend',          brief: 'Hold the ground.' },
+    { id: 'deliver', name: 'Collect & Deliver', brief: 'Fetch it. Run it home.' },
+    { id: 'puzzle',  name: 'Physical Puzzle', brief: 'Set the stones right.' },
+    { id: 'word',    name: 'Word Puzzle',     brief: 'Find the hints. Answer.' },
+    { id: 'hide',    name: 'Hide & Seek',     brief: 'Do not be found.' },
+    { id: 'seek',    name: 'Seek & Destroy',  brief: 'They are hiding. Find them.' }
+  ];
+  D.TRIAL_ROTATION = ['defeat', 'deliver', 'puzzle', 'defend', 'hide', 'defeat', 'word', 'deliver', 'seek', 'defend'];
+
+  D.TOTAL_TRIALS = 50;
+  D.BOSS_EVERY = 5;
+  D.DEATH_LIMIT = 25;
+
+  /* --------------------------------------------------------- word puzzles */
+  D.RIDDLES = [
+    { q: 'What has a ring of trees but never a road out?', a: 'The arena', wrong: ['A crown', 'The city', 'A wheel'] },
+    { q: 'Garatu calls them watchers. What do they want?', a: 'Entertainment', wrong: ['Tribute', 'Silence', 'Blood'] },
+    { q: 'It cuts wide, needs no wind-up, and was here all along.', a: 'The scythe', wrong: ['The axe', 'The bow', 'The sword'] },
+    { q: 'Spend it in two shops, earn it in one place.', a: 'Vel', wrong: ['Time', 'Blood', 'Trust'] },
+    { q: 'Bright green, waist high, and it will save your life.', a: 'A bush', wrong: ['A shield', 'A tree', 'A wall'] },
+    { q: 'Every fifth guest arrives carrying your own weapon.', a: 'The Reaper', wrong: ['Garatu', 'A goblin', 'A watcher'] },
+    { q: 'Twenty-five of these and nothing you own survives.', a: 'Deaths', wrong: ['Trials', 'Days', 'Coins'] },
+    { q: 'It was given once, at random, and it grows with you.', a: 'A power gem', wrong: ['A debt', 'A scar', 'A name'] },
+    { q: 'Slow, heavy, and it will get you killed if you are surrounded.', a: 'The battleaxe', wrong: ['The bow', 'The scythe', 'Cowardice'] },
+    { q: 'Thirty seconds edge to edge. What is it?', a: 'The arena', wrong: ['The trial', 'A minute', 'The hall'] },
+    { q: 'Below forty percent buys you this.', a: 'A debuff', wrong: ['A reward', 'A rest', 'Applause'] },
+    { q: 'Where does the story begin?', a: 'A bedroom', wrong: ['A grave', 'The plains', 'A throne'] }
+  ];
+
+  /* ---------------------------------------------------------------- shops
+     GDD 9. One shared currency across both shops. */
+  D.REALITY_SHOP = [
+    { id: 'shirt_red',   cat: 'Clothes', name: 'Crimson Tunic',  price: 60,  desc: 'A red tunic. Purely for the watchers.', tint: '#d84a4a' },
+    { id: 'shirt_blue',  cat: 'Clothes', name: 'Deepwater Coat', price: 60,  desc: 'Cold blue. Suits the snowfields.',     tint: '#4a7fd8' },
+    { id: 'shirt_gold',  cat: 'Clothes', name: 'Gilded Vest',    price: 180, desc: 'Loud. Expensive. Slightly ridiculous.', tint: '#e8c14a' },
+    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',   price: 320, desc: 'Woven from a Reaper cloak.',            tint: '#3b3550' },
+    { id: 'decor_rug',   cat: 'Decor',   name: 'Woven Rug',      price: 80,  desc: 'The floor is less cold now.',           decor: 'rug' },
+    { id: 'decor_plant', cat: 'Decor',   name: 'Corner Fern',    price: 70,  desc: 'It is alive. Probably.',                decor: 'plant' },
+    { id: 'decor_lamp',  cat: 'Decor',   name: 'Warm Lamp',      price: 110, desc: 'Makes the room feel like a home.',      decor: 'lamp' },
+    { id: 'decor_shelf', cat: 'Decor',   name: 'Trophy Shelf',   price: 150, desc: 'Somewhere to put what you survive.',    decor: 'shelf' },
+    { id: 'biz_cart',    cat: 'Business', name: 'Street Cart',    price: 200,  desc: 'Passive income each trial.', income: 6 },
+    { id: 'biz_bakery',  cat: 'Business', name: 'Corner Bakery',  price: 450,  desc: 'Passive income each trial.', income: 15 },
+    { id: 'biz_smith',   cat: 'Business', name: 'Smithy Share',   price: 800,  desc: 'Passive income each trial.', income: 28 },
+    { id: 'biz_tower',   cat: 'Business', name: 'Tower Floor',    price: 1400, desc: 'Passive income each trial.', income: 52 },
+    { id: 'biz_guild',   cat: 'Business', name: 'Guild Charter',  price: 2400, desc: 'Passive income each trial.', income: 95 }
+  ];
+
+  D.TRIAL_SHOP = [
+    { id: 'w_battleaxe', cat: 'Weapon', name: 'Battleaxe', price: 260, desc: 'High damage, wide arc, slow.', weapon: 'battleaxe' },
+    { id: 'w_bow',       cat: 'Weapon', name: 'Bow',       price: 240, desc: 'Long range. Weak up close.',   weapon: 'bow' },
+    { id: 'g_armour',    cat: 'Gear', name: 'Padded Vest',  price: 150, desc: '+20 max health.',              gear: { maxHp: 20 } },
+    { id: 'g_armour2',   cat: 'Gear', name: 'Plated Vest',  price: 420, desc: '+45 max health.',              gear: { maxHp: 45 }, needs: 'g_armour' },
+    { id: 'g_boots',     cat: 'Gear', name: 'Runner Boots', price: 180, desc: '+10% move speed.',             gear: { speedMul: 0.10 } },
+    { id: 'g_belt',      cat: 'Gear', name: 'Stamina Belt', price: 200, desc: '+25 max stamina, faster regen.', gear: { maxStamina: 25, staminaRegen: 5 } },
+    { id: 'g_charm',     cat: 'Gear', name: 'Hunter Charm',  price: 260, desc: '-25% enemy detection range.',  gear: { stealthMul: 0.25 } },
+    { id: 'c_potion',    cat: 'Consumable', name: 'Health Draught', price: 45, desc: 'Restores 50 health mid-trial.', consumable: 'potion', stack: true },
+    { id: 'c_tonic',     cat: 'Consumable', name: 'Stamina Tonic',  price: 35, desc: 'Refills stamina instantly.',    consumable: 'tonic',  stack: true },
+    { id: 'c_smoke',     cat: 'Consumable', name: 'Smoke Bomb',     price: 55, desc: 'Breaks all enemy detection.',   consumable: 'smoke',  stack: true }
+  ];
+
+  /* ------------------------------------------------------------- debuffs
+     GDD 6.2 - "potential debuff applied on the reattempt". */
+  D.DEBUFFS = [
+    { id: 'weak',    name: 'Weakened',  desc: '-20% damage dealt',      apply: function (s) { s.damageMul *= 0.8; } },
+    { id: 'brittle', name: 'Brittle',   desc: '+25% damage taken',      apply: function (s) { s.defenceMul *= 1.25; } },
+    { id: 'winded',  name: 'Winded',    desc: '-30% max stamina',       apply: function (s) { s.maxStamina *= 0.7; } },
+    { id: 'heavy',   name: 'Leadfoot',  desc: '-15% move speed',        apply: function (s) { s.speedMul *= 0.85; } },
+    { id: 'marked',  name: 'Marked',    desc: 'Enemies see 40% further', apply: function (s) { s.stealthMul *= 1.4; } }
+  ];
+
+  /* ------------------------------------------------- scythe unlock combos
+     GDD 7.1. Ten presets; one is picked at random per run and rerolled on reset. */
+  D.COMBOS = [
+    ['up', 'up', 'down', 'down', 'left', 'right'],
+    ['left', 'right', 'left', 'right', 'up'],
+    ['down', 'down', 'up', 'left', 'left'],
+    ['up', 'left', 'down', 'right', 'up'],
+    ['right', 'right', 'up', 'up', 'down'],
+    ['down', 'left', 'up', 'right', 'down'],
+    ['left', 'left', 'right', 'down', 'up'],
+    ['up', 'down', 'up', 'down', 'left'],
+    ['right', 'down', 'left', 'up', 'right'],
+    ['down', 'up', 'right', 'right', 'left']
+  ];
+  D.IDLE_UNLOCK_SECONDS = 300; /* GDD: five minutes on the Start Screen */
+
+  /* ------------------------------------------------------------- ranking
+     GDD 6.2. Percentile is derived from score vs. the trial's par score. */
+  D.RANK_TIERS = [
+    { max: 25, id: 'top',     label: 'Top 25%',     outcome: 'reward' },
+    { max: 40, id: 'middle',  label: '26 - 40%',    outcome: 'neutral' },
+    { max: 100, id: 'bottom', label: 'Below 40%',   outcome: 'fail' }
+  ];
+
+  V.D = D;
+})(window.V = window.V || {});
+
+/* ===== src/js/save.js ===== */
+/* Velthiros - persistent run state (localStorage) */
+(function (V) {
+  'use strict';
+
+  var U = V.U, D = V.D;
+  var KEY = 'velthiros.save.v1';
+
+  var Save = {};
+
+  Save.blank = function () {
+    return {
+      version: 1,
+      started: false,          /* has a run been created at all */
+      trial: 1,                /* next trial index, 1..TOTAL_TRIALS */
+      cleared: 0,              /* trials actually completed */
+      deaths: 0,               /* GDD 9: 25 deaths wipes everything */
+      resets: 0,               /* how many full wipes this profile has seen */
+      currency: 0,
+      lifetimeEarned: 0,
+      gem: null,               /* { id, level } - granted in trial 1 */
+      weapon: 'sword',
+      weapons: { sword: true },
+      scytheUnlocked: false,
+      comboIndex: Math.floor(Math.random() * D.COMBOS.length),
+      owned: {},               /* shop item id -> true (or count for stackables) */
+      equippedTint: null,
+      decor: {},
+      debuff: null,            /* { id } applied to the next attempt only */
+      lastRank: null,
+      seenIntro: false,
+      endgame: false,          /* reached the wave gauntlet */
+      endgameWave: 0,
+      beatenGame: false,
+      stats: { kills: 0, trialsFailed: 0, bestRank: 100 }
+    };
+  };
+
+  Save.load = function () {
+    var raw = null;
+    try { raw = window.localStorage.getItem(KEY); } catch (e) { raw = null; }
+    if (!raw) return Save.blank();
+    try {
+      var data = JSON.parse(raw);
+      if (!data || data.version !== 1) return Save.blank();
+      /* fill in anything a newer build added */
+      var base = Save.blank();
+      for (var k in base) if (!(k in data)) data[k] = base[k];
+      return data;
+    } catch (e) {
+      return Save.blank();
+    }
+  };
+
+  Save.write = function (state) {
+    try { window.localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* private mode */ }
+  };
+
+  Save.wipe = function () {
+    try { window.localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+  };
+
+  /* GDD 9: a full reset wipes currency, gem levels, purchases and weapons.
+     The scythe reverts to locked with a *new* random combination. */
+  Save.fullReset = function (state) {
+    var fresh = Save.blank();
+    fresh.resets = (state && state.resets ? state.resets : 0) + 1;
+    fresh.comboIndex = Save.rerollCombo(state ? state.comboIndex : -1);
+    Save.write(fresh);
+    return fresh;
+  };
+
+  /* pick a combo that differs from the current one */
+  Save.rerollCombo = function (current) {
+    var n = D.COMBOS.length;
+    if (n <= 1) return 0;
+    var next = current;
+    while (next === current) next = Math.floor(Math.random() * n);
+    return next;
+  };
+
+  Save.newGame = function (state) {
+    var fresh = Save.blank();
+    fresh.resets = state ? state.resets : 0;
+    fresh.comboIndex = Save.rerollCombo(state ? state.comboIndex : -1);
+    fresh.started = true;
+    Save.write(fresh);
+    return fresh;
+  };
+
+  Save.hasContinue = function () {
+    var s = Save.load();
+    return !!s.started && !s.beatenGame;
+  };
+
+  /* ------------------------------------------------------- derived helpers */
+
+  Save.ownedCount = function (state, id) {
+    var v = state.owned[id];
+    if (v === true) return 1;
+    return v ? v | 0 : 0;
+  };
+
+  Save.passiveIncome = function (state) {
+    var total = 0;
+    for (var i = 0; i < D.REALITY_SHOP.length; i++) {
+      var it = D.REALITY_SHOP[i];
+      if (it.income && Save.ownedCount(state, it.id) > 0) total += it.income;
+    }
+    return total;
+  };
+
+  /* Gem level tracks progress: one level per 8 cleared trials, capped at 5. */
+  Save.gemLevel = function (state) {
+    if (!state.gem) return 0;
+    return U.clamp(1 + Math.floor(state.cleared / 8), 1, 5);
+  };
+
+  /* Weapons level alongside the player (GDD 7.1). */
+  Save.weaponLevel = function (state) {
+    return U.clamp(1 + Math.floor(state.cleared / 6), 1, 6);
+  };
+
+  /* Fully resolved player stats for a trial attempt. */
+  Save.resolveStats = function (state) {
+    var s = {
+      maxHp: 100, maxStamina: 100, staminaRegen: 20,
+      speed: 60,                  /* GDD 5: ~30s to cross a 1800u diameter */
+      speedMul: 1, damageMul: 1, rangedMul: 1, defenceMul: 1,
+      dodgeCdMul: 1, dodgeDist: 150, evasion: 0, stealthMul: 1,
+      glide: false, pierce: false,
+      weaponLevel: Save.weaponLevel(state),
+      gemLevel: Save.gemLevel(state)
+    };
+
+    /* gear */
+    for (var i = 0; i < D.TRIAL_SHOP.length; i++) {
+      var it = D.TRIAL_SHOP[i];
+      if (!it.gear || !Save.ownedCount(state, it.id)) continue;
+      if (it.gear.maxHp) s.maxHp += it.gear.maxHp;
+      if (it.gear.maxStamina) s.maxStamina += it.gear.maxStamina;
+      if (it.gear.staminaRegen) s.staminaRegen += it.gear.staminaRegen;
+      if (it.gear.speedMul) s.speedMul *= 1 + it.gear.speedMul;
+      if (it.gear.stealthMul) s.stealthMul *= 1 - it.gear.stealthMul;
+    }
+
+    /* gem */
+    if (state.gem) {
+      var gem = D.GEMS[state.gem.id];
+      if (gem) gem.apply(s, s.gemLevel);
+    }
+
+    /* weapon level: +6% damage per level past 1 */
+    s.damageMul *= 1 + 0.06 * (s.weaponLevel - 1);
+
+    /* debuff from a failed attempt */
+    if (state.debuff) {
+      var db = null;
+      for (var j = 0; j < D.DEBUFFS.length; j++) if (D.DEBUFFS[j].id === state.debuff) db = D.DEBUFFS[j];
+      if (db) db.apply(s);
+    }
+
+    s.speed *= s.speedMul;
+    s.maxHp = Math.round(s.maxHp);
+    s.maxStamina = Math.round(s.maxStamina);
+    return s;
+  };
+
+  V.Save = Save;
+})(window.V = window.V || {});
+
+/* ===== src/js/input.js ===== */
+/* Velthiros - touch / mouse / keyboard input, virtual joystick and button zones */
+(function (V) {
+  'use strict';
+
+  var U = V.U;
+
+  var Input = {
+    /* movement vector, magnitude 0..1 */
+    move: { x: 0, y: 0, mag: 0 },
+    stick: { active: false, ox: 0, oy: 0, x: 0, y: 0, id: null },
+    zones: [],            /* collected during the current frame's render */
+    activeZones: [],      /* the previous frame's zones - what a tap hits */
+    down: {},             /* zone id -> true while held */
+    pressed: {},          /* zone id -> true for one frame */
+    released: {},
+    taps: [],             /* {x,y} taps that hit no zone - used by menus */
+    lastZones: [],
+    keys: {},
+    keyPressed: {},
+    anyInput: false,      /* true on any frame with a fresh interaction */
+    lastActivity: 0,
+    canvas: null,
+    scale: 1
+  };
+
+  var pointers = {};      /* pointerId -> { zone, x, y } */
+
+  var KEYMAP = {
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+    KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right',
+    Space: 'attack', KeyJ: 'attack', Enter: 'confirm',
+    KeyK: 'special', KeyL: 'dodge', ShiftLeft: 'dodge', ShiftRight: 'dodge',
+    Escape: 'back', KeyE: 'interact', KeyQ: 'item'
+  };
+
+  Input.init = function (canvas) {
+    Input.canvas = canvas;
+    var opts = { passive: false };
+
+    canvas.addEventListener('pointerdown', onDown, opts);
+    canvas.addEventListener('pointermove', onMove, opts);
+    canvas.addEventListener('pointerup', onUp, opts);
+    canvas.addEventListener('pointercancel', onUp, opts);
+    canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    canvas.addEventListener('touchstart', function (e) { e.preventDefault(); }, opts);
+
+    window.addEventListener('keydown', function (e) {
+      var k = KEYMAP[e.code];
+      if (!k) return;
+      e.preventDefault();
+      if (!Input.keys[k]) Input.keyPressed[k] = true;
+      Input.keys[k] = true;
+      Input.markActivity();
+    });
+    window.addEventListener('keyup', function (e) {
+      var k = KEYMAP[e.code];
+      if (!k) return;
+      e.preventDefault();
+      Input.keys[k] = false;
+    });
+    window.addEventListener('blur', function () {
+      Input.keys = {};
+      pointers = {};
+      Input.down = {};
+      Input.stick.active = false;
+      Input.stick.id = null;
+    });
+  };
+
+  Input.markActivity = function () {
+    Input.anyInput = true;
+    Input.lastActivity = performance.now();
+  };
+
+  function localPos(e) {
+    var r = Input.canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left), y: (e.clientY - r.top) };
+  }
+
+  function hitZone(x, y) {
+    /* Pointer events arrive between frames, so hit-test the zones the last
+       rendered frame registered - `zones` is empty at that moment. */
+    var zs = Input.activeZones;
+    for (var i = zs.length - 1; i >= 0; i--) {
+      var z = zs[i];
+      if (z.r != null) {
+        if (U.dist2(x, y, z.x, z.y) <= z.r * z.r) return z;
+      } else if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
+        return z;
+      }
+    }
+    return null;
+  }
+
+  function onDown(e) {
+    Input.canvas.setPointerCapture && Input.canvas.setPointerCapture(e.pointerId);
+    var p = localPos(e);
+    Input.markActivity();
+
+    var z = hitZone(p.x, p.y);
+    if (z) {
+      pointers[e.pointerId] = { zone: z.id, x: p.x, y: p.y };
+      if (!Input.down[z.id]) Input.pressed[z.id] = true;
+      Input.down[z.id] = true;
+      return;
+    }
+
+    /* left third of the screen (and not on a zone) drives the floating stick */
+    if (Input.stickEnabled && p.x < Input.canvas.clientWidth * 0.5 && !Input.stick.active) {
+      Input.stick.active = true;
+      Input.stick.id = e.pointerId;
+      Input.stick.ox = p.x; Input.stick.oy = p.y;
+      Input.stick.x = p.x; Input.stick.y = p.y;
+      pointers[e.pointerId] = { zone: '__stick', x: p.x, y: p.y };
+      return;
+    }
+
+    pointers[e.pointerId] = { zone: null, x: p.x, y: p.y };
+    Input.taps.push({ x: p.x, y: p.y });
+  }
+
+  function onMove(e) {
+    var rec = pointers[e.pointerId];
+    if (!rec) return;
+    var p = localPos(e);
+    rec.x = p.x; rec.y = p.y;
+    if (rec.zone === '__stick') {
+      Input.stick.x = p.x; Input.stick.y = p.y;
+      Input.markActivity();
+    }
+  }
+
+  function onUp(e) {
+    var rec = pointers[e.pointerId];
+    delete pointers[e.pointerId];
+    if (!rec) return;
+    if (rec.zone === '__stick') {
+      Input.stick.active = false;
+      Input.stick.id = null;
+      return;
+    }
+    if (rec.zone) {
+      /* only clear if no other pointer holds the same zone */
+      var stillHeld = false;
+      for (var id in pointers) if (pointers[id].zone === rec.zone) stillHeld = true;
+      if (!stillHeld) {
+        Input.down[rec.zone] = false;
+        Input.released[rec.zone] = true;
+      }
+    }
+  }
+
+  Input.stickEnabled = false;
+  var STICK_RADIUS = 62;
+
+  /* called once per frame, after scenes have read last frame's state */
+  Input.update = function () {
+    var mx = 0, my = 0;
+
+    if (Input.stick.active) {
+      var dx = Input.stick.x - Input.stick.ox;
+      var dy = Input.stick.y - Input.stick.oy;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 1) {
+        var mag = Math.min(d / STICK_RADIUS, 1);
+        mx = (dx / d) * mag;
+        my = (dy / d) * mag;
+      }
+    }
+
+    /* keyboard fallback */
+    var kx = (Input.keys.right ? 1 : 0) - (Input.keys.left ? 1 : 0);
+    var ky = (Input.keys.down ? 1 : 0) - (Input.keys.up ? 1 : 0);
+    if (kx || ky) {
+      var kd = Math.sqrt(kx * kx + ky * ky);
+      mx = kx / kd; my = ky / kd;
+    }
+
+    Input.move.x = mx;
+    Input.move.y = my;
+    Input.move.mag = Math.min(Math.sqrt(mx * mx + my * my), 1);
+    if (Input.move.mag > 0.15) Input.markActivity();
+
+    /* fold keyboard action keys into the button maps */
+    ['attack', 'special', 'dodge', 'confirm', 'back', 'interact', 'item'].forEach(function (k) {
+      if (Input.keyPressed[k]) Input.pressed[k] = true;
+      if (Input.keys[k]) Input.down[k] = true;
+      else if (!heldByPointer(k)) Input.down[k] = false;
+    });
+  };
+
+  function heldByPointer(zoneId) {
+    for (var id in pointers) if (pointers[id].zone === zoneId) return true;
+    return false;
+  }
+
+  /* called at the very end of a frame */
+  Input.endFrame = function () {
+    Input.activeZones = Input.zones;
+    Input.lastZones = Input.zones;   /* kept for automated tests / debugging */
+    Input.pressed = {};
+    Input.released = {};
+    Input.keyPressed = {};
+    Input.taps.length = 0;
+    Input.anyInput = false;
+    Input.zones = [];
+  };
+
+  Input.zone = function (id, x, y, w, h) {
+    Input.zones.push({ id: id, x: x, y: y, w: w, h: h });
+  };
+  Input.circleZone = function (id, x, y, r) {
+    Input.zones.push({ id: id, x: x, y: y, r: r });
+  };
+
+  Input.isDown = function (id) { return !!Input.down[id]; };
+  Input.wasPressed = function (id) { return !!Input.pressed[id]; };
+  Input.stickRadius = STICK_RADIUS;
+
+  V.Input = Input;
+})(window.V = window.V || {});
+
+/* ===== src/js/audio.js ===== */
+/* Velthiros - procedural WebAudio SFX and a small ambient bed (no asset files) */
+(function (V) {
+  'use strict';
+
+  var Audio = { enabled: true, ready: false, ctx: null, master: null, musicGain: null, sfxGain: null };
+  var musicTimer = null;
+  var musicStep = 0;
+  var currentMood = null;
+
+  Audio.init = function () {
+    if (Audio.ctx) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { Audio.enabled = false; return; }
+    try {
+      Audio.ctx = new AC();
+      Audio.master = Audio.ctx.createGain();
+      Audio.master.gain.value = 0.6;
+      Audio.master.connect(Audio.ctx.destination);
+      Audio.sfxGain = Audio.ctx.createGain();
+      Audio.sfxGain.gain.value = 0.85;
+      Audio.sfxGain.connect(Audio.master);
+      Audio.musicGain = Audio.ctx.createGain();
+      Audio.musicGain.gain.value = 0.32;
+      Audio.musicGain.connect(Audio.master);
+      Audio.ready = true;
+    } catch (e) { Audio.enabled = false; }
+  };
+
+  /* browsers require a gesture before audio starts */
+  Audio.resume = function () {
+    if (!Audio.ctx) Audio.init();
+    if (Audio.ctx && Audio.ctx.state === 'suspended') Audio.ctx.resume();
+  };
+
+  Audio.setEnabled = function (on) {
+    Audio.enabled = on;
+    if (Audio.master) Audio.master.gain.value = on ? 0.6 : 0;
+  };
+
+  function tone(opts) {
+    if (!Audio.enabled || !Audio.ready) return;
+    var ctx = Audio.ctx, t = ctx.currentTime;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = opts.type || 'sine';
+    osc.frequency.setValueAtTime(opts.freq, t);
+    if (opts.to) osc.frequency.exponentialRampToValueAtTime(Math.max(opts.to, 1), t + opts.dur);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(opts.vol || 0.2, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + opts.dur);
+    osc.connect(gain);
+    gain.connect(opts.bus || Audio.sfxGain);
+    osc.start(t);
+    osc.stop(t + opts.dur + 0.02);
+  }
+
+  function noise(dur, vol, filterFreq, sweepTo) {
+    if (!Audio.enabled || !Audio.ready) return;
+    var ctx = Audio.ctx, t = ctx.currentTime;
+    var len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    var buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    var filt = ctx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(filterFreq || 1400, t);
+    if (sweepTo) filt.frequency.exponentialRampToValueAtTime(sweepTo, t + dur);
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(vol || 0.2, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(filt); filt.connect(gain); gain.connect(Audio.sfxGain);
+    src.start(t);
+  }
+
+  var SFX = {
+    swing:    function () { noise(0.16, 0.22, 2600, 500); },
+    heavy:    function () { noise(0.3, 0.3, 1400, 260); tone({ type: 'sine', freq: 120, to: 50, dur: 0.25, vol: 0.2 }); },
+    hit:      function () { noise(0.1, 0.3, 3200, 900); tone({ type: 'square', freq: 220, to: 110, dur: 0.09, vol: 0.14 }); },
+    kill:     function () { tone({ type: 'triangle', freq: 320, to: 90, dur: 0.3, vol: 0.2 }); noise(0.2, 0.18, 1200, 300); },
+    hurt:     function () { tone({ type: 'sawtooth', freq: 180, to: 70, dur: 0.28, vol: 0.22 }); },
+    bow:      function () { tone({ type: 'triangle', freq: 800, to: 1600, dur: 0.1, vol: 0.14 }); noise(0.1, 0.14, 4000, 1400); },
+    dodge:    function () { noise(0.18, 0.16, 2200, 700); },
+    pickup:   function () { tone({ type: 'sine', freq: 700, dur: 0.09, vol: 0.16 }); tone({ type: 'sine', freq: 1050, dur: 0.14, vol: 0.13 }); },
+    coin:     function () { tone({ type: 'square', freq: 980, dur: 0.07, vol: 0.1 }); tone({ type: 'square', freq: 1480, dur: 0.12, vol: 0.08 }); },
+    ui:       function () { tone({ type: 'square', freq: 520, dur: 0.05, vol: 0.09 }); },
+    confirm:  function () { tone({ type: 'square', freq: 620, dur: 0.06, vol: 0.1 }); tone({ type: 'square', freq: 930, dur: 0.1, vol: 0.08 }); },
+    deny:     function () { tone({ type: 'square', freq: 200, to: 130, dur: 0.16, vol: 0.12 }); },
+    win:      function () { [523, 659, 784, 1047].forEach(function (f, i) { setTimeout(function () { tone({ type: 'triangle', freq: f, dur: 0.26, vol: 0.16 }); }, i * 110); }); },
+    lose:     function () { [392, 330, 262, 196].forEach(function (f, i) { setTimeout(function () { tone({ type: 'sawtooth', freq: f, dur: 0.3, vol: 0.15 }); }, i * 150); }); },
+    gem:      function () { [660, 880, 1320].forEach(function (f, i) { setTimeout(function () { tone({ type: 'sine', freq: f, dur: 0.5, vol: 0.16 }); }, i * 130); }); },
+    boss:     function () { tone({ type: 'sawtooth', freq: 90, to: 40, dur: 1.2, vol: 0.3 }); noise(1.0, 0.2, 700, 160); },
+    warp:     function () { tone({ type: 'sine', freq: 120, to: 1400, dur: 0.7, vol: 0.2 }); noise(0.7, 0.14, 900, 3000); },
+    unlock:   function () { [440, 554, 659, 880, 1109].forEach(function (f, i) { setTimeout(function () { tone({ type: 'triangle', freq: f, dur: 0.42, vol: 0.15 }); }, i * 95); }); }
+  };
+
+  Audio.play = function (name) {
+    var fn = SFX[name];
+    if (fn) { try { fn(); } catch (e) { /* ignore */ } }
+  };
+
+  /* ---------------------------------------------------------------- music */
+  var MOODS = {
+    hub:   { root: 261.63, scale: [0, 2, 4, 7, 9], tempo: 620, type: 'triangle', vol: 0.09 },
+    trial: { root: 196.00, scale: [0, 3, 5, 7, 10], tempo: 420, type: 'square', vol: 0.06 },
+    boss:  { root: 130.81, scale: [0, 1, 5, 6, 8], tempo: 300, type: 'sawtooth', vol: 0.07 },
+    calm:  { root: 220.00, scale: [0, 4, 7, 11, 14], tempo: 900, type: 'sine', vol: 0.08 }
+  };
+
+  Audio.music = function (mood) {
+    if (mood === currentMood) return;
+    currentMood = mood;
+    if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
+    if (!mood || !Audio.ready) return;
+    var m = MOODS[mood];
+    if (!m) return;
+    musicStep = 0;
+    musicTimer = setInterval(function () {
+      if (!Audio.enabled || !Audio.ready) return;
+      var deg = m.scale[Math.floor(Math.random() * m.scale.length)];
+      var oct = Math.random() < 0.25 ? 12 : 0;
+      var f = m.root * Math.pow(2, (deg + oct) / 12);
+      tone({ type: m.type, freq: f, dur: m.tempo / 1000 * 1.6, vol: m.vol, bus: Audio.musicGain });
+      if (musicStep % 4 === 0) {
+        tone({ type: 'sine', freq: m.root / 2, dur: m.tempo / 1000 * 3, vol: m.vol * 1.3, bus: Audio.musicGain });
+      }
+      musicStep++;
+    }, m.tempo);
+  };
+
+  V.Audio = Audio;
+})(window.V = window.V || {});
+
+/* ===== src/js/art.js ===== */
+/* Velthiros - all drawing. Everything is procedural canvas art, no image assets.
+   Look target: Minish Cap brightness, chibi (Mario-ish) proportions, 3/4 view. */
+(function (V) {
+  'use strict';
+
+  var U = V.U;
+  var Art = {};
+
+  /* 3/4 perspective: the world's Y axis is squashed on screen. */
+  Art.SQUASH = 0.62;
+
+  /* ------------------------------------------------------------- primitives */
+  Art.roundRect = function (ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+
+  Art.ellipse = function (ctx, x, y, rx, ry) {
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, U.TAU);
+    ctx.closePath();
+  };
+
+  Art.shadow = function (ctx, x, y, rx, alpha) {
+    ctx.fillStyle = 'rgba(20,26,18,' + (alpha == null ? 0.24 : alpha) + ')';
+    Art.ellipse(ctx, x, y, rx, rx * 0.42);
+    ctx.fill();
+  };
+
+  Art.shade = function (hex, amt) {
+    var c = hex.replace('#', '');
+    if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+    var r = parseInt(c.substr(0, 2), 16), g = parseInt(c.substr(2, 2), 16), b = parseInt(c.substr(4, 2), 16);
+    r = U.clamp(Math.round(r + amt), 0, 255);
+    g = U.clamp(Math.round(g + amt), 0, 255);
+    b = U.clamp(Math.round(b + amt), 0, 255);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  };
+
+  Art.outline = function (ctx, w) {
+    ctx.strokeStyle = 'rgba(38,30,44,0.85)';
+    ctx.lineWidth = w || 2;
+    ctx.stroke();
+  };
+
+  /* ------------------------------------------------------------ characters
+     Every character is built from the same chibi rig so the cast reads as
+     one family: big head, stubby limbs, heavy outline, single highlight. */
+  function chibi(ctx, o) {
+    var s = o.scale;
+    var bob = Math.sin(o.phase) * 1.6 * s;
+    var lean = o.lean || 0;
+    var headR = 12 * s;
+    var bodyW = 15 * s, bodyH = 14 * s;
+    var footY = 0;
+    var bodyY = footY - 8 * s - bodyH + bob;
+    var headY = bodyY - headR * 0.75;
+
+    ctx.save();
+    ctx.translate(o.x, o.y);
+    if (o.flash) { ctx.globalAlpha = 0.9; }
+    ctx.rotate(lean);
+
+    /* legs */
+    var stride = Math.sin(o.phase) * 5 * s * (o.moving ? 1 : 0);
+    ctx.fillStyle = o.legs || Art.shade(o.body, -40);
+    Art.roundRect(ctx, -6 * s - stride * 0.5, footY - 10 * s, 6 * s, 11 * s, 2.5 * s); ctx.fill(); Art.outline(ctx, 1.6 * s);
+    Art.roundRect(ctx, 0.6 * s + stride * 0.5, footY - 10 * s, 6 * s, 11 * s, 2.5 * s); ctx.fill(); Art.outline(ctx, 1.6 * s);
+
+    /* torso */
+    ctx.fillStyle = o.body;
+    Art.roundRect(ctx, -bodyW / 2, bodyY, bodyW, bodyH + 4 * s, 5 * s); ctx.fill(); Art.outline(ctx, 1.8 * s);
+    /* torso highlight */
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    Art.roundRect(ctx, -bodyW / 2 + 2 * s, bodyY + 2 * s, bodyW * 0.34, bodyH * 0.6, 2 * s); ctx.fill();
+
+    /* arms */
+    var armSwing = Math.sin(o.phase + Math.PI) * 4 * s * (o.moving ? 1 : 0);
+    ctx.fillStyle = o.skin;
+    Art.roundRect(ctx, -bodyW / 2 - 4.2 * s, bodyY + 3 * s + armSwing, 5 * s, 9 * s, 2.4 * s); ctx.fill(); Art.outline(ctx, 1.5 * s);
+    if (!o.hideRightArm) {
+      Art.roundRect(ctx, bodyW / 2 - 0.8 * s, bodyY + 3 * s - armSwing, 5 * s, 9 * s, 2.4 * s); ctx.fill(); Art.outline(ctx, 1.5 * s);
+    }
+
+    /* head */
+    ctx.fillStyle = o.skin;
+    Art.ellipse(ctx, 0, headY, headR, headR * 0.96); ctx.fill(); Art.outline(ctx, 2 * s);
+
+    /* hair / cap */
+    if (o.hair) {
+      ctx.fillStyle = o.hair;
+      ctx.beginPath();
+      ctx.ellipse(0, headY - headR * 0.32, headR * 1.02, headR * 0.72, 0, Math.PI, U.TAU);
+      ctx.closePath();
+      ctx.fill(); Art.outline(ctx, 1.6 * s);
+    }
+    if (o.horns) {
+      ctx.fillStyle = '#efe3c8';
+      [-1, 1].forEach(function (sgn) {
+        ctx.beginPath();
+        ctx.moveTo(sgn * headR * 0.72, headY - headR * 0.25);
+        ctx.quadraticCurveTo(sgn * headR * 1.5, headY - headR * 0.9, sgn * headR * 1.05, headY - headR * 1.25);
+        ctx.quadraticCurveTo(sgn * headR * 1.0, headY - headR * 0.55, sgn * headR * 0.6, headY - headR * 0.35);
+        ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.4 * s);
+      });
+    }
+    if (o.hood) {
+      ctx.fillStyle = o.hood;
+      ctx.beginPath();
+      ctx.ellipse(0, headY - headR * 0.1, headR * 1.12, headR * 1.05, 0, Math.PI * 0.92, Math.PI * 2.08);
+      ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.8 * s);
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      Art.ellipse(ctx, 0, headY + headR * 0.16, headR * 0.72, headR * 0.62); ctx.fill();
+    }
+
+    /* face - only when facing the camera-ish */
+    if (!o.hood && o.faceDir !== 0) {
+      var fx = o.faceDir * 2.2 * s;
+      ctx.fillStyle = '#2b2231';
+      Art.ellipse(ctx, fx - 4.2 * s, headY + 0.5 * s, 1.7 * s, 2.3 * s); ctx.fill();
+      Art.ellipse(ctx, fx + 4.2 * s, headY + 0.5 * s, 1.7 * s, 2.3 * s); ctx.fill();
+      if (o.eyeGlow) {
+        ctx.fillStyle = o.eyeGlow;
+        Art.ellipse(ctx, fx - 4.2 * s, headY + 0.5 * s, 1.1 * s, 1.5 * s); ctx.fill();
+        Art.ellipse(ctx, fx + 4.2 * s, headY + 0.5 * s, 1.1 * s, 1.5 * s); ctx.fill();
+      }
+    } else if (o.hood && o.eyeGlow) {
+      ctx.fillStyle = o.eyeGlow;
+      Art.ellipse(ctx, -3.4 * s, headY + 1.5 * s, 1.5 * s, 1.5 * s); ctx.fill();
+      Art.ellipse(ctx, 3.4 * s, headY + 1.5 * s, 1.5 * s, 1.5 * s); ctx.fill();
+    }
+
+    ctx.restore();
+    return { headY: headY, bodyY: bodyY, scale: s };
+  }
+  Art.chibi = chibi;
+
+  /* ------------------------------------------------------------- weapons */
+  Art.drawWeapon = function (ctx, id, x, y, scale, angle, swing) {
+    var s = scale;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    if (id === 'sword') {
+      ctx.fillStyle = '#dfe6ee';
+      Art.roundRect(ctx, 0, -2.6 * s, 27 * s, 5.2 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.8 * s);
+      ctx.fillStyle = '#8a5a33';
+      Art.roundRect(ctx, -7 * s, -2.4 * s, 8 * s, 4.8 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.4 * s);
+      ctx.fillStyle = '#e8c14a';
+      Art.roundRect(ctx, -0.5 * s, -5.5 * s, 3 * s, 11 * s, 1.4 * s); ctx.fill(); Art.outline(ctx, 1.2 * s);
+    } else if (id === 'battleaxe') {
+      ctx.fillStyle = '#6b4a2c';
+      Art.roundRect(ctx, -8 * s, -2 * s, 30 * s, 4 * s, 1.6 * s); ctx.fill(); Art.outline(ctx, 1.5 * s);
+      ctx.fillStyle = '#cfd8e2';
+      ctx.beginPath();
+      ctx.moveTo(15 * s, -3 * s);
+      ctx.quadraticCurveTo(29 * s, -16 * s, 33 * s, 0);
+      ctx.quadraticCurveTo(29 * s, 16 * s, 15 * s, 3 * s);
+      ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.8 * s);
+    } else if (id === 'bow') {
+      var br = 21 * s;
+      ctx.strokeStyle = '#3a2a1a';
+      ctx.lineWidth = 6 * s;
+      ctx.beginPath();
+      ctx.arc(0, 0, br, -1.25, 1.25);
+      ctx.stroke();
+      ctx.strokeStyle = '#a5713d';
+      ctx.lineWidth = 3.4 * s;
+      ctx.beginPath();
+      ctx.arc(0, 0, br, -1.25, 1.25);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(250,250,250,0.9)';
+      ctx.lineWidth = 1.6 * s;
+      ctx.beginPath();
+      ctx.moveTo(br * Math.cos(-1.25), br * Math.sin(-1.25));
+      ctx.lineTo(2 * s - (swing || 0) * 9 * s, 0);
+      ctx.lineTo(br * Math.cos(1.25), br * Math.sin(1.25));
+      ctx.stroke();
+    } else if (id === 'scythe') {
+      ctx.fillStyle = '#3a2f43';
+      Art.roundRect(ctx, -10 * s, -2 * s, 34 * s, 3.6 * s, 1.6 * s); ctx.fill(); Art.outline(ctx, 1.5 * s);
+      ctx.fillStyle = '#c9f0ea';
+      ctx.beginPath();
+      ctx.moveTo(22 * s, 0);
+      ctx.quadraticCurveTo(40 * s, -6 * s, 34 * s, -20 * s);
+      ctx.quadraticCurveTo(34 * s, -7 * s, 21 * s, -4 * s);
+      ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.7 * s);
+    }
+    ctx.restore();
+  };
+
+  /* --------------------------------------------------------------- actors */
+  Art.drawPlayer = function (ctx, p, t) {
+    var s = p.drawScale || 1;
+    Art.shadow(ctx, p.sx, p.sy, 14 * s, p.z > 2 ? 0.14 : 0.24);
+    var faceDir = Math.cos(p.facing) > 0.25 ? 1 : (Math.cos(p.facing) < -0.25 ? -1 : 0);
+    var yy = p.sy - (p.z || 0);
+    var flashing = p.hurtFlash > 0 && Math.floor(p.hurtFlash * 24) % 2 === 0;
+
+    if (flashing) { ctx.save(); ctx.globalAlpha = 0.55; }
+
+    /* weapon behind the body when swinging away from camera */
+    var wpnBehind = Math.sin(p.facing) < -0.1;
+    var swingT = p.attackTimer > 0 ? 1 - (p.attackTimer / Math.max(p.attackDuration, 0.01)) : 0;
+    var wAngle = p.facing + (p.attacking ? U.lerp(-0.9, 1.1, swingT) : 0.5);
+    var wx = p.sx + Math.cos(p.facing) * 13 * s;
+    var wy = yy - 16 * s + Math.sin(p.facing) * 5 * s;
+
+    if (wpnBehind) Art.drawWeapon(ctx, p.weaponId, wx, wy, s, wAngle, p.drawT || 0);
+
+    chibi(ctx, {
+      x: p.sx, y: yy, scale: s, phase: p.animPhase, moving: p.moving,
+      body: p.tint || '#4f8fd6', skin: '#f5c9a0', hair: '#5b3d2b',
+      faceDir: faceDir, legs: '#3f6ea8', lean: p.lean || 0
+    });
+
+    if (!wpnBehind) Art.drawWeapon(ctx, p.weaponId, wx, wy, s, wAngle, p.drawT || 0);
+
+    if (flashing) ctx.restore();
+
+    if (p.hidden) {
+      ctx.fillStyle = 'rgba(120,200,140,0.28)';
+      Art.ellipse(ctx, p.sx, yy - 18 * s, 22 * s, 24 * s); ctx.fill();
+    }
+    if (p.invuln > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.25 + 0.2 * Math.sin(t * 22)) + ')';
+      ctx.lineWidth = 2;
+      Art.ellipse(ctx, p.sx, p.sy, 20 * s, 9 * s); ctx.stroke();
+    }
+  };
+
+  Art.drawGoblin = function (ctx, e) {
+    var s = e.drawScale;
+    Art.shadow(ctx, e.sx, e.sy, 13 * s);
+    var yy = e.sy - (e.z || 0);
+    var faceDir = Math.cos(e.facing) > 0.25 ? 1 : (Math.cos(e.facing) < -0.25 ? -1 : 0);
+    var alert = e.state === 'windup';
+    if (e.hurtFlash > 0) ctx.globalAlpha = 0.6;
+    chibi(ctx, {
+      x: e.sx, y: yy, scale: s * 0.86, phase: e.animPhase, moving: e.moving,
+      body: '#6f5236', skin: e.def.colour, legs: '#5b4229',
+      faceDir: faceDir, eyeGlow: alert ? '#ffdd55' : null,
+      lean: alert ? Math.sin(e.stateTime * 30) * 0.06 : 0
+    });
+    ctx.globalAlpha = 1;
+    /* crude club */
+    var wa = e.facing + (alert ? -0.9 : 0.6);
+    ctx.save();
+    ctx.translate(e.sx + Math.cos(e.facing) * 11 * s, yy - 17 * s);
+    ctx.rotate(wa);
+    ctx.fillStyle = '#6b4a2c';
+    Art.roundRect(ctx, 0, -2 * s, 17 * s, 4 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.4 * s);
+    ctx.restore();
+  };
+
+  Art.drawMinotaur = function (ctx, e) {
+    var s = e.drawScale * 1.35;
+    Art.shadow(ctx, e.sx, e.sy, 20 * s * 0.8);
+    var yy = e.sy - (e.z || 0);
+    var faceDir = Math.cos(e.facing) > 0.25 ? 1 : (Math.cos(e.facing) < -0.25 ? -1 : 0);
+    var alert = e.state === 'windup' || e.state === 'charge';
+    if (e.hurtFlash > 0) ctx.globalAlpha = 0.6;
+    chibi(ctx, {
+      x: e.sx, y: yy, scale: s, phase: e.animPhase, moving: e.moving,
+      body: '#8a5b3a', skin: e.def.colour, legs: '#6b4227', horns: true,
+      faceDir: faceDir, eyeGlow: alert ? '#ff6a3c' : null,
+      lean: e.state === 'charge' ? 0.14 * Math.sign(Math.cos(e.facing) || 1) : 0
+    });
+    ctx.globalAlpha = 1;
+    Art.drawWeapon(ctx, 'battleaxe', e.sx + Math.cos(e.facing) * 15 * s, yy - 22 * s, s * 0.8,
+      e.facing + (alert ? -1.1 : 0.5), 0);
+  };
+
+  Art.drawReaper = function (ctx, e, t) {
+    var s = e.drawScale * 1.45;
+    Art.shadow(ctx, e.sx, e.sy, 22 * s * 0.8, 0.3);
+    var yy = e.sy - (e.z || 0) - Math.sin(t * 2) * 4;
+    var alert = e.state === 'windup';
+    if (e.hurtFlash > 0) ctx.globalAlpha = 0.6;
+
+    /* trailing cloak */
+    ctx.fillStyle = 'rgba(30,26,44,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(e.sx - 16 * s, yy - 20 * s);
+    ctx.quadraticCurveTo(e.sx - 22 * s, yy + 6, e.sx, yy + 4);
+    ctx.quadraticCurveTo(e.sx + 22 * s, yy + 6, e.sx + 16 * s, yy - 20 * s);
+    ctx.closePath(); ctx.fill(); Art.outline(ctx, 2);
+
+    chibi(ctx, {
+      x: e.sx, y: yy, scale: s, phase: e.animPhase, moving: e.moving,
+      body: e.def.colour, skin: '#cfc6d8', legs: e.def.dark,
+      hood: '#2a2438', eyeGlow: alert ? '#ff4d5e' : '#9b6bff', faceDir: 1
+    });
+    ctx.globalAlpha = 1;
+    Art.drawWeapon(ctx, 'scythe', e.sx + Math.cos(e.facing) * 16 * s, yy - 24 * s, s,
+      e.facing + (alert ? -1.2 : 0.4), 0);
+  };
+
+  /* Final boss - the provided reference: pale winged figure, insectoid core,
+     a single red eye, twin red sockets on the abdomen. */
+  Art.drawAurelith = function (ctx, e, t) {
+    var s = e.drawScale * 2.1;
+    Art.shadow(ctx, e.sx, e.sy, 34 * s * 0.7, 0.3);
+    var yy = e.sy - (e.z || 0) - 10 - Math.sin(t * 1.4) * 6;
+    var flap = Math.sin(t * 1.8) * 0.16;
+
+    /* six wings */
+    for (var i = 0; i < 3; i++) {
+      var spread = 0.55 + i * 0.42 + flap;
+      [-1, 1].forEach(function (sgn) {
+        ctx.save();
+        ctx.translate(e.sx, yy - 34 * s);
+        ctx.rotate(sgn * spread);
+        ctx.fillStyle = i === 0 ? '#ffffff' : (i === 1 ? '#f2eef6' : '#e4dced');
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(sgn * 34 * s, -14 * s, sgn * 62 * s, 6 * s);
+        ctx.quadraticCurveTo(sgn * 34 * s, 10 * s, 0, 8 * s);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(70,60,80,0.5)'; ctx.lineWidth = 1.6; ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    /* carapace torso */
+    ctx.fillStyle = e.def.dark;
+    Art.roundRect(ctx, e.sx - 16 * s, yy - 40 * s, 32 * s, 34 * s, 10 * s); ctx.fill(); Art.outline(ctx, 2.4);
+    /* web pattern */
+    ctx.strokeStyle = 'rgba(220,210,230,0.32)'; ctx.lineWidth = 1.2;
+    for (var w = -2; w <= 2; w++) {
+      ctx.beginPath();
+      ctx.moveTo(e.sx + w * 6 * s, yy - 40 * s);
+      ctx.lineTo(e.sx + w * 3 * s, yy - 8 * s);
+      ctx.stroke();
+    }
+    /* orange growths */
+    ctx.fillStyle = '#ff6a33';
+    for (var g = 0; g < 7; g++) {
+      var ga = g / 7 * Math.PI - Math.PI / 2;
+      Art.ellipse(ctx, e.sx + Math.cos(ga) * 15 * s, yy - 34 * s + Math.sin(ga) * 9 * s, 2.6 * s, 2.6 * s);
+      ctx.fill();
+    }
+    /* twin red sockets */
+    ctx.fillStyle = '#ff2f4a';
+    Art.ellipse(ctx, e.sx - 7 * s, yy - 16 * s, 3.4 * s, 4.2 * s); ctx.fill();
+    Art.ellipse(ctx, e.sx + 7 * s, yy - 16 * s, 3.4 * s, 4.2 * s); ctx.fill();
+
+    /* elongated pale head with the single gem eye */
+    ctx.fillStyle = e.def.colour;
+    Art.ellipse(ctx, e.sx, yy - 54 * s, 9 * s, 15 * s); ctx.fill(); Art.outline(ctx, 2.2);
+    ctx.fillStyle = '#ff2f4a';
+    Art.ellipse(ctx, e.sx, yy - 56 * s, 3.6 * s, 3.6 * s); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    Art.ellipse(ctx, e.sx - 1 * s, yy - 57 * s, 1.2 * s, 1.2 * s); ctx.fill();
+
+    /* insect legs */
+    ctx.strokeStyle = e.def.dark; ctx.lineWidth = 3 * s * 0.6;
+    [-1, 1].forEach(function (sgn) {
+      for (var l = 0; l < 2; l++) {
+        ctx.beginPath();
+        ctx.moveTo(e.sx + sgn * 8 * s, yy - 12 * s);
+        ctx.quadraticCurveTo(e.sx + sgn * (22 + l * 8) * s, yy - 4 * s, e.sx + sgn * (14 + l * 10) * s, yy + 2);
+        ctx.stroke();
+      }
+    });
+
+    /* floating X blade fragments */
+    ctx.strokeStyle = 'rgba(240,235,245,0.8)'; ctx.lineWidth = 2;
+    for (var f = 0; f < 4; f++) {
+      var fa = t * 0.6 + f * 1.57;
+      var fx = e.sx + Math.cos(fa) * 40 * s, fy = yy - 14 * s + Math.sin(fa) * 10 * s;
+      ctx.beginPath();
+      ctx.moveTo(fx - 5, fy - 5); ctx.lineTo(fx + 5, fy + 5);
+      ctx.moveTo(fx + 5, fy - 5); ctx.lineTo(fx - 5, fy + 5);
+      ctx.stroke();
+    }
+  };
+
+  /* Garatu - the abductor. Winged demon, seen mostly in cutscenes. */
+  Art.drawGaratu = function (ctx, x, y, scale, t) {
+    var s = scale;
+    var flap = Math.sin(t * 3.2) * 0.4;
+    ctx.save();
+    ctx.translate(x, y);
+
+    [-1, 1].forEach(function (sgn) {
+      ctx.save();
+      ctx.rotate(sgn * (0.5 + flap));
+      ctx.fillStyle = '#43213a';
+      ctx.beginPath();
+      ctx.moveTo(0, -30 * s);
+      ctx.quadraticCurveTo(sgn * 46 * s, -56 * s, sgn * 70 * s, -18 * s);
+      ctx.quadraticCurveTo(sgn * 44 * s, -26 * s, sgn * 50 * s, -2 * s);
+      ctx.quadraticCurveTo(sgn * 30 * s, -14 * s, sgn * 28 * s, 6 * s);
+      ctx.quadraticCurveTo(sgn * 14 * s, -10 * s, 0, -22 * s);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(20,10,20,0.8)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.restore();
+    });
+
+    chibi(ctx, {
+      x: 0, y: 0, scale: s * 1.25, phase: t * 2, moving: false,
+      body: '#5c2b4a', skin: '#c9526a', legs: '#3d1c31',
+      horns: true, faceDir: 1, eyeGlow: '#ffd24a'
+    });
+    ctx.restore();
+  };
+
+  /* ----------------------------------------------------------- environment */
+  Art.drawProp = function (ctx, kind, x, y, s, seed, t) {
+    var r = U.rng(seed);
+    switch (kind) {
+      case 'tree': {
+        ctx.fillStyle = 'rgba(20,26,18,0.22)';
+        Art.ellipse(ctx, x, y, 20 * s, 8 * s); ctx.fill();
+        ctx.fillStyle = '#6b4a2c';
+        Art.roundRect(ctx, x - 5 * s, y - 30 * s, 10 * s, 30 * s, 3 * s); ctx.fill(); Art.outline(ctx, 2);
+        var lay = [[0, -58, 26], [-11, -44, 20], [11, -44, 20]];
+        for (var i = 0; i < lay.length; i++) {
+          ctx.fillStyle = i === 0 ? '#4f9a49' : '#3f8a3d';
+          Art.ellipse(ctx, x + lay[i][0] * s, y + lay[i][1] * s, lay[i][2] * s, lay[i][2] * 0.86 * s);
+          ctx.fill(); Art.outline(ctx, 2);
+        }
+        ctx.fillStyle = 'rgba(255,255,255,0.16)';
+        Art.ellipse(ctx, x - 8 * s, y - 64 * s, 9 * s, 6 * s); ctx.fill();
+        break;
+      }
+      case 'pine': {
+        ctx.fillStyle = 'rgba(20,26,18,0.18)';
+        Art.ellipse(ctx, x, y, 18 * s, 7 * s); ctx.fill();
+        ctx.fillStyle = '#5b3f27';
+        Art.roundRect(ctx, x - 4 * s, y - 20 * s, 8 * s, 20 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.8);
+        for (var k = 0; k < 3; k++) {
+          ctx.fillStyle = k === 2 ? '#3d7a4e' : '#2f6b41';
+          ctx.beginPath();
+          ctx.moveTo(x, y - (62 - k * 4) * s + k * 14 * s);
+          ctx.lineTo(x - (20 - k * 3) * s, y - (20 - k * 2) * s + k * 12 * s);
+          ctx.lineTo(x + (20 - k * 3) * s, y - (20 - k * 2) * s + k * 12 * s);
+          ctx.closePath(); ctx.fill(); Art.outline(ctx, 1.8);
+        }
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.beginPath();
+        ctx.moveTo(x, y - 62 * s); ctx.lineTo(x - 7 * s, y - 44 * s); ctx.lineTo(x + 7 * s, y - 44 * s);
+        ctx.closePath(); ctx.fill();
+        break;
+      }
+      case 'cactus': {
+        ctx.fillStyle = 'rgba(60,50,20,0.2)';
+        Art.ellipse(ctx, x, y, 14 * s, 6 * s); ctx.fill();
+        ctx.fillStyle = '#4f9a5e';
+        Art.roundRect(ctx, x - 7 * s, y - 52 * s, 14 * s, 52 * s, 7 * s); ctx.fill(); Art.outline(ctx, 2);
+        Art.roundRect(ctx, x - 20 * s, y - 40 * s, 13 * s, 9 * s, 4.5 * s); ctx.fill(); Art.outline(ctx, 2);
+        Art.roundRect(ctx, x + 7 * s, y - 32 * s, 13 * s, 9 * s, 4.5 * s); ctx.fill(); Art.outline(ctx, 2);
+        break;
+      }
+      case 'fence': {
+        ctx.fillStyle = '#8a5a33';
+        Art.roundRect(ctx, x - 4 * s, y - 34 * s, 8 * s, 34 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.8);
+        Art.roundRect(ctx, x - 22 * s, y - 26 * s, 44 * s, 6 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.6);
+        Art.roundRect(ctx, x - 22 * s, y - 14 * s, 44 * s, 6 * s, 2 * s); ctx.fill(); Art.outline(ctx, 1.6);
+        break;
+      }
+      case 'wall': {
+        ctx.fillStyle = '#5a5364';
+        Art.roundRect(ctx, x - 22 * s, y - 46 * s, 44 * s, 46 * s, 4 * s); ctx.fill(); Art.outline(ctx, 2.2);
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        Art.roundRect(ctx, x - 18 * s, y - 42 * s, 36 * s, 12 * s, 3 * s); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(x - 22 * s, y - 30 * s); ctx.lineTo(x + 22 * s, y - 30 * s);
+        ctx.moveTo(x - 22 * s, y - 16 * s); ctx.lineTo(x + 22 * s, y - 16 * s);
+        ctx.moveTo(x, y - 30 * s); ctx.lineTo(x, y - 16 * s);
+        ctx.stroke();
+        break;
+      }
+      case 'bush': case 'snowbush': case 'shrub': {
+        var base = kind === 'snowbush' ? '#cfe4ef' : (kind === 'shrub' ? '#9db35c' : '#4fa85a');
+        var top = kind === 'snowbush' ? '#eef7fc' : (kind === 'shrub' ? '#b3c76e' : '#63c46c');
+        ctx.fillStyle = 'rgba(20,26,18,0.2)';
+        Art.ellipse(ctx, x, y, 20 * s, 7 * s); ctx.fill();
+        ctx.fillStyle = base;
+        Art.ellipse(ctx, x, y - 12 * s, 22 * s, 16 * s); ctx.fill(); Art.outline(ctx, 2);
+        ctx.fillStyle = top;
+        Art.ellipse(ctx, x - 6 * s, y - 18 * s, 11 * s, 8 * s); ctx.fill();
+        Art.ellipse(ctx, x + 7 * s, y - 15 * s, 8 * s, 6 * s); ctx.fill();
+        break;
+      }
+      case 'crate': {
+        ctx.fillStyle = 'rgba(20,26,18,0.2)';
+        Art.ellipse(ctx, x, y, 18 * s, 6 * s); ctx.fill();
+        ctx.fillStyle = '#a9793f';
+        Art.roundRect(ctx, x - 17 * s, y - 30 * s, 34 * s, 30 * s, 3 * s); ctx.fill(); Art.outline(ctx, 2);
+        ctx.strokeStyle = 'rgba(90,60,25,0.7)'; ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(x - 17 * s, y - 30 * s); ctx.lineTo(x + 17 * s, y);
+        ctx.moveTo(x + 17 * s, y - 30 * s); ctx.lineTo(x - 17 * s, y);
+        ctx.stroke();
+        break;
+      }
+      case 'flower': {
+        var col = ['#ff8fb1', '#ffd86b', '#b58cff', '#ffffff'][seed % 4];
+        ctx.fillStyle = '#3f8a3d';
+        Art.roundRect(ctx, x - 0.8 * s, y - 9 * s, 1.6 * s, 9 * s, 1); ctx.fill();
+        ctx.fillStyle = col;
+        for (var f = 0; f < 5; f++) {
+          var fa = f / 5 * U.TAU;
+          Art.ellipse(ctx, x + Math.cos(fa) * 3 * s, y - 10 * s + Math.sin(fa) * 3 * s, 2.4 * s, 2.4 * s);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#ffe98a';
+        Art.ellipse(ctx, x, y - 10 * s, 1.8 * s, 1.8 * s); ctx.fill();
+        break;
+      }
+      case 'fern': {
+        ctx.strokeStyle = '#3f8a3d'; ctx.lineWidth = 2 * s;
+        for (var n = 0; n < 5; n++) {
+          var na = -Math.PI / 2 + (n - 2) * 0.34;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.quadraticCurveTo(x + Math.cos(na) * 6 * s, y + Math.sin(na) * 10 * s,
+            x + Math.cos(na) * 13 * s, y + Math.sin(na) * 16 * s);
+          ctx.stroke();
+        }
+        break;
+      }
+      case 'rock': {
+        ctx.fillStyle = 'rgba(20,26,18,0.16)';
+        Art.ellipse(ctx, x, y, 10 * s, 4 * s); ctx.fill();
+        ctx.fillStyle = '#9aa0a8';
+        Art.ellipse(ctx, x, y - 5 * s, 9 * s, 7 * s); ctx.fill(); Art.outline(ctx, 1.6);
+        ctx.fillStyle = 'rgba(255,255,255,0.24)';
+        Art.ellipse(ctx, x - 3 * s, y - 7 * s, 3.4 * s, 2.4 * s); ctx.fill();
+        break;
+      }
+      case 'plate': {
+        ctx.fillStyle = 'rgba(255,255,255,0.16)';
+        Art.ellipse(ctx, x, y, 26 * s, 12 * s); ctx.fill();
+        ctx.strokeStyle = '#ffe45c'; ctx.lineWidth = 3;
+        Art.ellipse(ctx, x, y, 26 * s, 12 * s); ctx.stroke();
+        break;
+      }
+      case 'stone': {
+        ctx.fillStyle = 'rgba(20,26,18,0.24)';
+        Art.ellipse(ctx, x, y, 18 * s, 7 * s); ctx.fill();
+        ctx.fillStyle = '#8f8aa0';
+        Art.roundRect(ctx, x - 16 * s, y - 26 * s, 32 * s, 26 * s, 5 * s); ctx.fill(); Art.outline(ctx, 2.2);
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        Art.roundRect(ctx, x - 12 * s, y - 22 * s, 16 * s, 8 * s, 3 * s); ctx.fill();
+        break;
+      }
+    }
+  };
+
+  /* item / objective markers */
+  Art.drawRelic = function (ctx, x, y, t, colour) {
+    var bob = Math.sin(t * 3) * 4;
+    ctx.fillStyle = 'rgba(20,26,18,0.2)';
+    Art.ellipse(ctx, x, y, 10, 4); ctx.fill();
+    ctx.save();
+    ctx.translate(x, y - 20 + bob);
+    ctx.rotate(t * 1.2);
+    ctx.fillStyle = colour || '#ffe45c';
+    ctx.beginPath();
+    ctx.moveTo(0, -12); ctx.lineTo(9, 0); ctx.lineTo(0, 12); ctx.lineTo(-9, 0);
+    ctx.closePath(); ctx.fill(); Art.outline(ctx, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.moveTo(-2, -6); ctx.lineTo(2, -2); ctx.lineTo(-2, 2); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  };
+
+  Art.drawCoin = function (ctx, x, y, t) {
+    var bob = Math.sin(t * 5) * 3;
+    ctx.fillStyle = '#e8c14a';
+    Art.ellipse(ctx, x, y - 8 + bob, 6 * Math.abs(Math.cos(t * 3)) + 1.5, 7); ctx.fill();
+    Art.outline(ctx, 1.5);
+  };
+
+  Art.drawHintGlyph = function (ctx, x, y, t, found) {
+    ctx.save();
+    ctx.translate(x, y - 16 + Math.sin(t * 2.4) * 3);
+    ctx.fillStyle = found ? 'rgba(150,150,160,0.5)' : '#9b6bff';
+    Art.ellipse(ctx, 0, 0, 9, 11); ctx.fill(); Art.outline(ctx, 2);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('?', 0, 0.5);
+    ctx.restore();
+  };
+
+  Art.drawGem = function (ctx, x, y, r, gem, t) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.sin(t) * 0.15);
+    var g = ctx.createRadialGradient(0, -r * 0.3, r * 0.1, 0, 0, r * 1.4);
+    g.addColorStop(0, gem.glow);
+    g.addColorStop(1, gem.colour);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, -r); ctx.lineTo(r * 0.78, -r * 0.2); ctx.lineTo(r * 0.5, r * 0.85);
+    ctx.lineTo(-r * 0.5, r * 0.85); ctx.lineTo(-r * 0.78, -r * 0.2);
+    ctx.closePath(); ctx.fill(); Art.outline(ctx, 2.4);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.2, -r * 0.72); ctx.lineTo(r * 0.16, -r * 0.3); ctx.lineTo(-r * 0.3, r * 0.1);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  };
+
+  V.Art = Art;
+})(window.V = window.V || {});
+
+/* ===== src/js/entities.js ===== */
+/* Velthiros - player, enemies, projectiles, particles */
+(function (V) {
+  'use strict';
+
+  var U = V.U, D = V.D, Art = V.Art, Audio = V.Audio;
+  var E = {};
+
+  /* ================================================================= PLAYER */
+  function Player(stats, weaponId, world) {
+    this.world = world;
+    this.stats = stats;
+    this.x = 0; this.y = 0; this.z = 0;
+    this.vx = 0; this.vy = 0;
+    this.radius = 15;
+    this.facing = -Math.PI / 2;
+    this.hp = stats.maxHp;
+    this.stamina = stats.maxStamina;
+    this.staminaLock = 0;
+    this.weaponId = weaponId;
+    this.animPhase = 0;
+    this.moving = false;
+    this.hurtFlash = 0;
+    this.invuln = 0;
+    this.dodgeCd = 0;
+    this.dodgeTime = 0;
+    this.atkState = null;
+    this.atkKind = null;
+    this.atkDef = null;
+    this.atkTime = 0;
+    this.specialCd = 0;
+    this.hidden = false;
+    this.hideAmount = 0;
+    this.carrying = null;
+    this.dead = false;
+    this.lean = 0;
+    this.drawScale = 1;
+    this.smokeTimer = 0;
+    this.damageTaken = 0;
+    this.kills = 0;
+  }
+
+  Player.prototype.canAct = function () {
+    return !this.dead && this.dodgeTime <= 0 && !this.atkState;
+  };
+
+  Player.prototype.moveScale = function () {
+    if (this.atkState) {
+      var w = D.WEAPONS[this.weaponId];
+      return w.moveScale * (this.atkState === 'windup' ? 0.6 : 1);
+    }
+    return 1;
+  };
+
+  Player.prototype.update = function (dt, input) {
+    if (this.dead) return;
+    var w = this.world;
+
+    this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+    this.invuln = Math.max(0, this.invuln - dt);
+    this.dodgeCd = Math.max(0, this.dodgeCd - dt);
+    this.specialCd = Math.max(0, this.specialCd - dt);
+    this.staminaLock = Math.max(0, this.staminaLock - dt);
+    this.smokeTimer = Math.max(0, this.smokeTimer - dt);
+
+    if (this.staminaLock <= 0 && this.stamina < this.stats.maxStamina) {
+      this.stamina = Math.min(this.stats.maxStamina, this.stamina + this.stats.staminaRegen * dt);
+    }
+
+    /* ------- dodge / glide ------- */
+    if (this.dodgeTime > 0) {
+      this.dodgeTime -= dt;
+      var dodgeSpeed = this.stats.dodgeDist / 0.24;
+      this.x += Math.cos(this.dodgeAngle) * dodgeSpeed * dt;
+      this.y += Math.sin(this.dodgeAngle) * dodgeSpeed * dt;
+      this.z = this.stats.glide ? Math.sin((1 - this.dodgeTime / 0.24) * Math.PI) * 16 : 0;
+      this.moving = true;
+      this.animPhase += dt * 18;
+      w.confine(this);
+      return;
+    }
+    this.z = 0;
+
+    /* ------- movement ------- */
+    var mv = input.move;
+    var sc = this.moveScale();
+    if (mv.mag > 0.08) {
+      var sp = this.stats.speed * mv.mag * sc;
+      this.x += mv.x * sp * dt;
+      this.y += mv.y * sp * dt;
+      this.moving = true;
+      if (!this.atkState) this.facing = Math.atan2(mv.y, mv.x);
+      this.animPhase += dt * (6 + 9 * mv.mag);
+    } else {
+      this.moving = false;
+      this.animPhase += dt * 2.2;
+    }
+    w.confine(this);
+
+    /* ------- attack state machine ------- */
+    if (this.atkState) {
+      this.atkTime += dt;
+      if (this.atkState === 'windup' && this.atkTime >= this.atkDef.windup) {
+        this.resolveAttack();
+        this.atkState = 'recover';
+        this.atkTime = 0;
+      } else if (this.atkState === 'recover' && this.atkTime >= this.atkDef.recover) {
+        this.atkState = null;
+        this.atkDef = null;
+      }
+    }
+
+    /* ------- hiding (GDD 7.3) ------- */
+    var wasHidden = this.hidden;
+    var inBush = w.inCover(this.x, this.y);
+    this.hidden = !!inBush && !this.atkState && mv.mag < 0.75;
+    this.hideAmount = U.approach(this.hideAmount, this.hidden ? 1 : 0, dt * 5);
+    if (this.hidden && !wasHidden) w.onHide && w.onHide();
+  };
+
+  Player.prototype.attackDuration = function () {
+    return this.atkDef ? this.atkDef.windup + this.atkDef.recover : 0.3;
+  };
+
+  Player.prototype.tryAttack = function (special) {
+    if (!this.canAct()) return false;
+    var w = D.WEAPONS[this.weaponId];
+    var def = special ? w.special : w;
+    if (special && this.specialCd > 0) return false;
+    if (this.stamina < def.stamina) { Audio.play('deny'); return false; }
+    this.stamina -= def.stamina;
+    this.staminaLock = 0.55;
+    this.atkDef = def;
+    this.atkKind = special ? 'special' : 'primary';
+    this.atkState = 'windup';
+    this.atkTime = 0;
+    if (special) this.specialCd = def.cooldown;
+    Audio.play(w.kind === 'ranged' ? 'bow' : (w.id === 'battleaxe' ? 'heavy' : 'swing'));
+
+    if (def.dash) {
+      this.dodgeAngle = this.facing;
+      this.x += Math.cos(this.facing) * def.dash * 0.35;
+      this.y += Math.sin(this.facing) * def.dash * 0.35;
+      this.world.confine(this);
+    }
+    return true;
+  };
+
+  Player.prototype.resolveAttack = function () {
+    var w = D.WEAPONS[this.weaponId];
+    var def = this.atkDef;
+    var world = this.world;
+    var mul = this.stats.damageMul * (w.kind === 'ranged' ? this.stats.rangedMul : 1);
+    var dmg = def.damage * mul;
+
+    if (w.kind === 'ranged') {
+      var shots = def.shots || 1;
+      var spread = def.spread || 0;
+      for (var i = 0; i < shots; i++) {
+        var a = this.facing + (shots > 1 ? (i - (shots - 1) / 2) * spread : 0);
+        world.spawnArrow(this.x, this.y, a, def.projectileSpeed || w.projectileSpeed,
+          dmg, w.range, this.stats.pierce);
+      }
+      return;
+    }
+
+    var halfArc = (def.spin ? Math.PI : def.arc / 2);
+    var hitAny = false;
+    for (var e = 0; e < world.enemies.length; e++) {
+      var en = world.enemies[e];
+      if (en.dead) continue;
+      if (!U.inArc(this.x, this.y, this.facing, halfArc, def.range + en.radius, en.x, en.y)) continue;
+      en.hurt(dmg, this.facing, def.knock || 120, this);
+      hitAny = true;
+      if (def.lifesteal) this.heal(dmg * def.lifesteal);
+    }
+    /* physical puzzle blocks can be knocked by melee too */
+    world.meleeProps && world.meleeProps(this, halfArc, def.range);
+
+    world.swipe(this.x, this.y, this.facing, def.range, halfArc, w.id);
+    if (def.quake) world.shake(9, 0.35);
+    if (hitAny) { Audio.play('hit'); world.shake(4, 0.12); }
+  };
+
+  Player.prototype.tryDodge = function () {
+    if (this.dead || this.atkState || this.dodgeTime > 0 || this.dodgeCd > 0) return false;
+    if (this.stamina < 16) { Audio.play('deny'); return false; }
+    this.stamina -= 16;
+    this.staminaLock = 0.5;
+    var mv = this.world.input.move;
+    this.dodgeAngle = mv.mag > 0.15 ? Math.atan2(mv.y, mv.x) : this.facing;
+    this.facing = this.dodgeAngle;
+    this.dodgeTime = 0.24;
+    this.dodgeCd = 0.85 * this.stats.dodgeCdMul;
+    this.invuln = Math.max(this.invuln, 0.3);
+    Audio.play('dodge');
+    this.world.dust(this.x, this.y, 6);
+    return true;
+  };
+
+  Player.prototype.heal = function (n) {
+    this.hp = Math.min(this.stats.maxHp, this.hp + n);
+  };
+
+  Player.prototype.hurt = function (dmg, fromAngle) {
+    if (this.dead || this.invuln > 0 || this.dodgeTime > 0) return false;
+    if (Math.random() < this.stats.evasion) {
+      this.world.floater(this.x, this.y - 40, 'miss', '#cfe8ff');
+      return false;
+    }
+    var real = dmg * this.stats.defenceMul;
+    this.hp -= real;
+    this.damageTaken += real;
+    this.hurtFlash = 0.45;
+    this.invuln = 0.6;
+    this.x += Math.cos(fromAngle) * 14;
+    this.y += Math.sin(fromAngle) * 14;
+    this.world.confine(this);
+    this.world.shake(7, 0.22);
+    this.world.floater(this.x, this.y - 44, '-' + Math.round(real), '#ff7a7a');
+    Audio.play('hurt');
+    if (this.hp <= 0) { this.hp = 0; this.dead = true; }
+    return true;
+  };
+
+  Player.prototype.draw = function (ctx, t) {
+    Art.drawPlayer(ctx, this, t);
+  };
+
+  /* ================================================================= ENEMY */
+  function Enemy(defId, x, y, world, opts) {
+    opts = opts || {};
+    var def = D.ENEMIES[defId];
+    this.def = def;
+    this.id = defId;
+    this.world = world;
+    this.x = x; this.y = y; this.z = 0;
+    this.radius = def.radius;
+    this.maxHp = def.hp * (opts.hpScale || 1);
+    this.hp = this.maxHp;
+    this.damage = def.damage * (opts.dmgScale || 1);
+    this.speed = def.speed * (opts.speedScale || 1);
+    this.facing = Math.random() * U.TAU;
+    this.state = 'idle';
+    this.stateTime = 0;
+    this.animPhase = Math.random() * 6;
+    this.moving = false;
+    this.hurtFlash = 0;
+    this.dead = false;
+    this.drawScale = 1;
+    this.vx = 0; this.vy = 0;
+    this.wanderAngle = Math.random() * U.TAU;
+    this.wanderTimer = 0;
+    this.hiding = !!opts.hiding;      /* seek trials: sits in cover until found */
+    this.homeX = x; this.homeY = y;
+    this.leash = opts.leash || 0;
+    this.aggro = false;
+    this.summonedAt = [];
+    this.phase = 1;
+    this.attackedThisSwing = false;
+  }
+
+  Enemy.prototype.detects = function (p) {
+    if (p.dead) return false;
+    if (p.smokeTimer > 0) return false;
+    var sight = this.def.sight * p.stats.stealthMul;
+    if (p.hidden) sight *= 0.22;
+    return U.dist2(this.x, this.y, p.x, p.y) < sight * sight;
+  };
+
+  Enemy.prototype.update = function (dt) {
+    if (this.dead) return;
+    var w = this.world, p = w.player;
+    this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+    this.stateTime += dt;
+
+    /* knockback velocity decay */
+    if (this.vx || this.vy) {
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.vx *= Math.pow(0.02, dt); this.vy *= Math.pow(0.02, dt);
+      if (Math.abs(this.vx) < 4) this.vx = 0;
+      if (Math.abs(this.vy) < 4) this.vy = 0;
+      w.confine(this);
+    }
+
+    if (this.hiding) {
+      this.moving = false;
+      this.animPhase += dt * 1.5;
+      /* found if the player gets very close */
+      if (U.dist2(this.x, this.y, p.x, p.y) < 92 * 92) {
+        this.hiding = false;
+        this.aggro = true;
+        this.state = 'chase';
+        w.floater(this.x, this.y - 40, 'found!', '#ffe45c');
+        w.onEnemyFound && w.onEnemyFound(this);
+      }
+      return;
+    }
+
+    var d = U.dist(this.x, this.y, p.x, p.y);
+    var toP = Math.atan2(p.y - this.y, p.x - this.x);
+
+    if (this.def.boss) this.bossBrain(dt, d, toP, p);
+
+    switch (this.state) {
+      case 'idle': {
+        this.wanderTimer -= dt;
+        if (this.wanderTimer <= 0) {
+          this.wanderTimer = 1 + Math.random() * 2.2;
+          this.wanderAngle = Math.random() * U.TAU;
+          this.wanderMoving = Math.random() < 0.6;
+        }
+        if (this.wanderMoving) {
+          this.step(this.wanderAngle, this.speed * 0.34, dt);
+          this.moving = true;
+        } else this.moving = false;
+        if (this.detects(p)) { this.state = 'chase'; this.stateTime = 0; this.aggro = true; }
+        break;
+      }
+      case 'chase': {
+        this.facing = toP;
+        this.moving = true;
+        var chaseSpeed = this.speed;
+        if (this.def.charge && d > 150 && d < 420 && this.stateTime > 1.2) {
+          this.state = 'charge'; this.stateTime = 0;
+          this.chargeAngle = toP;
+          w.floater(this.x, this.y - 46, '!', '#ff6a3c');
+          break;
+        }
+        this.step(toP, chaseSpeed, dt);
+        if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
+        else if (!this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
+        break;
+      }
+      case 'charge': {
+        this.moving = true;
+        this.facing = this.chargeAngle;
+        this.step(this.chargeAngle, this.speed * 2.6, dt);
+        if (d < this.def.attackRange * 0.8) {
+          if (p.hurt(this.damage * 1.2, this.chargeAngle)) w.shake(10, 0.3);
+          this.state = 'recover'; this.stateTime = 0;
+        }
+        if (this.stateTime > 1.1) { this.state = 'recover'; this.stateTime = 0; }
+        break;
+      }
+      case 'windup': {
+        this.moving = false;
+        this.facing = U.lerp(this.facing, this.facing + U.angleDelta(this.facing, toP), 0.18);
+        if (this.stateTime >= this.def.attackWindup) {
+          this.swing(p);
+          this.state = 'recover'; this.stateTime = 0;
+        }
+        break;
+      }
+      case 'recover': {
+        this.moving = false;
+        if (this.stateTime >= this.def.attackRecover) {
+          this.state = d < this.def.sight ? 'chase' : 'idle';
+          this.stateTime = 0;
+        }
+        break;
+      }
+      case 'stagger': {
+        this.moving = false;
+        if (this.stateTime > 0.45) { this.state = 'chase'; this.stateTime = 0; }
+        break;
+      }
+    }
+    this.animPhase += dt * (this.moving ? 11 : 2);
+  };
+
+  Enemy.prototype.step = function (angle, speed, dt) {
+    var nx = this.x + Math.cos(angle) * speed * dt;
+    var ny = this.y + Math.sin(angle) * speed * dt;
+    this.x = nx; this.y = ny;
+    this.world.confine(this);
+  };
+
+  Enemy.prototype.swing = function (p) {
+    var w = this.world;
+    var arc = this.def.boss ? 1.6 : 1.1;
+    w.swipe(this.x, this.y, this.facing, this.def.attackRange, arc / 2, 'enemy');
+    if (U.inArc(this.x, this.y, this.facing, arc / 2, this.def.attackRange + p.radius, p.x, p.y)) {
+      p.hurt(this.damage, this.facing);
+    }
+    V.Audio.play(this.def.heavy || this.def.boss ? 'heavy' : 'swing');
+  };
+
+  Enemy.prototype.bossBrain = function (dt, d, toP, p) {
+    var w = this.world;
+    this.bossTimer = (this.bossTimer || 0) + dt;
+    var hpFrac = this.hp / this.maxHp;
+
+    /* phase gates: summon adds at 66% and 33% */
+    var wantPhase = hpFrac > 0.66 ? 1 : (hpFrac > 0.33 ? 2 : 3);
+    if (wantPhase > this.phase) {
+      this.phase = wantPhase;
+      var n = this.def.finalBoss ? 4 : 2;
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * U.TAU;
+        w.spawnEnemy(this.def.finalBoss && i % 2 === 0 ? 'minotaur' : 'goblin',
+          this.x + Math.cos(a) * 120, this.y + Math.sin(a) * 120);
+      }
+      w.floater(this.x, this.y - 70, 'RISE', '#ff4d5e');
+      V.Audio.play('boss');
+      w.shake(14, 0.5);
+    }
+
+    /* teleport out of a corner or when kited */
+    if (this.def.teleport && this.bossTimer > (this.def.finalBoss ? 4.5 : 6) && d > 240) {
+      this.bossTimer = 0;
+      var ta = Math.atan2(this.y - p.y, this.x - p.x) + Math.PI;
+      this.x = p.x + Math.cos(ta + (Math.random() - 0.5)) * 90;
+      this.y = p.y + Math.sin(ta + (Math.random() - 0.5)) * 90;
+      w.confine(this);
+      w.burst(this.x, this.y, 18, '#9b6bff');
+      V.Audio.play('warp');
+      this.state = 'windup'; this.stateTime = 0;
+    }
+
+    /* final boss: radial feather volley */
+    if (this.def.finalBoss) {
+      this.volleyTimer = (this.volleyTimer || 0) + dt;
+      if (this.volleyTimer > (this.phase >= 3 ? 2.6 : 4)) {
+        this.volleyTimer = 0;
+        var shots = 8 + this.phase * 2;
+        for (var s = 0; s < shots; s++) {
+          w.spawnBolt(this.x, this.y - 20, (s / shots) * U.TAU + this.bossTimer, 165, this.damage * 0.45);
+        }
+        V.Audio.play('warp');
+      }
+    }
+  };
+
+  Enemy.prototype.hurt = function (dmg, fromAngle, knock, src) {
+    if (this.dead) return;
+    this.hiding = false;
+    this.hp -= dmg;
+    this.hurtFlash = 0.18;
+    this.aggro = true;
+    var resist = this.def.boss ? 0.25 : (this.def.heavy ? 0.5 : 1);
+    this.vx += Math.cos(fromAngle) * knock * resist;
+    this.vy += Math.sin(fromAngle) * knock * resist;
+    this.world.floater(this.x, this.y - 36 - this.radius, String(Math.round(dmg)), '#fff0a8');
+    this.world.burst(this.x, this.y - 18, 5, '#ffd66b');
+    if (!this.def.boss && knock > 200) { this.state = 'stagger'; this.stateTime = 0; }
+    if (this.state === 'idle') { this.state = 'chase'; this.stateTime = 0; }
+    if (this.hp <= 0) this.die(src);
+  };
+
+  Enemy.prototype.die = function (src) {
+    this.dead = true;
+    this.hp = 0;
+    var w = this.world;
+    w.burst(this.x, this.y - 18, 16, this.def.colour);
+    V.Audio.play('kill');
+    if (src) src.kills++;
+    w.onEnemyKilled && w.onEnemyKilled(this);
+  };
+
+  Enemy.prototype.draw = function (ctx, t) {
+    if (this.dead) return;
+    if (this.hiding) {
+      /* only a faint rustle gives them away */
+      ctx.globalAlpha = 0.22 + 0.08 * Math.sin(t * 3 + this.animPhase);
+    }
+    if (this.id === 'goblin') Art.drawGoblin(ctx, this);
+    else if (this.id === 'minotaur') Art.drawMinotaur(ctx, this);
+    else if (this.id === 'reaper') Art.drawReaper(ctx, this, t);
+    else if (this.id === 'aurelith') Art.drawAurelith(ctx, this, t);
+    ctx.globalAlpha = 1;
+
+    /* windup telegraph */
+    if (this.state === 'windup' || this.state === 'charge') {
+      var prog = U.clamp(this.stateTime / (this.state === 'charge' ? 1.1 : this.def.attackWindup), 0, 1);
+      ctx.strokeStyle = 'rgba(255,90,80,' + (0.25 + prog * 0.5) + ')';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(this.sx, this.sy, this.def.attackRange * 0.5, this.facing - 0.6, this.facing + 0.6);
+      ctx.stroke();
+    }
+    if (this.def.boss) {
+      var bw = 74, bx = this.sx - bw / 2, by = this.sy - 96;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      Art.roundRect(ctx, bx - 2, by - 2, bw + 4, 9, 4); ctx.fill();
+      ctx.fillStyle = '#ff4d5e';
+      Art.roundRect(ctx, bx, by, bw * (this.hp / this.maxHp), 5, 2.5); ctx.fill();
+    }
+  };
+
+  /* ============================================================ PROJECTILE */
+  function Projectile(x, y, angle, speed, dmg, range, opts) {
+    opts = opts || {};
+    this.x = x; this.y = y;
+    this.angle = angle;
+    this.speed = speed;
+    this.damage = dmg;
+    this.life = range / speed;
+    this.dead = false;
+    this.hostile = !!opts.hostile;
+    this.pierce = !!opts.pierce;
+    this.hits = [];
+    this.colour = opts.colour || (opts.hostile ? '#ff7a9c' : '#f0e6c8');
+    this.trail = [];
+  }
+
+  Projectile.prototype.update = function (dt, world) {
+    this.life -= dt;
+    if (this.life <= 0) { this.dead = true; return; }
+    this.x += Math.cos(this.angle) * this.speed * dt;
+    this.y += Math.sin(this.angle) * this.speed * dt;
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 6) this.trail.shift();
+
+    if (!world.insideArena(this.x, this.y, 8)) { this.dead = true; return; }
+
+    if (this.hostile) {
+      var p = world.player;
+      if (!p.dead && U.dist2(this.x, this.y, p.x, p.y) < (p.radius + 7) * (p.radius + 7)) {
+        p.hurt(this.damage, this.angle);
+        this.dead = true;
+      }
+      return;
+    }
+    for (var i = 0; i < world.enemies.length; i++) {
+      var e = world.enemies[i];
+      if (e.dead || this.hits.indexOf(e) >= 0) continue;
+      if (U.dist2(this.x, this.y, e.x, e.y) < (e.radius + 8) * (e.radius + 8)) {
+        e.hurt(this.damage, this.angle, 90);
+        V.Audio.play('hit');
+        this.hits.push(e);
+        if (!this.pierce) { this.dead = true; return; }
+      }
+    }
+  };
+
+  Projectile.prototype.draw = function (ctx) {
+    ctx.save();
+    for (var i = 0; i < this.trail.length; i++) {
+      var tp = this.trail[i];
+      ctx.globalAlpha = (i / this.trail.length) * 0.4;
+      ctx.fillStyle = this.colour;
+      Art.ellipse(ctx, tp.sx, tp.sy, 3, 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.translate(this.sx, this.sy);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = this.colour;
+    if (this.hostile) {
+      Art.ellipse(ctx, 0, 0, 7, 4); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      Art.ellipse(ctx, -1, -1, 2.4, 1.6); ctx.fill();
+    } else {
+      Art.roundRect(ctx, -10, -1.6, 20, 3.2, 1.6); ctx.fill();
+      ctx.fillStyle = '#cfd8e2';
+      ctx.beginPath();
+      ctx.moveTo(10, 0); ctx.lineTo(4, -4); ctx.lineTo(4, 4);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  };
+
+  E.Player = Player;
+  E.Enemy = Enemy;
+  E.Projectile = Projectile;
+  V.E = E;
+})(window.V = window.V || {});
+
+/* ===== src/js/arena.js ===== */
+/* Velthiros - the trial arena: generation, objectives, scoring, world rendering */
+(function (V) {
+  'use strict';
+
+  var U = V.U, D = V.D, Art = V.Art, E = V.E, Audio = V.Audio;
+
+  var ARENA_R = 900;            /* GDD 5: ~30s to cross at 60u/s => 1800 diameter */
+  var BARRIER_R = ARENA_R + 30;
+
+  function Trial(game, spec) {
+    this.game = game;
+    this.spec = spec;                       /* {index,type,env,seed,boss,wave,label} */
+    this.env = spec.env;
+    this.rng = U.rng(spec.seed);
+    this.input = game.input;
+    this.t = 0;
+    this.state = 'intro';                   /* intro -> play -> done */
+    this.introTimer = 2.4;
+    this.result = null;
+    this.shakeAmt = 0; this.shakeTime = 0;
+    this.cam = { x: 0, y: 0 };
+    this.enemies = [];
+    this.projectiles = [];
+    this.particles = [];
+    this.floaters = [];
+    this.swipes = [];
+    this.props = [];       /* barrier + decoration, non-interactive */
+    this.cover = [];       /* bushes/crates: hiding spots */
+    this.blocks = [];      /* puzzle blocks */
+    this.plates = [];      /* puzzle plates */
+    this.hints = [];       /* word puzzle hint glyphs */
+    this.pickups = [];
+    this.kills = 0;
+    this.paused = false;
+    this.timeLimit = 0;
+    this.timeLeft = 0;
+    this.objectiveDone = false;
+    this.objectiveFailed = false;
+    this.spawnQueue = [];
+    this.message = null; this.messageTime = 0;
+
+    this.stats = V.Save.resolveStats(game.save);
+    this.player = new E.Player(this.stats, game.save.weapon, this);
+    this.player.drawScale = 1.5;
+    this.player.tint = game.playerTint();
+
+    this.consumables = game.consumableCounts();
+
+    this.build();
+    this.cam.x = this.player.x;
+    this.cam.y = this.player.y;
+  }
+
+  /* ==================================================================== gen */
+  Trial.prototype.build = function () {
+    var r = this.rng, i, a, d;
+
+    /* barrier ring (GDD 5: player cannot leave) */
+    var ringCount = 74;
+    for (i = 0; i < ringCount; i++) {
+      a = (i / ringCount) * U.TAU;
+      var jitter = r.range(-14, 14);
+      this.props.push({
+        x: Math.cos(a) * (BARRIER_R + jitter),
+        y: Math.sin(a) * (BARRIER_R + jitter),
+        kind: this.env.barrier, s: r.range(1.0, 1.35), seed: r.int(0, 9999), solid: true
+      });
+    }
+    /* a second, sparser row for depth */
+    for (i = 0; i < ringCount; i += 2) {
+      a = (i / ringCount) * U.TAU + 0.04;
+      this.props.push({
+        x: Math.cos(a) * (BARRIER_R + 62), y: Math.sin(a) * (BARRIER_R + 62),
+        kind: this.env.barrier, s: r.range(0.9, 1.2), seed: r.int(0, 9999)
+      });
+    }
+
+    /* cover (GDD 5 + 7.3) */
+    var bushes = 26 + r.int(0, 10);
+    for (i = 0; i < bushes; i++) {
+      a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 120);
+      this.cover.push({
+        x: Math.cos(a) * d, y: Math.sin(a) * d,
+        kind: this.env.cover, s: r.range(0.9, 1.3), seed: r.int(0, 9999), r: 46
+      });
+    }
+
+    /* ground litter */
+    for (i = 0; i < 90; i++) {
+      a = r() * U.TAU; d = Math.sqrt(r()) * (ARENA_R - 40);
+      this.props.push({
+        x: Math.cos(a) * d, y: Math.sin(a) * d,
+        kind: this.env.litter, s: r.range(0.7, 1.2), seed: r.int(0, 9999)
+      });
+    }
+
+    /* player start: near the south edge, looking in */
+    this.player.x = 0;
+    this.player.y = ARENA_R * 0.62;
+    this.player.facing = -Math.PI / 2;
+
+    this.setupObjective();
+  };
+
+  Trial.prototype.randomPoint = function (minD, maxD, awayFromPlayer) {
+    var r = this.rng;
+    for (var tries = 0; tries < 40; tries++) {
+      var a = r() * U.TAU;
+      var d = U.lerp(minD, maxD, Math.sqrt(r()));
+      var x = Math.cos(a) * d, y = Math.sin(a) * d;
+      if (!awayFromPlayer || U.dist2(x, y, this.player.x, this.player.y) > awayFromPlayer * awayFromPlayer) {
+        return { x: x, y: y };
+      }
+    }
+    return { x: 0, y: 0 };
+  };
+
+  /* difficulty ramp across the 50-trial demo */
+  Trial.prototype.tier = function () {
+    return 1 + (this.spec.index - 1) / D.TOTAL_TRIALS * 1.9;   /* 1.0 -> ~2.9 */
+  };
+
+  Trial.prototype.setupObjective = function () {
+    var r = this.rng, i, p;
+    var tier = this.tier();
+    var scaleOpts = { hpScale: 0.8 + tier * 0.35, dmgScale: 0.75 + tier * 0.28, speedScale: 0.9 + tier * 0.08 };
+    this.scaleOpts = scaleOpts;
+
+    if (this.spec.boss) {
+      this.type = 'boss';
+      this.objective = { text: 'Defeat the ' + (this.spec.finalBoss ? 'Aurelith' : 'Reaper') };
+      this.timeLimit = this.spec.finalBoss ? 300 : 180;
+      var bossId = this.spec.finalBoss ? 'aurelith' : 'reaper';
+      var boss = this.spawnEnemy(bossId, 0, -ARENA_R * 0.35, {
+        hpScale: 0.7 + tier * 0.5, dmgScale: 0.8 + tier * 0.22, speedScale: 1
+      });
+      this.boss = boss;
+      for (i = 0; i < 2 + Math.floor(tier); i++) {
+        p = this.randomPoint(200, ARENA_R - 150, 340);
+        this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+      }
+      this.par = boss.maxHp * 1.5 + 220;
+      this.timeLeft = this.timeLimit;
+      return;
+    }
+
+    this.type = this.spec.type;
+
+    switch (this.type) {
+      case 'defeat': {
+        var target = 6 + Math.round(tier * 5);
+        this.target = target;
+        this.timeLimit = 90 + target * 4;
+        this.objective = { text: 'Defeat ' + target + ' enemies' };
+        var inField = Math.min(target, 5 + Math.floor(tier * 2));
+        for (i = 0; i < inField; i++) {
+          p = this.randomPoint(160, ARENA_R - 120, 320);
+          this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
+        }
+        this.remainingToSpawn = target - inField;
+        this.par = target * 22 + this.timeLimit * 1.35;
+        break;
+      }
+      case 'defend': {
+        this.timeLimit = 60 + Math.round(tier * 22);
+        this.zone = { x: 0, y: 0, r: 160, hp: 100, maxHp: 100 };
+        this.objective = { text: 'Hold the ground for ' + Math.round(this.timeLimit) + 's' };
+        this.player.x = 0; this.player.y = 90;
+        this.waveTimer = 2;
+        this.par = this.timeLimit * 12 + 380;
+        break;
+      }
+      case 'deliver': {
+        this.timeLimit = 100 + Math.round(tier * 12);
+        var rp = this.randomPoint(ARENA_R * 0.5, ARENA_R - 130, 500);
+        this.relic = { x: rp.x, y: rp.y, taken: false };
+        /* delivery point roughly opposite the relic */
+        var ra = Math.atan2(rp.y, rp.x) + Math.PI;
+        this.delivery = { x: Math.cos(ra) * ARENA_R * 0.6, y: Math.sin(ra) * ARENA_R * 0.6, r: 70 };
+        this.objective = { text: 'Collect the relic, deliver it' };
+        for (i = 0; i < 4 + Math.floor(tier * 3); i++) {
+          p = this.randomPoint(220, ARENA_R - 120, 300);
+          this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
+        }
+        this.par = 560 + this.timeLimit * 2.2;
+        break;
+      }
+      case 'puzzle': {
+        this.timeLimit = 130;
+        var n = 3;
+        this.objective = { text: 'Push the stones onto the marks' };
+        for (i = 0; i < n; i++) {
+          var ang = (i / n) * U.TAU + r() * 0.6;
+          this.blocks.push({ x: Math.cos(ang) * 240, y: Math.sin(ang) * 240, r: 34, done: false });
+          this.plates.push({ x: Math.cos(ang + 0.9) * 520, y: Math.sin(ang + 0.9) * 520, r: 46, filled: false });
+        }
+        for (i = 0; i < 2 + Math.floor(tier); i++) {
+          p = this.randomPoint(300, ARENA_R - 150, 420);
+          this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+        }
+        this.par = 520 + this.timeLimit * 2.4;
+        break;
+      }
+      case 'word': {
+        this.timeLimit = 150;
+        var pool = D.RIDDLES;
+        var q = pool[this.spec.seed % pool.length];
+        var opts = r.shuffle([q.a].concat(q.wrong.slice(0, 3)));
+        this.riddle = { q: q.q, answer: q.a, options: opts, revealed: 0, answered: false, correct: false };
+        this.objective = { text: 'Find 3 hints, then answer' };
+        for (i = 0; i < 3; i++) {
+          p = this.randomPoint(300, ARENA_R - 150, 300);
+          this.hints.push({ x: p.x, y: p.y, found: false });
+        }
+        for (i = 0; i < 2 + Math.floor(tier * 1.5); i++) {
+          p = this.randomPoint(300, ARENA_R - 150, 420);
+          this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+        }
+        this.par = 540 + this.timeLimit * 2.3;
+        break;
+      }
+      case 'hide': {
+        this.timeLimit = 55 + Math.round(tier * 16);
+        this.objective = { text: 'Survive unseen for ' + Math.round(this.timeLimit) + 's' };
+        this.spottedTime = 0;
+        var hunters = 4 + Math.floor(tier * 2.5);
+        for (i = 0; i < hunters; i++) {
+          p = this.randomPoint(340, ARENA_R - 120, 420);
+          var h = this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
+          h.def = Object.create(h.def);
+          h.def.sight = h.def.sight * 1.3;
+        }
+        this.par = this.timeLimit * 9 + 200;
+        break;
+      }
+      case 'seek': {
+        this.timeLimit = 120;
+        var hidden = 4 + Math.floor(tier * 1.6);
+        this.target = hidden;
+        this.objective = { text: 'Find and defeat ' + hidden + ' hidden enemies' };
+        var spots = r.shuffle(this.cover.slice());
+        for (i = 0; i < hidden; i++) {
+          var sp = spots[i % spots.length];
+          this.spawnEnemy(this.pickEnemy(tier, r), sp.x + r.range(-14, 14), sp.y + r.range(-14, 14),
+            Object.assign({ hiding: true }, scaleOpts));
+        }
+        this.par = hidden * 46 + this.timeLimit * 2.2;
+        break;
+      }
+    }
+    this.timeLeft = this.timeLimit;
+  };
+
+  Trial.prototype.pickEnemy = function (tier, r) {
+    /* Minotaurs are the difficulty-spike enemy introduced as you level (GDD 7.2) */
+    var minoChance = U.clamp((tier - 1.25) * 0.5, 0, 0.42);
+    return r.chance(minoChance) ? 'minotaur' : 'goblin';
+  };
+
+  /* ============================================================ world hooks */
+  Trial.prototype.spawnEnemy = function (id, x, y, opts) {
+    var e = new E.Enemy(id, x, y, this, opts || this.scaleOpts);
+    e.drawScale = 1.5;
+    this.enemies.push(e);
+    return e;
+  };
+
+  Trial.prototype.spawnArrow = function (x, y, a, sp, dmg, range, pierce) {
+    this.projectiles.push(new E.Projectile(x, y, a, sp, dmg, range, { pierce: pierce }));
+  };
+
+  Trial.prototype.spawnBolt = function (x, y, a, sp, dmg) {
+    this.projectiles.push(new E.Projectile(x, y, a, sp, dmg, 900, { hostile: true, colour: '#ff9ec4' }));
+  };
+
+  Trial.prototype.confine = function (ent) {
+    U.confineToCircle(ent, 0, 0, ARENA_R - (ent.radius || 12));
+  };
+
+  Trial.prototype.insideArena = function (x, y, pad) {
+    return U.dist2(x, y, 0, 0) < (ARENA_R - (pad || 0)) * (ARENA_R - (pad || 0));
+  };
+
+  Trial.prototype.inCover = function (x, y) {
+    for (var i = 0; i < this.cover.length; i++) {
+      var c = this.cover[i];
+      if (U.dist2(x, y, c.x, c.y) < c.r * c.r) return c;
+    }
+    return null;
+  };
+
+  Trial.prototype.shake = function (amt, time) {
+    this.shakeAmt = Math.max(this.shakeAmt, amt);
+    this.shakeTime = Math.max(this.shakeTime, time);
+  };
+
+  Trial.prototype.burst = function (x, y, n, colour) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * U.TAU, sp = 40 + Math.random() * 130;
+      this.particles.push({
+        x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.3 + Math.random() * 0.4, max: 0.7, r: 2 + Math.random() * 3, colour: colour
+      });
+    }
+  };
+
+  Trial.prototype.dust = function (x, y, n) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * U.TAU;
+      this.particles.push({
+        x: x, y: y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40,
+        life: 0.35, max: 0.35, r: 3 + Math.random() * 3, colour: 'rgba(255,255,255,0.7)'
+      });
+    }
+  };
+
+  Trial.prototype.floater = function (x, y, text, colour) {
+    this.floaters.push({ x: x, y: y, text: text, colour: colour, life: 0.9, max: 0.9 });
+  };
+
+  Trial.prototype.swipe = function (x, y, angle, range, halfArc, kind) {
+    this.swipes.push({ x: x, y: y, angle: angle, range: range, halfArc: halfArc, kind: kind, life: 0.18, max: 0.18 });
+  };
+
+  Trial.prototype.meleeProps = function (p, halfArc, range) {
+    /* melee shoves puzzle blocks */
+    for (var i = 0; i < this.blocks.length; i++) {
+      var b = this.blocks[i];
+      if (U.inArc(p.x, p.y, p.facing, halfArc, range + b.r, b.x, b.y)) {
+        b.x += Math.cos(p.facing) * 46;
+        b.y += Math.sin(p.facing) * 46;
+        U.confineToCircle(b, 0, 0, ARENA_R - 60);
+      }
+    }
+  };
+
+  Trial.prototype.onEnemyKilled = function (e) {
+    this.kills++;
+    if (this.type === 'seek') this.foundCount = (this.foundCount || 0) + 1;
+  };
+
+  /* ================================================================ update */
+  Trial.prototype.update = function (dt) {
+    this.t += dt;
+
+    if (this.state === 'intro') {
+      this.introTimer -= dt;
+      if (this.introTimer <= 0) { this.state = 'play'; Audio.music(this.spec.boss ? 'boss' : 'trial'); }
+      return;
+    }
+    if (this.state === 'done') { this.updateFx(dt); return; }
+    if (this.paused) return;
+
+    var p = this.player, i;
+
+    /* ---- input ---- */
+    var In = this.input;
+    if (In.wasPressed('attack')) {
+      if (this.riddle && !this.riddle.answered && this.nearAnswerPad()) { /* handled in HUD taps */ }
+      else p.tryAttack(false);
+    }
+    if (In.wasPressed('special')) p.tryAttack(true);
+    if (In.wasPressed('dodge')) p.tryDodge();
+    if (In.wasPressed('item')) this.useConsumable();
+
+    p.update(dt, In);
+
+    /* ---- entities ---- */
+    for (i = 0; i < this.enemies.length; i++) this.enemies[i].update(dt);
+    for (i = this.enemies.length - 1; i >= 0; i--) if (this.enemies[i].dead) this.enemies.splice(i, 1);
+    for (i = this.projectiles.length - 1; i >= 0; i--) {
+      this.projectiles[i].update(dt, this);
+      if (this.projectiles[i].dead) this.projectiles.splice(i, 1);
+    }
+    this.separate();
+    this.updateFx(dt);
+
+    /* ---- pickups ---- */
+    for (i = this.pickups.length - 1; i >= 0; i--) {
+      var pk = this.pickups[i];
+      if (U.dist2(pk.x, pk.y, p.x, p.y) < 40 * 40) {
+        this.pickups.splice(i, 1);
+        if (pk.kind === 'coin') { this.bonusCoins = (this.bonusCoins || 0) + pk.value; Audio.play('coin'); }
+        else if (pk.kind === 'heal') { p.heal(30); Audio.play('pickup'); }
+      }
+    }
+
+    /* ---- timer & objective ---- */
+    this.timeLeft -= dt;
+    this.updateObjective(dt);
+
+    if (p.dead) return this.finish('death');
+    if (this.objectiveDone) return this.finish('complete');
+    if (this.objectiveFailed) return this.finish('objective');
+    if (this.timeLeft <= 0) return this.finish(this.type === 'hide' || this.type === 'defend' ? 'complete' : 'timeout');
+  };
+
+  Trial.prototype.updateFx = function (dt) {
+    var i;
+    for (i = this.particles.length - 1; i >= 0; i--) {
+      var pt = this.particles[i];
+      pt.life -= dt;
+      pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+      pt.vx *= Math.pow(0.05, dt); pt.vy *= Math.pow(0.05, dt);
+      if (pt.life <= 0) this.particles.splice(i, 1);
+    }
+    for (i = this.floaters.length - 1; i >= 0; i--) {
+      this.floaters[i].life -= dt;
+      this.floaters[i].y -= 26 * dt;
+      if (this.floaters[i].life <= 0) this.floaters.splice(i, 1);
+    }
+    for (i = this.swipes.length - 1; i >= 0; i--) {
+      this.swipes[i].life -= dt;
+      if (this.swipes[i].life <= 0) this.swipes.splice(i, 1);
+    }
+    if (this.shakeTime > 0) {
+      this.shakeTime -= dt;
+      if (this.shakeTime <= 0) this.shakeAmt = 0;
+    }
+    if (this.messageTime > 0) {
+      this.messageTime -= dt;
+      if (this.messageTime <= 0) this.message = null;
+    }
+  };
+
+  /* keep bodies from stacking */
+  Trial.prototype.separate = function () {
+    var list = this.enemies;
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      for (var j = i + 1; j < list.length; j++) {
+        var b = list[j];
+        var minD = a.radius + b.radius;
+        var dx = b.x - a.x, dy = b.y - a.y;
+        var d2 = dx * dx + dy * dy;
+        if (d2 > minD * minD || d2 < 0.001) continue;
+        var d = Math.sqrt(d2);
+        var push = (minD - d) / 2;
+        var ux = dx / d, uy = dy / d;
+        a.x -= ux * push; a.y -= uy * push;
+        b.x += ux * push; b.y += uy * push;
+      }
+    }
+    /* blocks push against the player */
+    for (var k = 0; k < this.blocks.length; k++) {
+      var bl = this.blocks[k], p = this.player;
+      var ddx = bl.x - p.x, ddy = bl.y - p.y;
+      var dd = Math.sqrt(ddx * ddx + ddy * ddy);
+      var need = bl.r + p.radius;
+      if (dd < need && dd > 0.001) {
+        var over = need - dd;
+        bl.x += (ddx / dd) * over;
+        bl.y += (ddy / dd) * over;
+        U.confineToCircle(bl, 0, 0, ARENA_R - 60);
+      }
+    }
+  };
+
+  Trial.prototype.setMessage = function (txt, time) {
+    this.message = txt;
+    this.messageTime = time || 2.2;
+  };
+
+  Trial.prototype.updateObjective = function (dt) {
+    var p = this.player, i;
+
+    switch (this.type) {
+      case 'boss': {
+        if (this.boss.dead || this.enemies.indexOf(this.boss) < 0) this.objectiveDone = true;
+        break;
+      }
+      case 'defeat': {
+        /* trickle in the remainder */
+        if (this.remainingToSpawn > 0 && this.enemies.length < 6) {
+          var sp = this.randomPoint(ARENA_R * 0.5, ARENA_R - 120, 380);
+          this.spawnEnemy(this.pickEnemy(this.tier(), this.rng), sp.x, sp.y, this.scaleOpts);
+          this.remainingToSpawn--;
+        }
+        if (this.kills >= this.target) this.objectiveDone = true;
+        break;
+      }
+      case 'defend': {
+        this.waveTimer -= dt;
+        if (this.waveTimer <= 0) {
+          this.waveTimer = Math.max(1.6, 5.2 - this.tier() * 0.9);
+          var n = 1 + Math.floor(this.tier());
+          for (i = 0; i < n; i++) {
+            var a = Math.random() * U.TAU;
+            this.spawnEnemy(this.pickEnemy(this.tier(), this.rng),
+              Math.cos(a) * (ARENA_R - 60), Math.sin(a) * (ARENA_R - 60), this.scaleOpts);
+          }
+        }
+        /* enemies inside the zone chew on it */
+        for (i = 0; i < this.enemies.length; i++) {
+          var e = this.enemies[i];
+          if (U.dist2(e.x, e.y, this.zone.x, this.zone.y) < this.zone.r * this.zone.r) {
+            this.zone.hp -= 7 * dt;
+          }
+        }
+        if (this.zone.hp <= 0) { this.zone.hp = 0; this.objectiveFailed = true; }
+        break;
+      }
+      case 'deliver': {
+        if (!this.relic.taken && U.dist2(p.x, p.y, this.relic.x, this.relic.y) < 44 * 44) {
+          this.relic.taken = true;
+          p.carrying = 'relic';
+          Audio.play('pickup');
+          this.setMessage('Relic taken - get it to the marker');
+        }
+        if (this.relic.taken && U.dist2(p.x, p.y, this.delivery.x, this.delivery.y) < this.delivery.r * this.delivery.r) {
+          this.objectiveDone = true;
+        }
+        break;
+      }
+      case 'puzzle': {
+        var solved = 0;
+        for (i = 0; i < this.plates.length; i++) {
+          var pl = this.plates[i];
+          pl.filled = false;
+          for (var b = 0; b < this.blocks.length; b++) {
+            if (U.dist2(this.blocks[b].x, this.blocks[b].y, pl.x, pl.y) < pl.r * pl.r) { pl.filled = true; break; }
+          }
+          if (pl.filled) solved++;
+        }
+        if (solved !== this.lastSolved) {
+          if (solved > (this.lastSolved || 0)) Audio.play('confirm');
+          this.lastSolved = solved;
+        }
+        if (solved >= this.plates.length) this.objectiveDone = true;
+        break;
+      }
+      case 'word': {
+        for (i = 0; i < this.hints.length; i++) {
+          var h = this.hints[i];
+          if (!h.found && U.dist2(p.x, p.y, h.x, h.y) < 46 * 46) {
+            h.found = true;
+            this.riddle.revealed++;
+            Audio.play('pickup');
+            this.setMessage('Hint ' + this.riddle.revealed + '/3 found');
+          }
+        }
+        if (this.riddle.answered) {
+          if (this.riddle.correct) this.objectiveDone = true;
+          else this.objectiveFailed = true;
+        }
+        break;
+      }
+      case 'hide': {
+        var spotted = false;
+        for (i = 0; i < this.enemies.length; i++) {
+          if (this.enemies[i].state === 'chase' || this.enemies[i].state === 'windup' ||
+              this.enemies[i].state === 'charge') { spotted = true; break; }
+        }
+        if (spotted) this.spottedTime += dt;
+        this.spotted = spotted;
+        break;
+      }
+      case 'seek': {
+        var left = 0;
+        for (i = 0; i < this.enemies.length; i++) if (!this.enemies[i].dead) left++;
+        this.enemiesLeft = left;
+        if (left === 0) this.objectiveDone = true;
+        break;
+      }
+    }
+  };
+
+  Trial.prototype.useConsumable = function () {
+    var g = this.game;
+    if (this.consumables.potion > 0 && this.player.hp < this.stats.maxHp * 0.75) {
+      this.consumables.potion--; g.spendConsumable('c_potion');
+      this.player.heal(50); Audio.play('pickup');
+      this.floater(this.player.x, this.player.y - 50, '+50', '#7fe08a');
+      return;
+    }
+    if (this.consumables.tonic > 0 && this.player.stamina < this.stats.maxStamina * 0.5) {
+      this.consumables.tonic--; g.spendConsumable('c_tonic');
+      this.player.stamina = this.stats.maxStamina; Audio.play('pickup');
+      return;
+    }
+    if (this.consumables.smoke > 0) {
+      this.consumables.smoke--; g.spendConsumable('c_smoke');
+      this.player.smokeTimer = 6;
+      for (var i = 0; i < this.enemies.length; i++) {
+        this.enemies[i].state = 'idle'; this.enemies[i].stateTime = 0;
+      }
+      this.burst(this.player.x, this.player.y, 26, 'rgba(220,220,230,0.9)');
+      Audio.play('dodge');
+      this.setMessage('Smoke - they lost you');
+      return;
+    }
+    Audio.play('deny');
+  };
+
+  Trial.prototype.answerRiddle = function (choice) {
+    if (!this.riddle || this.riddle.answered) return;
+    this.riddle.answered = true;
+    this.riddle.correct = (choice === this.riddle.answer);
+    Audio.play(this.riddle.correct ? 'confirm' : 'deny');
+  };
+
+  Trial.prototype.nearAnswerPad = function () { return this.riddle && this.riddle.revealed >= 3; };
+
+  /* ================================================================ scoring */
+  Trial.prototype.finish = function (reason) {
+    if (this.state === 'done') return;
+    this.state = 'done';
+    Audio.music(null);
+
+    var score = 0;
+    var timeBonus = Math.max(0, this.timeLeft) * 2.2;
+    var killScore = 0;
+    /* the enemies list only holds the living; count kills directly */
+    killScore = this.kills * 16;
+    var damagePenalty = this.player.damageTaken * 1.1;
+
+    var completed = (reason === 'complete');
+    if (completed) {
+      score += this.par * 0.62;
+      score += timeBonus;
+    }
+    score += killScore;
+
+    if (this.type === 'hide') {
+      /* rewarded for staying unseen, not for kills */
+      var unseen = Math.max(0, this.timeLimit - this.spottedTime);
+      score = (completed ? this.par * 0.5 : 0) + unseen * 5 + killScore * 0.5;
+    }
+    if (this.type === 'defend' && completed) {
+      score += (this.zone.hp / this.zone.maxHp) * this.par * 0.22;
+    }
+    if (this.type === 'word' && completed) {
+      score += (3 - this.riddle.revealed) * 40; /* answering on fewer hints scores higher */
+    }
+    if (this.type === 'boss' && completed) {
+      score += this.boss ? this.boss.maxHp * 0.3 : 0;
+    }
+
+    score -= damagePenalty;
+    if (reason === 'death') score = Math.min(score, this.par * 0.2);
+    if (reason === 'timeout' || reason === 'objective') score = Math.min(score, this.par * 0.55);
+    score = Math.max(0, Math.round(score));
+
+    /* GDD 6.2: ratio 1.0 => top 25%, 0.8 => 40% boundary */
+    var ratio = score / Math.max(1, this.par);
+    var percentile = U.clamp(Math.round(100 - 75 * ratio), 1, 99);
+    if (reason === 'death') percentile = Math.max(percentile, 62);
+
+    var tier = D.RANK_TIERS[2];
+    for (var i = 0; i < D.RANK_TIERS.length; i++) {
+      if (percentile <= D.RANK_TIERS[i].max) { tier = D.RANK_TIERS[i]; break; }
+    }
+
+    this.result = {
+      reason: reason,
+      completed: completed,
+      score: score,
+      par: Math.round(this.par),
+      percentile: percentile,
+      tier: tier,
+      kills: this.kills,
+      timeLeft: Math.max(0, this.timeLeft),
+      damageTaken: Math.round(this.player.damageTaken),
+      bonusCoins: this.bonusCoins || 0,
+      died: reason === 'death',
+      trial: this.spec
+    };
+    Audio.play(tier.outcome === 'fail' ? 'lose' : 'win');
+    this.game.onTrialFinished(this.result);
+  };
+
+  /* ================================================================= render */
+  Trial.prototype.zoom = function (cw, ch) {
+    return U.clamp(Math.min(cw, ch * 1.75) / 780, 0.55, 1.35);
+  };
+
+  Trial.prototype.render = function (ctx, cw, ch) {
+    var p = this.player;
+    var zoom = this.zoom(cw, ch);
+
+    /* camera lead + smoothing */
+    var lead = 60;
+    var tx = p.x + Math.cos(p.facing) * lead * 0.35;
+    var ty = p.y + Math.sin(p.facing) * lead * 0.35;
+    this.cam.x = U.lerp(this.cam.x, tx, 0.12);
+    this.cam.y = U.lerp(this.cam.y, ty, 0.12);
+
+    var shakeX = 0, shakeY = 0;
+    if (this.shakeTime > 0) {
+      shakeX = (Math.random() - 0.5) * this.shakeAmt;
+      shakeY = (Math.random() - 0.5) * this.shakeAmt;
+    }
+
+    ctx.fillStyle = this.env.sky;
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.save();
+    ctx.translate(cw / 2 + shakeX, ch / 2 + shakeY);
+    ctx.scale(zoom, zoom);
+
+    var self = this;
+    function P(x, y) { return { x: x - self.cam.x, y: (y - self.cam.y) * Art.SQUASH }; }
+    this.project = P;
+
+    this.drawGround(ctx, P);
+
+    /* build the depth-sorted draw list */
+    var list = [];
+    var i, s;
+
+    for (i = 0; i < this.props.length; i++) {
+      var pr = this.props[i];
+      list.push({ y: pr.y, fn: makePropDraw(ctx, pr, P, this.t) });
+    }
+    for (i = 0; i < this.cover.length; i++) {
+      var cv = this.cover[i];
+      list.push({ y: cv.y, fn: makePropDraw(ctx, cv, P, this.t) });
+    }
+    for (i = 0; i < this.blocks.length; i++) {
+      list.push({ y: this.blocks[i].y, fn: makePropDraw(ctx, { x: this.blocks[i].x, y: this.blocks[i].y, kind: 'stone', s: 1.25, seed: i }, P, this.t) });
+    }
+    for (i = 0; i < this.enemies.length; i++) {
+      (function (e) {
+        var sp = P(e.x, e.y);
+        e.sx = sp.x; e.sy = sp.y;
+        list.push({ y: e.y, fn: function () { e.draw(ctx, self.t); } });
+      })(this.enemies[i]);
+    }
+    (function (pl) {
+      var sp = P(pl.x, pl.y);
+      pl.sx = sp.x; pl.sy = sp.y;
+      list.push({ y: pl.y + 0.1, fn: function () { pl.draw(ctx, self.t); } });
+    })(p);
+
+    for (i = 0; i < this.projectiles.length; i++) {
+      (function (pj) {
+        var sp = P(pj.x, pj.y);
+        pj.sx = sp.x; pj.sy = sp.y - 24;
+        for (var k = 0; k < pj.trail.length; k++) {
+          var tp = P(pj.trail[k].x, pj.trail[k].y);
+          pj.trail[k].sx = tp.x; pj.trail[k].sy = tp.y - 24;
+        }
+        list.push({ y: pj.y, fn: function () { pj.draw(ctx); } });
+      })(this.projectiles[i]);
+    }
+
+    /* objective markers sit on the ground, drawn before actors of the same row */
+    this.drawObjectiveGround(ctx, P);
+
+    list.sort(function (a, b) { return a.y - b.y; });
+    for (i = 0; i < list.length; i++) list[i].fn();
+
+    this.drawFx(ctx, P);
+    this.drawObjectiveOverlay(ctx, P);
+
+    ctx.restore();
+  };
+
+  function makePropDraw(ctx, pr, P, t) {
+    return function () {
+      var sp = P(pr.x, pr.y);
+      V.Art.drawProp(ctx, pr.kind, sp.x, sp.y, pr.s, pr.seed || 0, t);
+    };
+  }
+
+  Trial.prototype.drawGround = function (ctx, P) {
+    var c = P(0, 0);
+    var r = ARENA_R;
+    /* arena disc */
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, r, r * Art.SQUASH, 0, 0, U.TAU);
+    ctx.closePath();
+    ctx.clip();
+
+    ctx.fillStyle = this.env.ground;
+    ctx.fillRect(c.x - r - 10, c.y - r - 10, r * 2 + 20, r * 2 + 20);
+
+    /* soft checker so movement reads */
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = this.env.ground2;
+    var cell = 84;
+    var x0 = Math.floor((c.x - r) / cell) * cell;
+    var y0 = Math.floor((c.y - r * Art.SQUASH) / cell) * cell;
+    for (var gx = x0; gx < c.x + r; gx += cell) {
+      for (var gy = y0; gy < c.y + r * Art.SQUASH; gy += cell) {
+        if ((Math.round(gx / cell) + Math.round(gy / cell)) % 2 === 0) {
+          ctx.fillRect(gx, gy, cell, cell * Art.SQUASH);
+        }
+      }
+    }
+
+    ctx.globalAlpha = 1;
+
+    /* edge vignette */
+    var grd = ctx.createRadialGradient(c.x, c.y, r * 0.55, c.x, c.y, r);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(1, 'rgba(20,26,18,0.28)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(c.x - r, c.y - r, r * 2, r * 2);
+    ctx.restore();
+
+    ctx.strokeStyle = 'rgba(30,40,28,0.35)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, r, r * Art.SQUASH, 0, 0, U.TAU);
+    ctx.stroke();
+  };
+
+  Trial.prototype.drawObjectiveGround = function (ctx, P) {
+    var t = this.t, i, sp;
+    if (this.zone) {
+      sp = P(this.zone.x, this.zone.y);
+      var frac = this.zone.hp / this.zone.maxHp;
+      ctx.fillStyle = 'rgba(90,200,255,' + (0.10 + 0.05 * Math.sin(t * 2)) + ')';
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y, this.zone.r, this.zone.r * Art.SQUASH, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.strokeStyle = frac > 0.4 ? '#5ac8ff' : '#ff6a6a';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y, this.zone.r, this.zone.r * Art.SQUASH, 0, -Math.PI / 2, -Math.PI / 2 + U.TAU * frac);
+      ctx.stroke();
+    }
+    if (this.delivery) {
+      sp = P(this.delivery.x, this.delivery.y);
+      ctx.strokeStyle = this.relic.taken ? '#7fe08a' : 'rgba(255,255,255,0.4)';
+      ctx.lineWidth = 5;
+      ctx.setLineDash([14, 10]);
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y, this.delivery.r, this.delivery.r * Art.SQUASH, 0, 0, U.TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    for (i = 0; i < this.plates.length; i++) {
+      sp = P(this.plates[i].x, this.plates[i].y);
+      ctx.fillStyle = this.plates[i].filled ? 'rgba(120,240,150,0.28)' : 'rgba(255,228,92,0.16)';
+      ctx.beginPath();
+      ctx.ellipse(sp.x, sp.y, this.plates[i].r, this.plates[i].r * Art.SQUASH, 0, 0, U.TAU);
+      ctx.fill();
+      ctx.strokeStyle = this.plates[i].filled ? '#7fe08a' : '#ffe45c';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+  };
+
+  Trial.prototype.drawObjectiveOverlay = function (ctx, P) {
+    var t = this.t, sp, i;
+    if (this.relic && !this.relic.taken) {
+      sp = P(this.relic.x, this.relic.y);
+      Art.drawRelic(ctx, sp.x, sp.y, t);
+    }
+    if (this.relic && this.relic.taken) {
+      sp = P(this.player.x, this.player.y);
+      Art.drawRelic(ctx, sp.x, sp.y - 58, t, '#ffd66b');
+    }
+    for (i = 0; i < this.hints.length; i++) {
+      sp = P(this.hints[i].x, this.hints[i].y);
+      if (!this.hints[i].found) Art.drawHintGlyph(ctx, sp.x, sp.y, t, false);
+    }
+    for (i = 0; i < this.pickups.length; i++) {
+      sp = P(this.pickups[i].x, this.pickups[i].y);
+      if (this.pickups[i].kind === 'coin') Art.drawCoin(ctx, sp.x, sp.y, t);
+    }
+
+    /* off-screen objective arrow */
+    var target = null;
+    if (this.relic && !this.relic.taken) target = this.relic;
+    else if (this.delivery && this.relic && this.relic.taken) target = this.delivery;
+    else if (this.zone) target = this.zone;
+    if (target) this.drawGuide(ctx, P, target);
+  };
+
+  Trial.prototype.drawGuide = function (ctx, P, target) {
+    var p = this.player;
+    var d = U.dist(p.x, p.y, target.x, target.y);
+    if (d < 240) return;
+    var a = Math.atan2((target.y - p.y) * Art.SQUASH, target.x - p.x);
+    var sp = P(p.x, p.y);
+    ctx.save();
+    ctx.translate(sp.x + Math.cos(a) * 70, sp.y - 30 + Math.sin(a) * 70);
+    ctx.rotate(a);
+    ctx.fillStyle = 'rgba(255,240,160,0.85)';
+    ctx.beginPath();
+    ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  };
+
+  Trial.prototype.drawFx = function (ctx, P) {
+    var i, sp;
+    for (i = 0; i < this.swipes.length; i++) {
+      var s = this.swipes[i];
+      sp = P(s.x, s.y);
+      var k = s.life / s.max;
+      ctx.save();
+      ctx.translate(sp.x, sp.y - 26);
+      ctx.scale(1, Art.SQUASH);
+      ctx.strokeStyle = s.kind === 'enemy' ? 'rgba(255,120,110,' + k * 0.7 + ')' : 'rgba(255,255,255,' + k * 0.75 + ')';
+      ctx.lineWidth = 9 * k + 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, s.range * (1.05 - k * 0.25), s.angle - s.halfArc, s.angle + s.halfArc);
+      ctx.stroke();
+      ctx.restore();
+    }
+    for (i = 0; i < this.particles.length; i++) {
+      var pt = this.particles[i];
+      sp = P(pt.x, pt.y);
+      ctx.globalAlpha = U.clamp(pt.life / pt.max, 0, 1);
+      ctx.fillStyle = pt.colour;
+      Art.ellipse(ctx, sp.x, sp.y - 22, pt.r, pt.r); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 17px system-ui, -apple-system, sans-serif';
+    for (i = 0; i < this.floaters.length; i++) {
+      var f = this.floaters[i];
+      sp = P(f.x, f.y);
+      ctx.globalAlpha = U.clamp(f.life / f.max, 0, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillText(f.text, sp.x + 1.5, sp.y + 1.5);
+      ctx.fillStyle = f.colour;
+      ctx.fillText(f.text, sp.x, sp.y);
+    }
+    ctx.globalAlpha = 1;
+  };
+
+  Trial.ARENA_R = ARENA_R;
+  V.Trial = Trial;
+})(window.V = window.V || {});
+
+/* ===== src/js/ui.js ===== */
+/* Velthiros - shared UI widgets and the trial HUD (GDD 12) */
+(function (V) {
+  'use strict';
+
+  var U = V.U, D = V.D, Art = V.Art, Input = V.Input, Audio = V.Audio;
+  var UI = {};
+
+  UI.FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+  UI.scale = 1;
+
+  UI.setScale = function (cw, ch) {
+    UI.scale = U.clamp(Math.min(cw, ch) / 400, 0.82, 1.7);
+    return UI.scale;
+  };
+
+  UI.font = function (ctx, size, weight) {
+    ctx.font = (weight || '600') + ' ' + Math.round(size * UI.scale) + 'px ' + UI.FONT;
+  };
+
+  UI.text = function (ctx, str, x, y, opts) {
+    opts = opts || {};
+    UI.font(ctx, opts.size || 15, opts.weight);
+    ctx.textAlign = opts.align || 'left';
+    ctx.textBaseline = opts.baseline || 'middle';
+    if (opts.shadow !== false) {
+      ctx.fillStyle = 'rgba(0,0,0,' + (opts.shadowAlpha || 0.45) + ')';
+      ctx.fillText(str, x + 1.5, y + 1.8);
+    }
+    ctx.fillStyle = opts.colour || '#fff';
+    ctx.fillText(str, x, y);
+  };
+
+  UI.panel = function (ctx, x, y, w, h, opts) {
+    opts = opts || {};
+    ctx.fillStyle = opts.fill || 'rgba(28,22,38,0.88)';
+    Art.roundRect(ctx, x, y, w, h, opts.radius || 14 * UI.scale);
+    ctx.fill();
+    ctx.strokeStyle = opts.stroke || 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = opts.lineWidth || 2;
+    ctx.stroke();
+  };
+
+  /* Returns true on the frame the button is released-as-a-tap (or key pressed). */
+  UI.button = function (ctx, id, x, y, w, h, label, opts) {
+    opts = opts || {};
+    var held = Input.isDown(id);
+    var disabled = !!opts.disabled;
+    Input.zone(id, x, y, w, h);
+
+    var fill = disabled ? 'rgba(60,56,70,0.7)'
+      : (held ? (opts.activeFill || 'rgba(255,220,120,0.95)') : (opts.fill || 'rgba(52,44,68,0.94)'));
+    var textCol = disabled ? 'rgba(255,255,255,0.35)'
+      : (held ? '#2a2135' : (opts.colour || '#fff'));
+
+    ctx.save();
+    if (held && !disabled) ctx.translate(0, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    Art.roundRect(ctx, x, y + 4, w, h, opts.radius || 12 * UI.scale); ctx.fill();
+    ctx.fillStyle = fill;
+    Art.roundRect(ctx, x, y, w, h, opts.radius || 12 * UI.scale); ctx.fill();
+    ctx.strokeStyle = opts.stroke || (held ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.22)');
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    UI.text(ctx, label, x + w / 2, y + h / 2, {
+      size: opts.size || 17, align: 'center', colour: textCol, weight: '700', shadow: !held
+    });
+    if (opts.sub) {
+      UI.text(ctx, opts.sub, x + w / 2, y + h / 2 + 15 * UI.scale, {
+        size: 11, align: 'center', colour: held ? 'rgba(40,32,50,0.8)' : 'rgba(255,255,255,0.6)'
+      });
+    }
+    ctx.restore();
+
+    if (disabled) return false;
+    var fired = Input.wasPressed(id);
+    if (fired) Audio.play(opts.silent ? null : 'ui');
+    return fired;
+  };
+
+  UI.roundButton = function (ctx, id, cx, cy, r, label, opts) {
+    opts = opts || {};
+    var held = Input.isDown(id);
+    var disabled = !!opts.disabled;
+    Input.circleZone(id, cx, cy, r * 1.08);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    Art.ellipse(ctx, cx, cy + 4, r, r); ctx.fill();
+    var fill = disabled ? 'rgba(60,56,70,0.5)' : (held ? (opts.activeFill || 'rgba(255,225,140,0.95)') : (opts.fill || 'rgba(58,48,76,0.8)'));
+    ctx.fillStyle = fill;
+    Art.ellipse(ctx, cx, cy + (held ? 2 : 0), r, r); ctx.fill();
+    ctx.strokeStyle = disabled ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.32)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    if (opts.cooldown > 0 && opts.cooldownMax > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + U.TAU * (opts.cooldown / opts.cooldownMax));
+      ctx.closePath(); ctx.fill();
+    }
+
+    UI.text(ctx, label, cx, cy + (held ? 2 : 0), {
+      size: opts.size || 15, align: 'center', weight: '800',
+      colour: disabled ? 'rgba(255,255,255,0.4)' : (held ? '#2a2135' : '#fff')
+    });
+    ctx.restore();
+    return Input.wasPressed(id);
+  };
+
+  UI.bar = function (ctx, x, y, w, h, frac, colour, opts) {
+    opts = opts || {};
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    Art.roundRect(ctx, x - 2, y - 2, w + 4, h + 4, (h + 4) / 2); ctx.fill();
+    ctx.fillStyle = opts.back || 'rgba(255,255,255,0.14)';
+    Art.roundRect(ctx, x, y, w, h, h / 2); ctx.fill();
+    var fw = Math.max(0, w * U.clamp(frac, 0, 1));
+    if (fw > 1) {
+      ctx.fillStyle = colour;
+      Art.roundRect(ctx, x, y, fw, h, h / 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      Art.roundRect(ctx, x + 2, y + 1.5, Math.max(0, fw - 4), h * 0.34, h * 0.2); ctx.fill();
+    }
+    if (opts.label) {
+      UI.text(ctx, opts.label, x + w + 8, y + h / 2, { size: 11, colour: 'rgba(255,255,255,0.85)' });
+    }
+  };
+
+  /* full-screen dim used behind modal panels */
+  UI.dim = function (ctx, cw, ch, a) {
+    ctx.fillStyle = 'rgba(10,8,16,' + (a == null ? 0.62 : a) + ')';
+    ctx.fillRect(0, 0, cw, ch);
+  };
+
+  UI.wrap = function (ctx, str, maxWidth, size) {
+    UI.font(ctx, size || 15);
+    var words = String(str).split(' ');
+    var lines = [], line = '';
+    for (var i = 0; i < words.length; i++) {
+      var test = line ? line + ' ' + words[i] : words[i];
+      if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = words[i]; }
+      else line = test;
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
+
+  /* ==================================================================== HUD */
+  var HUD = {};
+
+  HUD.draw = function (ctx, trial, cw, ch) {
+    var s = UI.setScale(cw, ch);
+    var p = trial.player;
+    var pad = 14 * s;
+
+    /* ---- top-left: health + stamina (GDD 12) ---- */
+    var barW = Math.min(150 * s, cw * 0.34);
+    UI.bar(ctx, pad, pad + 4, barW, 11 * s, p.hp / p.stats.maxHp, '#ff5f6d');
+    UI.bar(ctx, pad, pad + 22 * s, barW * 0.86, 8 * s, p.stamina / p.stats.maxStamina, '#7fe08a');
+    UI.text(ctx, Math.ceil(p.hp) + '/' + p.stats.maxHp, pad + barW + 8, pad + 9 * s, { size: 11, colour: 'rgba(255,255,255,0.9)' });
+
+    /* ---- top-middle: timer ---- */
+    var warn = trial.timeLeft < 15;
+    UI.text(ctx, U.fmtTime(trial.timeLeft), cw / 2, pad + 12 * s, {
+      size: 26, align: 'center', weight: '800', colour: warn ? '#ff8a8a' : '#fff'
+    });
+
+    /* ---- top-right: trial label + objective progress ---- */
+    UI.text(ctx, trial.spec.label, cw - pad, pad + 6 * s, { size: 13, align: 'right', colour: 'rgba(255,255,255,0.85)' });
+    UI.text(ctx, HUD.progressText(trial), cw - pad, pad + 24 * s, { size: 13, align: 'right', colour: '#ffe45c' });
+
+    /* ---- pause ---- */
+    if (UI.button(ctx, 'pause', cw - pad - 34 * s, pad + 38 * s, 34 * s, 26 * s, '| |', { size: 13 })) {
+      trial.paused = !trial.paused;
+    }
+
+    /* ---- objective banner ---- */
+    if (trial.t < 6 || trial.message) {
+      var txt = trial.message || trial.objective.text;
+      UI.font(ctx, 14);
+      var tw = ctx.measureText(txt).width + 26 * s;
+      var bx = cw / 2 - tw / 2, by = pad + 34 * s;
+      UI.panel(ctx, bx, by, tw, 26 * s, { fill: 'rgba(20,16,28,0.7)' });
+      UI.text(ctx, txt, cw / 2, by + 13 * s, { size: 14, align: 'center' });
+    }
+
+    /* ---- hide-trial spotted warning ---- */
+    if (trial.type === 'hide' && trial.spotted) {
+      UI.text(ctx, 'SPOTTED', cw / 2, ch * 0.24, { size: 30, align: 'center', weight: '800', colour: '#ff5f6d' });
+    }
+    if (p.hidden) {
+      UI.text(ctx, 'hidden', cw / 2, ch * 0.24, { size: 16, align: 'center', colour: 'rgba(160,240,180,0.9)' });
+    }
+
+    /* ---- bottom-left: virtual joystick ---- */
+    Input.stickEnabled = !trial.paused && trial.state === 'play';
+    HUD.drawStick(ctx, cw, ch, s);
+
+    /* ---- bottom-right: action buttons ---- */
+    var live = trial.state === 'play' && !trial.paused && !p.dead;
+    var aR = 44 * s, sR = 31 * s, dR = 26 * s;
+    var ax = cw - pad - aR - 6 * s, ay = ch - pad - aR - 6 * s;
+    if (UI.roundButton(ctx, 'attack', ax, ay, aR, 'ATK', { disabled: !live, size: 16 }) && live) p.tryAttack(false);
+
+    var sx = ax - aR - sR + 6 * s, sy = ay - 12 * s;
+    var wpn = D.WEAPONS[p.weaponId];
+    if (UI.roundButton(ctx, 'special', sx, sy, sR, wpn.special.name, {
+      disabled: !live, size: 11, cooldown: p.specialCd, cooldownMax: wpn.special.cooldown
+    }) && live) p.tryAttack(true);
+
+    var dx = ax - 6 * s, dy = ay - aR - dR - 4 * s;
+    if (UI.roundButton(ctx, 'dodge', dx, dy, dR, 'DODGE', {
+      disabled: !live, size: 9, cooldown: p.dodgeCd, cooldownMax: 0.85 * p.stats.dodgeCdMul
+    }) && live) p.tryDodge();
+
+    var items = trial.consumables.potion + trial.consumables.tonic + trial.consumables.smoke;
+    var ix = sx - sR - dR + 2 * s, iy = sy - 6 * s;
+    if (UI.roundButton(ctx, 'item', ix, iy, dR, 'ITEM ' + items, {
+      disabled: !live || items <= 0, size: 9
+    }) && live) trial.useConsumable();
+
+    /* ---- riddle panel ---- */
+    if (trial.riddle && !trial.riddle.answered) HUD.drawRiddle(ctx, trial, cw, ch, s);
+
+    /* ---- pause menu ---- */
+    if (trial.paused) HUD.drawPause(ctx, trial, cw, ch, s);
+
+    /* ---- intro card ---- */
+    if (trial.state === 'intro') HUD.drawIntro(ctx, trial, cw, ch, s);
+  };
+
+  HUD.progressText = function (trial) {
+    switch (trial.type) {
+      case 'defeat': return trial.kills + ' / ' + trial.target + ' slain';
+      case 'seek': return (trial.target - (trial.enemiesLeft || trial.target)) + ' / ' + trial.target + ' found';
+      case 'defend': return 'Ground ' + Math.ceil(trial.zone.hp) + '%';
+      case 'deliver': return trial.relic.taken ? 'Deliver it' : 'Find the relic';
+      case 'puzzle': return (trial.lastSolved || 0) + ' / ' + trial.plates.length + ' set';
+      case 'word': return trial.riddle.revealed + ' / 3 hints';
+      case 'hide': return 'Stay unseen';
+      case 'boss': return trial.boss && !trial.boss.dead ? Math.ceil(trial.boss.hp) + ' hp' : 'down';
+      default: return '';
+    }
+  };
+
+  HUD.drawStick = function (ctx, cw, ch, s) {
+    var st = Input.stick;
+    var baseX, baseY, knobX, knobY, alpha;
+    if (st.active) {
+      baseX = st.ox; baseY = st.oy;
+      var dx = st.x - baseX, dy = st.y - baseY;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      var lim = Input.stickRadius;
+      if (d > lim) { dx = dx / d * lim; dy = dy / d * lim; }
+      knobX = baseX + dx; knobY = baseY + dy;
+      alpha = 0.5;
+    } else {
+      baseX = 78 * s; baseY = ch - 78 * s;
+      knobX = baseX; knobY = baseY;
+      alpha = 0.22;
+    }
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,' + alpha + ')';
+    ctx.lineWidth = 3;
+    Art.ellipse(ctx, baseX, baseY, Input.stickRadius, Input.stickRadius); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,' + (alpha * 0.35) + ')';
+    Art.ellipse(ctx, baseX, baseY, Input.stickRadius, Input.stickRadius); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,' + (alpha + 0.28) + ')';
+    Art.ellipse(ctx, knobX, knobY, 26, 26); ctx.fill();
+    ctx.restore();
+  };
+
+  HUD.drawIntro = function (ctx, trial, cw, ch, s) {
+    var k = U.clamp(trial.introTimer / 2.4, 0, 1);
+    UI.dim(ctx, cw, ch, 0.55 * U.clamp(k * 2, 0, 1));
+    UI.text(ctx, trial.spec.label, cw / 2, ch / 2 - 30 * s, { size: 30, align: 'center', weight: '800' });
+    UI.text(ctx, trial.objective.text, cw / 2, ch / 2 + 6 * s, { size: 17, align: 'center', colour: '#ffe45c' });
+    UI.text(ctx, trial.env.name, cw / 2, ch / 2 + 32 * s, { size: 13, align: 'center', colour: 'rgba(255,255,255,0.6)' });
+  };
+
+  HUD.drawRiddle = function (ctx, trial, cw, ch, s) {
+    var r = trial.riddle;
+    var w = Math.min(cw - 40 * s, 420 * s);
+    var x = cw / 2 - w / 2;
+    var lines = UI.wrap(ctx, r.q, w - 28 * s, 14);
+    var h = 40 * s + lines.length * 18 * s + (r.revealed >= 3 ? 4 * 34 * s : 24 * s);
+    var y = ch * 0.5 - h / 2;
+
+    UI.panel(ctx, x, y, w, h);
+    for (var i = 0; i < lines.length; i++) {
+      UI.text(ctx, lines[i], cw / 2, y + 22 * s + i * 18 * s, { size: 14, align: 'center' });
+    }
+    var oy = y + 30 * s + lines.length * 18 * s;
+    if (r.revealed < 3) {
+      UI.text(ctx, 'Find ' + (3 - r.revealed) + ' more hint' + (3 - r.revealed === 1 ? '' : 's') + ' in the arena',
+        cw / 2, oy, { size: 13, align: 'center', colour: 'rgba(255,255,255,0.6)' });
+    } else {
+      for (var o = 0; o < r.options.length; o++) {
+        var by = oy + o * 32 * s;
+        if (UI.button(ctx, 'ans' + o, x + 14 * s, by, w - 28 * s, 27 * s, r.options[o], { size: 14 })) {
+          trial.answerRiddle(r.options[o]);
+        }
+      }
+    }
+  };
+
+  HUD.drawPause = function (ctx, trial, cw, ch, s) {
+    UI.dim(ctx, cw, ch, 0.72);
+    var w = Math.min(300 * s, cw - 40), x = cw / 2 - w / 2, y = ch / 2 - 120 * s;
+    UI.panel(ctx, x, y, w, 240 * s);
+    UI.text(ctx, 'Paused', cw / 2, y + 28 * s, { size: 24, align: 'center', weight: '800' });
+    UI.text(ctx, trial.spec.label + ' - ' + trial.objective.text, cw / 2, y + 56 * s,
+      { size: 12, align: 'center', colour: 'rgba(255,255,255,0.65)' });
+
+    if (UI.button(ctx, 'resume', x + 20 * s, y + 76 * s, w - 40 * s, 38 * s, 'Resume')) trial.paused = false;
+    if (UI.button(ctx, 'sound', x + 20 * s, y + 122 * s, w - 40 * s, 34 * s,
+      'Sound: ' + (Audio.enabled ? 'on' : 'off'))) Audio.setEnabled(!Audio.enabled);
+    if (UI.button(ctx, 'giveup', x + 20 * s, y + 164 * s, w - 40 * s, 34 * s, 'Abandon trial',
+      { fill: 'rgba(120,40,52,0.9)' })) {
+      trial.paused = false;
+      trial.player.hp = 0;
+      trial.player.dead = true;
+    }
+    UI.text(ctx, 'Keys: WASD move, J attack, K special, L dodge, Q item',
+      cw / 2, y + 216 * s, { size: 10, align: 'center', colour: 'rgba(255,255,255,0.4)' });
+  };
+
+  V.UI = UI;
+  V.HUD = HUD;
+})(window.V = window.V || {});
+
+/* ===== src/js/scenes.js ===== */
+/* Velthiros - non-combat scenes: start, bedroom/hub, cutscene, shops, ranking */
+(function (V) {
+  'use strict';
+
+  var U = V.U, D = V.D, Art = V.Art, UI = V.UI, Input = V.Input, Audio = V.Audio, Save = V.Save;
+  var S = {};
+
+  /* ============================================================ START SCREEN
+     GDD 12: "New Game" and "Continue", vertically stacked.
+     GDD 7.1: idle here for 5 minutes to surface the scythe unlock prompt. */
+  function StartScene(game) {
+    this.game = game;
+    this.t = 0;
+    this.idle = 0;
+    this.promptShown = false;
+    this.comboProgress = 0;
+    this.unlockFlash = 0;
+    this.combo = D.COMBOS[game.save.comboIndex % D.COMBOS.length];
+    this.stars = [];
+    for (var i = 0; i < 60; i++) {
+      this.stars.push({ x: Math.random(), y: Math.random() * 0.6, r: Math.random() * 1.6 + 0.4, p: Math.random() * 6 });
+    }
+    Audio.music('calm');
+  }
+
+  StartScene.prototype.update = function (dt) {
+    this.t += dt;
+    this.unlockFlash = Math.max(0, this.unlockFlash - dt);
+
+    /* any interaction resets the idle clock */
+    if (Input.anyInput && !this.promptShown) this.idle = 0;
+    else this.idle += dt;
+
+    if (!this.promptShown && !this.game.save.scytheUnlocked && this.idle >= this.game.idleUnlockSeconds) {
+      this.promptShown = true;
+      this.comboProgress = 0;
+      Audio.play('warp');
+    }
+  };
+
+  StartScene.prototype.pressDir = function (dir) {
+    if (!this.promptShown) return;
+    if (this.combo[this.comboProgress] === dir) {
+      this.comboProgress++;
+      Audio.play('confirm');
+      if (this.comboProgress >= this.combo.length) {
+        this.game.unlockScythe();
+        this.promptShown = false;
+        this.unlockFlash = 3.2;
+        Audio.play('unlock');
+      }
+    } else {
+      this.comboProgress = 0;
+      Audio.play('deny');
+    }
+  };
+
+  StartScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch), t = this.t, i;
+
+    /* night sky over a skyline - the life being taken away */
+    var g = ctx.createLinearGradient(0, 0, 0, ch);
+    g.addColorStop(0, '#1a1030');
+    g.addColorStop(0.55, '#3a1f47');
+    g.addColorStop(1, '#6b3352');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cw, ch);
+
+    for (i = 0; i < this.stars.length; i++) {
+      var st = this.stars[i];
+      ctx.globalAlpha = 0.35 + 0.45 * Math.abs(Math.sin(t * 0.8 + st.p));
+      ctx.fillStyle = '#fff';
+      Art.ellipse(ctx, st.x * cw, st.y * ch, st.r, st.r); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    /* skyline */
+    ctx.fillStyle = '#150d22';
+    var bw = cw / 11;
+    for (i = 0; i < 12; i++) {
+      var bh = ch * (0.16 + ((i * 37) % 11) / 11 * 0.24);
+      ctx.fillRect(i * bw - 4, ch - bh, bw + 2, bh);
+      ctx.fillStyle = 'rgba(255,220,140,0.5)';
+      for (var wI = 0; wI < 4; wI++) {
+        if ((i * 7 + wI * 3) % 5 < 2) ctx.fillRect(i * bw + 8 + wI * 9, ch - bh + 14 + wI * 16, 5, 7);
+      }
+      ctx.fillStyle = '#150d22';
+    }
+
+    /* Garatu drifting behind the title */
+    ctx.globalAlpha = 0.30 + 0.06 * Math.sin(t * 0.9);
+    Art.drawGaratu(ctx, cw * 0.78, ch * 0.44 + Math.sin(t * 0.7) * 10, 1.05 * s, t);
+    ctx.globalAlpha = 1;
+
+    /* title */
+    UI.text(ctx, 'VELTHIROS', cw / 2, ch * 0.22, {
+      size: 48, align: 'center', weight: '800', colour: '#ffe9c9', shadowAlpha: 0.7
+    });
+    UI.text(ctx, 'they are watching', cw / 2, ch * 0.22 + 34 * s, {
+      size: 14, align: 'center', colour: 'rgba(255,220,190,0.7)'
+    });
+
+    /* stacked buttons */
+    var bwid = Math.min(230 * s, cw * 0.7);
+    var bx = cw / 2 - bwid / 2;
+    var by = ch * 0.44;
+    var bh = 46 * s;
+
+    if (UI.button(ctx, 'newgame', bx, by, bwid, bh, 'New Game')) this.game.newGame();
+    var canContinue = this.game.save.started;
+    if (UI.button(ctx, 'continue', bx, by + bh + 14 * s, bwid, bh, 'Continue',
+      { disabled: !canContinue, sub: canContinue ? 'Trial ' + this.game.save.trial : 'no run yet' })) {
+      this.game.continueRun();
+    }
+
+    var oy = by + (bh + 14 * s) * 2;
+    if (UI.button(ctx, 'sound', bx, oy, bwid * 0.48 - 5 * s, 34 * s, Audio.enabled ? 'Sound on' : 'Sound off')) {
+      Audio.setEnabled(!Audio.enabled);
+    }
+    if (UI.button(ctx, 'howto', bx + bwid * 0.52 + 5 * s, oy, bwid * 0.48 - 5 * s, 34 * s, 'How to play')) {
+      this.game.setScene(new S.HelpScene(this.game));
+    }
+
+    /* footer state */
+    var sv = this.game.save;
+    UI.text(ctx, 'deaths ' + sv.deaths + '/' + D.DEATH_LIMIT + '   ' + D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency) +
+      (sv.scytheUnlocked ? '   scythe: unlocked' : ''),
+      cw / 2, ch - 22 * s, { size: 11, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+
+    if (this.unlockFlash > 0) {
+      UI.text(ctx, 'THE SCYTHE IS YOURS', cw / 2, ch * 0.35,
+        { size: 22, align: 'center', weight: '800', colour: '#c9f0ea' });
+    }
+
+    if (this.promptShown) this.drawCombo(ctx, cw, ch, s);
+    else if (!this.game.save.scytheUnlocked) {
+      /* the faintest nudge - the mechanic is meant to be discovered */
+      var left = Math.max(0, this.game.idleUnlockSeconds - this.idle);
+      if (left < 30) {
+        UI.text(ctx, '. . .', cw / 2, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
+      }
+    }
+  };
+
+  StartScene.prototype.drawCombo = function (ctx, cw, ch, s) {
+    UI.dim(ctx, cw, ch, 0.78);
+    var w = Math.min(330 * s, cw - 30), x = cw / 2 - w / 2, y = ch * 0.5 - 150 * s;
+    UI.panel(ctx, x, y, w, 300 * s, { fill: 'rgba(18,14,26,0.95)', stroke: 'rgba(200,240,235,0.5)' });
+
+    UI.text(ctx, 'something is here', cw / 2, y + 26 * s, { size: 18, align: 'center', weight: '800', colour: '#c9f0ea' });
+
+    /* the sequence */
+    var glyph = { up: '▲', down: '▼', left: '◀', right: '▶' };
+    var gy = y + 62 * s;
+    var step = Math.min(38 * s, (w - 40 * s) / this.combo.length);
+    var startX = cw / 2 - (this.combo.length - 1) * step / 2;
+    for (var i = 0; i < this.combo.length; i++) {
+      var done = i < this.comboProgress;
+      UI.text(ctx, glyph[this.combo[i]], startX + i * step, gy, {
+        size: 22, align: 'center', colour: done ? '#7fe08a' : 'rgba(255,255,255,0.55)'
+      });
+    }
+
+    /* d-pad */
+    var cx = cw / 2, cy = y + 175 * s, r = 34 * s, gap = 42 * s;
+    var self = this;
+    function dirBtn(id, dx, dy, label) {
+      if (UI.roundButton(ctx, id, cx + dx, cy + dy, r, label, { size: 18 })) self.pressDir(id.replace('cmb_', ''));
+    }
+    dirBtn('cmb_up', 0, -gap, '▲');
+    dirBtn('cmb_down', 0, gap, '▼');
+    dirBtn('cmb_left', -gap, 0, '◀');
+    dirBtn('cmb_right', gap, 0, '▶');
+
+    UI.text(ctx, 'enter it', cw / 2, y + 274 * s, { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+
+    /* keyboard also works */
+    if (Input.keyPressed.up) this.pressDir('up');
+    if (Input.keyPressed.down) this.pressDir('down');
+    if (Input.keyPressed.left) this.pressDir('left');
+    if (Input.keyPressed.right) this.pressDir('right');
+  };
+
+  /* =================================================================== HELP */
+  function HelpScene(game) { this.game = game; this.t = 0; }
+  HelpScene.prototype.update = function (dt) { this.t += dt; };
+  HelpScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch);
+    ctx.fillStyle = '#1a1030';
+    ctx.fillRect(0, 0, cw, ch);
+    var w = Math.min(440 * s, cw - 28), x = cw / 2 - w / 2, y = 22 * s;
+    UI.panel(ctx, x, y, w, ch - 44 * s);
+    UI.text(ctx, 'How to play', cw / 2, y + 26 * s, { size: 22, align: 'center', weight: '800' });
+
+    var lines = [
+      ['Move', 'Drag anywhere on the left half of the screen.'],
+      ['ATK / special', 'Bottom-right. Special costs more stamina and has a cooldown.'],
+      ['DODGE', 'Brief invulnerability. Costs stamina.'],
+      ['Hide', 'Stand still in a bush and enemies lose you.'],
+      ['Rank', 'Top 25% pays. 26-40% is a wash. Below 40% you redo the trial with a debuff.'],
+      ['Death', 'Back to the start of the same trial. ' + D.DEATH_LIMIT + ' deaths wipes the run.'],
+      ['Every 5th', 'A Reaper comes instead of a trial.'],
+      ['Keyboard', 'WASD move, J attack, K special, L dodge, Q item, Esc pause.']
+    ];
+    var ly = y + 56 * s;
+    for (var i = 0; i < lines.length; i++) {
+      UI.text(ctx, lines[i][0], x + 18 * s, ly, { size: 13, weight: '800', colour: '#ffe45c' });
+      var wrapped = UI.wrap(ctx, lines[i][1], w - 36 * s, 12);
+      for (var j = 0; j < wrapped.length; j++) {
+        UI.text(ctx, wrapped[j], x + 18 * s, ly + 16 * s + j * 14 * s, { size: 12, colour: 'rgba(255,255,255,0.8)' });
+      }
+      ly += 22 * s + wrapped.length * 14 * s;
+    }
+    if (UI.button(ctx, 'back', cw / 2 - 70 * s, ch - 58 * s, 140 * s, 36 * s, 'Back')) {
+      this.game.setScene(new S.StartScene(this.game));
+    }
+  };
+
+  /* =============================================================== BEDROOM
+     GDD 2: mood-setting intro (non-interactive), then the same room becomes
+     the hub with both shops (GDD 4). */
+  function RoomScene(game, mode) {
+    this.game = game;
+    this.mode = mode;                 /* 'intro' | 'hub' */
+    this.t = 0;
+    this.introTimer = mode === 'intro' ? 11 : 0;
+    this.px = 0; this.py = 60;
+    this.pfacing = -Math.PI / 2;
+    this.animPhase = 0;
+    this.moving = false;
+    this.W = 620; this.H = 320;
+    this.prompt = null;
+    this.fade = mode === 'intro' ? 1 : 0;
+    this.dialog = mode === 'intro' ? 'Another night in the tower.' : null;
+    this.dialogTime = mode === 'intro' ? 4 : 0;
+    Audio.music(mode === 'intro' ? 'calm' : 'hub');
+  }
+
+  RoomScene.prototype.zones = function () {
+    if (this.mode !== 'hub') return [];
+    return [
+      { id: 'reality', x: -220, y: 0, r: 66, label: 'Reality Shop' },
+      { id: 'trial', x: 220, y: 0, r: 66, label: 'Trial Shop' },
+      { id: 'gate', x: 0, y: -112, r: 60, label: 'Enter Trial ' + this.game.save.trial }
+    ];
+  };
+
+  RoomScene.prototype.update = function (dt) {
+    this.t += dt;
+    this.fade = Math.max(0, this.fade - dt * 0.8);
+    if (this.dialogTime > 0) {
+      this.dialogTime -= dt;
+      if (this.dialogTime <= 0) this.dialog = null;
+    }
+
+    var mv = Input.move;
+    var speed = 105;
+    if (mv.mag > 0.08) {
+      this.px += mv.x * speed * mv.mag * dt;
+      this.py += mv.y * speed * mv.mag * dt;
+      this.pfacing = Math.atan2(mv.y, mv.x);
+      this.moving = true;
+      this.animPhase += dt * 12;
+    } else { this.moving = false; this.animPhase += dt * 2; }
+    this.px = U.clamp(this.px, -this.W / 2 + 26, this.W / 2 - 26);
+    this.py = U.clamp(this.py, -this.H / 2 + 40, this.H / 2 - 26);
+
+    /* nearest interactable */
+    this.prompt = null;
+    var zs = this.zones();
+    for (var i = 0; i < zs.length; i++) {
+      if (U.dist2(this.px, this.py, zs[i].x, zs[i].y) < zs[i].r * zs[i].r) { this.prompt = zs[i]; break; }
+    }
+    if (this.prompt && (Input.wasPressed('interact') || Input.wasPressed('actionbtn'))) {
+      this.trigger(this.prompt.id);
+    }
+
+    if (this.mode === 'intro') {
+      this.introTimer -= dt;
+      if (this.introTimer < 7 && !this.saidTwo) {
+        this.saidTwo = true;
+        this.dialog = 'Nothing in here is worth touching.';
+        this.dialogTime = 4;
+      }
+      if (this.introTimer <= 0) this.game.startAbduction();
+    }
+  };
+
+  RoomScene.prototype.trigger = function (id) {
+    Audio.play('confirm');
+    if (id === 'reality') this.game.setScene(new S.ShopScene(this.game, 'reality'));
+    else if (id === 'trial') this.game.setScene(new S.ShopScene(this.game, 'trial'));
+    else if (id === 'gate') this.game.enterTrial();
+  };
+
+  RoomScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch), t = this.t;
+    /* the room is 460 wide and spans -219..+99 vertically once projected */
+    var zoom = U.clamp(Math.min(cw / (this.W + 60), (ch - 26) / 372), 0.4, 1.5);
+
+    var bg = ctx.createRadialGradient(cw / 2, ch / 2, 40, cw / 2, ch / 2, Math.max(cw, ch) * 0.75);
+    bg.addColorStop(0, '#241a33');
+    bg.addColorStop(1, '#0d0916');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, cw, ch);
+
+    ctx.save();
+    ctx.translate(cw / 2, ch / 2 + 60 * zoom);
+    ctx.scale(zoom, zoom);
+    var SQ = Art.SQUASH;
+    function P(x, y) { return { x: x, y: y * SQ }; }
+
+    var W = this.W, H = this.H;
+
+    /* floor */
+    ctx.fillStyle = '#8a6f52';
+    ctx.fillRect(-W / 2, -H / 2 * SQ, W, H * SQ);
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    for (var fx = -W / 2; fx < W / 2; fx += 46) ctx.fillRect(fx, -H / 2 * SQ, 2, H * SQ);
+
+    /* back wall */
+    ctx.fillStyle = '#5e4f74';
+    ctx.fillRect(-W / 2, -H / 2 * SQ - 120, W, 120);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(-W / 2, -H / 2 * SQ - 120, W, 40);
+
+    /* window with the city outside */
+    var wx = -158, wy = -H / 2 * SQ - 104;
+    ctx.fillStyle = '#1c1430';
+    Art.roundRect(ctx, wx, wy, 120, 78, 6); ctx.fill();
+    ctx.fillStyle = '#2f2450';
+    for (var b = 0; b < 4; b++) ctx.fillRect(wx + 8 + b * 28, wy + 30 + (b % 2) * 12, 20, 48);
+    ctx.fillStyle = 'rgba(255,220,140,0.75)';
+    for (var lw = 0; lw < 10; lw++) {
+      ctx.fillRect(wx + 12 + (lw % 4) * 28, wy + 38 + Math.floor(lw / 4) * 14, 4, 5);
+    }
+    ctx.strokeStyle = '#3b2f4d'; ctx.lineWidth = 5;
+    Art.roundRect(ctx, wx, wy, 120, 78, 6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx + 60, wy); ctx.lineTo(wx + 60, wy + 78); ctx.stroke();
+
+    /* bed */
+    ctx.fillStyle = '#7a4b3a';
+    Art.roundRect(ctx, W / 2 - 150, -H / 2 * SQ + 6, 130, 74, 8); ctx.fill(); Art.outline(ctx, 3);
+    ctx.fillStyle = '#e0e6f0';
+    Art.roundRect(ctx, W / 2 - 144, -H / 2 * SQ + 12, 118, 40, 6); ctx.fill();
+    ctx.fillStyle = '#c9d4e6';
+    Art.roundRect(ctx, W / 2 - 140, -H / 2 * SQ + 14, 44, 24, 5); ctx.fill();
+
+    /* desk */
+    ctx.fillStyle = '#6b4a2c';
+    Art.roundRect(ctx, -W / 2 + 24, -H / 2 * SQ + 10, 110, 52, 6); ctx.fill(); Art.outline(ctx, 3);
+    ctx.fillStyle = '#9aa0a8';
+    Art.roundRect(ctx, -W / 2 + 48, -H / 2 * SQ + 18, 44, 28, 3); ctx.fill(); Art.outline(ctx, 2);
+
+    /* purchased decor */
+    var sv = this.game.save;
+    if (sv.decor.rug) {
+      ctx.fillStyle = '#a4405a';
+      ctx.beginPath(); ctx.ellipse(0, 30 * SQ, 100, 54 * SQ, 0, 0, U.TAU); ctx.fill();
+      ctx.strokeStyle = '#d9738c'; ctx.lineWidth = 6; ctx.stroke();
+    }
+    if (sv.decor.plant) Art.drawProp(ctx, 'bush', -W / 2 + 40, H / 2 * SQ - 30, 1.0, 4, t);
+    if (sv.decor.lamp) {
+      ctx.fillStyle = '#3b2f4d';
+      Art.roundRect(ctx, W / 2 - 60, -30, 8, 60, 3); ctx.fill();
+      ctx.fillStyle = '#ffe1a0';
+      Art.ellipse(ctx, W / 2 - 56, -40, 24, 18); ctx.fill();
+      var lg = ctx.createRadialGradient(W / 2 - 56, -30, 6, W / 2 - 56, -30, 130);
+      lg.addColorStop(0, 'rgba(255,225,160,0.30)');
+      lg.addColorStop(1, 'rgba(255,225,160,0)');
+      ctx.fillStyle = lg;
+      ctx.fillRect(W / 2 - 190, -160, 270, 300);
+    }
+    if (sv.decor.shelf) {
+      ctx.fillStyle = '#6b4a2c';
+      Art.roundRect(ctx, -W / 2 + 20, -H / 2 * SQ - 66, 90, 10, 3); ctx.fill();
+      for (var tr = 0; tr < 3; tr++) {
+        ctx.fillStyle = ['#e8c14a', '#c9f0ea', '#ff7a3c'][tr];
+        Art.ellipse(ctx, -W / 2 + 36 + tr * 28, -H / 2 * SQ - 74, 7, 9); ctx.fill(); Art.outline(ctx, 2);
+      }
+    }
+
+    /* hub fixtures */
+    if (this.mode === 'hub') {
+        this.drawCounter(ctx, -220, 0, '#4a7fd8', 'REALITY');
+      this.drawCounter(ctx, 220, 0, '#d84a4a', 'TRIAL');
+      this.drawGate(ctx, 0, -112, t);
+    }
+
+    /* player */
+    var pp = P(this.px, this.py);
+    Art.shadow(ctx, pp.x, pp.y, 16);
+    Art.chibi(ctx, {
+      x: pp.x, y: pp.y, scale: 1.3, phase: this.animPhase, moving: this.moving,
+      body: this.game.playerTint(), skin: '#f5c9a0', hair: '#5b3d2b', legs: '#3f6ea8',
+      faceDir: Math.cos(this.pfacing) > 0.25 ? 1 : (Math.cos(this.pfacing) < -0.25 ? -1 : 0)
+    });
+
+    ctx.restore();
+
+    /* ---- overlay UI ---- */
+    Input.stickEnabled = true;
+    V.HUD.drawStick(ctx, cw, ch, s);
+
+    if (this.mode === 'hub') {
+      UI.text(ctx, D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency), 16 * s, 22 * s, { size: 18, weight: '800', colour: '#ffe45c' });
+      UI.text(ctx, 'Trial ' + sv.trial + ' / ' + D.TOTAL_TRIALS + '   deaths ' + sv.deaths + '/' + D.DEATH_LIMIT,
+        16 * s, 44 * s, { size: 12, colour: 'rgba(255,255,255,0.7)' });
+      if (sv.gem) {
+        var gem = D.GEMS[sv.gem.id];
+        Art.drawGem(ctx, cw - 32 * s, 30 * s, 14 * s, gem, t);
+        UI.text(ctx, gem.name + ' ' + U.roman(Save.gemLevel(sv)), cw - 52 * s, 30 * s,
+          { size: 12, align: 'right', colour: gem.glow });
+      }
+      var income = Save.passiveIncome(sv);
+      if (income > 0) {
+        UI.text(ctx, '+' + income + ' / trial', 16 * s, 62 * s, { size: 11, colour: '#7fe08a' });
+      }
+
+      /* weapon selector - the scythe shows up here once discovered */
+      var ownedW = [];
+      for (var wi = 0; wi < D.WEAPON_ORDER.length; wi++) {
+        if (sv.weapons[D.WEAPON_ORDER[wi]]) ownedW.push(D.WEAPON_ORDER[wi]);
+      }
+      var curW = D.WEAPONS[sv.weapon];
+      var wBtnW = Math.min(150 * s, cw * 0.42);
+      if (UI.button(ctx, 'weapon', cw - wBtnW - 14 * s, ch - 62 * s, wBtnW, 40 * s,
+        curW.name + (ownedW.length > 1 ? '  >' : ''), {
+          size: 13, sub: 'Lv ' + Save.weaponLevel(sv) + (ownedW.length > 1 ? '  tap to swap' : ''),
+          disabled: ownedW.length < 2
+        })) this.game.cycleWeapon();
+
+      if (this.prompt) {
+        var bw = Math.min(240 * s, cw * 0.6);
+        if (UI.button(ctx, 'actionbtn', cw / 2 - bw / 2, ch - 122 * s, bw, 44 * s, this.prompt.label)) {
+          this.trigger(this.prompt.id);
+        }
+      } else {
+        UI.text(ctx, 'walk to a counter or the gate', cw / 2, ch - 22 * s,
+          { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+      }
+    }
+
+    if (this.dialog) {
+      var dw = Math.min(420 * s, cw - 40);
+      UI.panel(ctx, cw / 2 - dw / 2, ch - 74 * s, dw, 44 * s, { fill: 'rgba(14,10,22,0.85)' });
+      UI.text(ctx, this.dialog, cw / 2, ch - 52 * s, { size: 14, align: 'center', colour: 'rgba(255,240,220,0.92)' });
+    }
+
+    if (this.fade > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,' + this.fade + ')';
+      ctx.fillRect(0, 0, cw, ch);
+    }
+  };
+
+  RoomScene.prototype.drawCounter = function (ctx, x, y, colour, label) {
+    var yy = y * Art.SQUASH;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    Art.ellipse(ctx, x, yy + 20, 52, 16); ctx.fill();
+    ctx.fillStyle = colour;
+    Art.roundRect(ctx, x - 48, yy - 30, 96, 50, 8); ctx.fill(); Art.outline(ctx, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    Art.roundRect(ctx, x - 42, yy - 24, 84, 14, 5); ctx.fill();
+    UI.text(ctx, label, x, yy + 34, { size: 11, align: 'center', weight: '800', colour: 'rgba(255,255,255,0.85)' });
+  };
+
+  RoomScene.prototype.drawGate = function (ctx, x, y, t) {
+    var yy = y * Art.SQUASH;
+    var pulse = 0.6 + 0.25 * Math.sin(t * 2.2);
+    var g = ctx.createRadialGradient(x, yy - 20, 4, x, yy - 20, 60);
+    g.addColorStop(0, 'rgba(180,120,255,' + pulse + ')');
+    g.addColorStop(1, 'rgba(80,40,140,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 70, yy - 92, 140, 150);
+    ctx.strokeStyle = '#b58cff'; ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.ellipse(x, yy - 20, 34, 46, 0, 0, U.TAU);
+    ctx.stroke();
+    UI.text(ctx, 'THE GATE', x, yy - 82, { size: 12, align: 'center', weight: '800', colour: '#e0ccff' });
+  };
+
+  /* ================================================================ CUTSCENE
+     GDD 2: Garatu arrives through a gate and takes the player. */
+  function CutsceneScene(game, kind) {
+    this.game = game;
+    this.kind = kind || 'abduction';
+    this.t = 0;
+    this.beat = 0;
+    this.lines = this.kind === 'abduction' ? [
+      { at: 0.0, text: null },
+      { at: 1.6, text: 'The air splits open.' },
+      { at: 4.2, text: '"This is the first of many trials."' },
+      { at: 7.0, text: '"We hope you can entertain us more."' },
+      { at: 10.0, text: null }
+    ] : [
+      { at: 0.0, text: null },
+      { at: 1.4, text: '"Fifty trials. You are still standing."' },
+      { at: 4.4, text: '"Then meet what waits underneath."' },
+      { at: 7.4, text: null }
+    ];
+    this.duration = this.kind === 'abduction' ? 12 : 9;
+    Audio.music(null);
+    Audio.play('warp');
+  }
+
+  CutsceneScene.prototype.update = function (dt) {
+    this.t += dt;
+    if (this.t > this.duration || Input.wasPressed('confirm') || Input.wasPressed('skip')) {
+      this.game.cutsceneDone(this.kind);
+    }
+  };
+
+  CutsceneScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch), t = this.t;
+    var line = null;
+    for (var i = 0; i < this.lines.length; i++) if (t >= this.lines[i].at) line = this.lines[i].text;
+
+    ctx.fillStyle = '#0d0916';
+    ctx.fillRect(0, 0, cw, ch);
+
+    /* gate opening */
+    var gateT = U.clamp((t - 0.6) / 1.6, 0, 1);
+    var gx = cw * 0.62, gy = ch * 0.44;
+    var gr = 20 + gateT * 130 * s;
+    var g = ctx.createRadialGradient(gx, gy, 2, gx, gy, gr);
+    g.addColorStop(0, 'rgba(255,220,255,0.95)');
+    g.addColorStop(0.4, 'rgba(170,90,255,0.55)');
+    g.addColorStop(1, 'rgba(60,20,90,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(gx - gr, gy - gr * 1.4, gr * 2, gr * 2.8);
+
+    ctx.strokeStyle = 'rgba(230,190,255,' + (0.5 + 0.4 * Math.sin(t * 6)) + ')';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(gx, gy, gr * 0.55, gr * 0.95, 0, 0, U.TAU);
+    ctx.stroke();
+
+    /* Garatu emerging */
+    if (t > 1.4) {
+      var em = U.clamp((t - 1.4) / 1.4, 0, 1);
+      ctx.globalAlpha = em;
+      Art.drawGaratu(ctx, gx, gy + 30 * s, 1.5 * s * (0.7 + em * 0.5), t);
+      ctx.globalAlpha = 1;
+    }
+
+    /* the player, small, being lifted */
+    var lift = U.clamp((t - 6.5) / 3, 0, 1);
+    var pxx = U.lerp(cw * 0.28, gx - 40 * s, lift);
+    var pyy = U.lerp(ch * 0.62, gy + 10 * s, lift) - lift * 20 * s;
+    if (t < 10.5 || this.kind !== 'abduction') {
+      Art.shadow(ctx, pxx, ch * 0.62, 16 * (1 - lift * 0.7), 0.2 * (1 - lift));
+      Art.chibi(ctx, {
+        x: pxx, y: pyy, scale: 1.3 * s, phase: t * 3, moving: false,
+        body: this.game.playerTint(), skin: '#f5c9a0', hair: '#5b3d2b', legs: '#3f6ea8',
+        faceDir: 1, lean: lift * 0.5
+      });
+    }
+
+    /* fade out at the end */
+    if (t > this.duration - 2) {
+      ctx.fillStyle = 'rgba(0,0,0,' + U.clamp((t - (this.duration - 2)) / 2, 0, 1) + ')';
+      ctx.fillRect(0, 0, cw, ch);
+    }
+
+    if (line) {
+      var w = Math.min(460 * s, cw - 36);
+      UI.panel(ctx, cw / 2 - w / 2, ch - 88 * s, w, 52 * s, { fill: 'rgba(10,8,16,0.82)' });
+      UI.text(ctx, line, cw / 2, ch - 62 * s, { size: 16, align: 'center', colour: '#ffe9c9' });
+    }
+    Input.zone('skip', cw - 90 * s, 14 * s, 76 * s, 30 * s);
+    UI.button(ctx, 'skip', cw - 90 * s, 14 * s, 76 * s, 30 * s, 'Skip', { size: 12 });
+  };
+
+  /* =================================================================== SHOPS */
+  function ShopScene(game, which) {
+    this.game = game;
+    this.which = which;
+    this.items = which === 'reality' ? D.REALITY_SHOP : D.TRIAL_SHOP;
+    this.scroll = 0;
+    this.t = 0;
+    this.flash = null; this.flashTime = 0;
+    Audio.music('hub');
+  }
+
+  ShopScene.prototype.update = function (dt) {
+    this.t += dt;
+    if (this.flashTime > 0) { this.flashTime -= dt; if (this.flashTime <= 0) this.flash = null; }
+    if (Input.wasPressed('back')) this.game.setScene(new S.RoomScene(this.game, 'hub'));
+  };
+
+  ShopScene.prototype.buy = function (item) {
+    var res = this.game.buy(item);
+    this.flash = res.message;
+    this.flashTime = 2;
+    Audio.play(res.ok ? 'coin' : 'deny');
+  };
+
+  ShopScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch);
+    var sv = this.game.save;
+    ctx.fillStyle = this.which === 'reality' ? '#1e2a3d' : '#2d1a26';
+    ctx.fillRect(0, 0, cw, ch);
+
+    var title = this.which === 'reality' ? 'Reality Shop' : 'Trial Shop';
+    UI.text(ctx, title, 18 * s, 26 * s, { size: 22, weight: '800' });
+    UI.text(ctx, D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency), cw - 18 * s, 26 * s,
+      { size: 20, align: 'right', weight: '800', colour: '#ffe45c' });
+
+    var listTop = 52 * s, listBottom = ch - 62 * s;
+    var rowH = 62 * s;
+    var maxScroll = Math.max(0, this.items.length * rowH - (listBottom - listTop));
+
+    /* drag to scroll */
+    if (Input.stick.active) {
+      /* the stick doubles as a scroll drag inside shop lists */
+      this.scroll = U.clamp(this.scroll - (Input.stick.y - Input.stick.oy) * 0.06, 0, maxScroll);
+    }
+    if (Input.keys.down) this.scroll = U.clamp(this.scroll + 340 * 0.016, 0, maxScroll);
+    if (Input.keys.up) this.scroll = U.clamp(this.scroll - 340 * 0.016, 0, maxScroll);
+    Input.stickEnabled = true;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, listTop, cw, listBottom - listTop);
+    ctx.clip();
+
+    for (var i = 0; i < this.items.length; i++) {
+      var it = this.items[i];
+      var y = listTop + i * rowH - this.scroll;
+      if (y > listBottom || y + rowH < listTop) continue;
+
+      var count = Save.ownedCount(sv, it.id);
+      var owned = count > 0 && !it.stack;
+      var locked = it.needs && !Save.ownedCount(sv, it.needs);
+      var afford = sv.currency >= it.price;
+
+      var x = 14 * s, w = cw - 28 * s;
+      UI.panel(ctx, x, y + 4 * s, w, rowH - 10 * s, {
+        fill: owned ? 'rgba(60,90,60,0.55)' : 'rgba(30,26,42,0.8)'
+      });
+      UI.text(ctx, it.name, x + 14 * s, y + 22 * s, { size: 15, weight: '700' });
+      UI.text(ctx, it.cat, x + 14 * s, y + 40 * s, { size: 10, colour: 'rgba(255,255,255,0.45)' });
+      UI.text(ctx, it.desc + (it.stack && count ? '  (x' + count + ')' : ''), x + 60 * s, y + 40 * s,
+        { size: 11, colour: 'rgba(255,255,255,0.7)' });
+
+      var bw = 88 * s;
+      var label = owned ? 'Owned' : (locked ? 'Locked' : D.CURRENCY.symbol + ' ' + it.price);
+      if (UI.button(ctx, 'buy' + i, x + w - bw - 12 * s, y + 16 * s, bw, 32 * s, label, {
+        disabled: owned || locked || !afford,
+        fill: afford ? 'rgba(70,110,70,0.9)' : 'rgba(52,44,68,0.9)', size: 13
+      })) this.buy(it);
+    }
+    ctx.restore();
+
+    if (maxScroll > 0) {
+      var trackH = listBottom - listTop;
+      var thumb = trackH * (trackH / (trackH + maxScroll));
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      Art.roundRect(ctx, cw - 7 * s, listTop + (this.scroll / maxScroll) * (trackH - thumb), 4 * s, thumb, 2 * s);
+      ctx.fill();
+    }
+
+    if (this.flash) {
+      UI.text(ctx, this.flash, cw / 2, ch - 74 * s, { size: 13, align: 'center', colour: '#ffe45c' });
+    }
+    if (UI.button(ctx, 'back', cw / 2 - 80 * s, ch - 52 * s, 160 * s, 38 * s, 'Back to room')) {
+      this.game.setScene(new S.RoomScene(this.game, 'hub'));
+    }
+  };
+
+  /* ================================================================ RANKING
+     GDD 6.2 / 12. Placement, outcome, one Continue action. */
+  function RankingScene(game, result) {
+    this.game = game;
+    this.result = result;
+    this.t = 0;
+    this.reveal = 0;
+    Audio.music('hub');
+  }
+
+  RankingScene.prototype.update = function (dt) {
+    this.t += dt;
+    this.reveal = U.clamp(this.reveal + dt * 0.9, 0, 1);
+    if (Input.wasPressed('confirm') && this.reveal >= 1) this.game.leaveRanking();
+  };
+
+  RankingScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch);
+    var r = this.result;
+    var outcome = r.tier.outcome;
+
+    var bg = outcome === 'reward' ? '#1d3324' : (outcome === 'neutral' ? '#2a2740' : '#331c22');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, cw, ch);
+
+    var w = Math.min(420 * s, cw - 28), x = cw / 2 - w / 2;
+    var y = Math.max(18 * s, ch / 2 - 190 * s);
+    UI.panel(ctx, x, y, w, Math.min(380 * s, ch - 36 * s));
+
+    UI.text(ctx, r.trial.label, cw / 2, y + 26 * s, { size: 14, align: 'center', colour: 'rgba(255,255,255,0.65)' });
+
+    var pct = Math.round(U.lerp(99, r.percentile, U.easeOut(this.reveal)));
+    UI.text(ctx, 'TOP ' + pct + '%', cw / 2, y + 66 * s, {
+      size: 40, align: 'center', weight: '800',
+      colour: outcome === 'reward' ? '#8ce89a' : (outcome === 'neutral' ? '#ffe45c' : '#ff7a7a')
+    });
+    UI.text(ctx, r.tier.label, cw / 2, y + 96 * s, { size: 14, align: 'center', colour: 'rgba(255,255,255,0.7)' });
+
+    var msg = outcome === 'reward' ? 'The watchers are pleased.'
+      : (outcome === 'neutral' ? 'Survived. Nothing earned.' : 'Not enough. Run it again.');
+    if (r.died) msg = 'You died. Back to the start of this trial.';
+    UI.text(ctx, msg, cw / 2, y + 122 * s, { size: 13, align: 'center', colour: 'rgba(255,255,255,0.8)' });
+
+    /* stat rows */
+    var rows = [
+      ['Score', U.fmtNum(r.score) + ' / ' + U.fmtNum(r.par)],
+      ['Kills', String(r.kills)],
+      ['Damage taken', String(r.damageTaken)],
+      ['Time left', U.fmtTime(r.timeLeft)]
+    ];
+    if (r.payout) rows.push(['Reward', D.CURRENCY.symbol + ' ' + U.fmtNum(r.payout)]);
+    if (r.income) rows.push(['Business income', D.CURRENCY.symbol + ' ' + U.fmtNum(r.income)]);
+    if (r.debuffName) rows.push(['Debuff next attempt', r.debuffName]);
+
+    var ry = y + 150 * s;
+    for (var i = 0; i < rows.length; i++) {
+      UI.text(ctx, rows[i][0], x + 22 * s, ry + i * 22 * s, { size: 12, colour: 'rgba(255,255,255,0.6)' });
+      UI.text(ctx, rows[i][1], x + w - 22 * s, ry + i * 22 * s, { size: 12, align: 'right', colour: '#fff' });
+    }
+
+    var by = Math.min(y + 340 * s, ch - 56 * s);
+    if (UI.button(ctx, 'continue', cw / 2 - 90 * s, by, 180 * s, 40 * s, 'Continue')) {
+      if (this.reveal >= 0.9) this.game.leaveRanking();
+      else this.reveal = 1;
+    }
+  };
+
+  /* =============================================================== GEM GRANT
+     GDD 8: received once, during the first trial, fully random. */
+  function GemScene(game, gemId) {
+    this.game = game;
+    this.gem = D.GEMS[gemId];
+    this.t = 0;
+    Audio.play('gem');
+  }
+  GemScene.prototype.update = function (dt) { this.t += dt; };
+  GemScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch), t = this.t;
+    ctx.fillStyle = '#150f22';
+    ctx.fillRect(0, 0, cw, ch);
+    var g = ctx.createRadialGradient(cw / 2, ch * 0.38, 10, cw / 2, ch * 0.38, 220 * s);
+    g.addColorStop(0, this.gem.colour + 'cc');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cw, ch);
+
+    Art.drawGem(ctx, cw / 2, ch * 0.38, 46 * s, this.gem, t);
+    UI.text(ctx, this.gem.name, cw / 2, ch * 0.55, { size: 28, align: 'center', weight: '800', colour: this.gem.glow });
+    UI.text(ctx, this.gem.role, cw / 2, ch * 0.55 + 26 * s, { size: 13, align: 'center', colour: 'rgba(255,255,255,0.65)' });
+    UI.text(ctx, this.gem.desc(1), cw / 2, ch * 0.55 + 48 * s, { size: 13, align: 'center', colour: '#fff' });
+    UI.text(ctx, 'It grows as you do.', cw / 2, ch * 0.55 + 72 * s, { size: 11, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+
+    if (UI.button(ctx, 'continue', cw / 2 - 80 * s, ch - 70 * s, 160 * s, 40 * s, 'Take it')) {
+      this.game.gemTaken();
+    }
+  };
+
+  /* ============================================================== FULL RESET
+     GDD 9: 25 deaths wipes everything. */
+  function ResetScene(game) {
+    this.game = game;
+    this.t = 0;
+    Audio.music(null);
+    Audio.play('lose');
+  }
+  ResetScene.prototype.update = function (dt) { this.t += dt; };
+  ResetScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch);
+    ctx.fillStyle = '#0d0710';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.globalAlpha = 0.25;
+    Art.drawGaratu(ctx, cw / 2, ch * 0.42, 1.6 * s, this.t);
+    ctx.globalAlpha = 1;
+    UI.text(ctx, 'TWENTY-FIVE', cw / 2, ch * 0.55, { size: 34, align: 'center', weight: '800', colour: '#ff5f6d' });
+    UI.text(ctx, '"You bored them. Start again."', cw / 2, ch * 0.55 + 34 * s,
+      { size: 15, align: 'center', colour: 'rgba(255,220,220,0.8)' });
+    UI.text(ctx, 'Currency, gem, purchases and weapons are gone. The scythe is hidden again.',
+      cw / 2, ch * 0.55 + 60 * s, { size: 11, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+    if (UI.button(ctx, 'continue', cw / 2 - 90 * s, ch - 74 * s, 180 * s, 42 * s, 'Start again')) {
+      this.game.confirmFullReset();
+    }
+  };
+
+  /* ================================================================ VICTORY */
+  function VictoryScene(game) { this.game = game; this.t = 0; Audio.play('win'); Audio.music('calm'); }
+  VictoryScene.prototype.update = function (dt) { this.t += dt; };
+  VictoryScene.prototype.render = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch), t = this.t;
+    var g = ctx.createLinearGradient(0, 0, 0, ch);
+    g.addColorStop(0, '#2b1c3f'); g.addColorStop(1, '#a35d7a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
+    for (var i = 0; i < 40; i++) {
+      var a = (i / 40) * U.TAU + t * 0.2;
+      ctx.globalAlpha = 0.3 + 0.3 * Math.sin(t * 2 + i);
+      ctx.fillStyle = '#ffe9c9';
+      Art.ellipse(ctx, cw / 2 + Math.cos(a) * (120 + i * 4) * s, ch * 0.4 + Math.sin(a) * (70 + i * 2) * s, 2, 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    UI.text(ctx, 'THE WATCHERS ARE SILENT', cw / 2, ch * 0.4, { size: 26, align: 'center', weight: '800', colour: '#ffe9c9' });
+    UI.text(ctx, 'Aurelith is down. Fifty trials behind you.', cw / 2, ch * 0.4 + 34 * s,
+      { size: 14, align: 'center', colour: 'rgba(255,240,220,0.85)' });
+    var sv = this.game.save;
+    UI.text(ctx, 'deaths ' + sv.deaths + '   ' + D.CURRENCY.symbol + ' ' + U.fmtNum(sv.lifetimeEarned) + ' earned',
+      cw / 2, ch * 0.4 + 58 * s, { size: 12, align: 'center', colour: 'rgba(255,255,255,0.6)' });
+    if (UI.button(ctx, 'continue', cw / 2 - 90 * s, ch - 76 * s, 180 * s, 42 * s, 'Back to the start')) {
+      this.game.setScene(new S.StartScene(this.game));
+    }
+  };
+
+  S.StartScene = StartScene;
+  S.HelpScene = HelpScene;
+  S.RoomScene = RoomScene;
+  S.CutsceneScene = CutsceneScene;
+  S.ShopScene = ShopScene;
+  S.RankingScene = RankingScene;
+  S.GemScene = GemScene;
+  S.ResetScene = ResetScene;
+  S.VictoryScene = VictoryScene;
+  V.S = S;
+})(window.V = window.V || {});
+
+/* ===== src/js/game.js ===== */
+/* Velthiros - game shell: loop, scene stack, run state and progression rules */
+(function (V) {
+  'use strict';
+
+  var U = V.U, D = V.D, Save = V.Save, Input = V.Input, Audio = V.Audio, S = V.S, UI = V.UI;
+
+  function Game(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.input = Input;
+    this.save = Save.load();
+    this.scene = null;
+    this.last = 0;
+    this.acc = 0;
+    this.running = false;
+    this.dpr = 1;
+    this.cw = 0; this.ch = 0;
+    this.fade = { a: 0, dir: 0, next: null };
+
+    /* dev affordance: ?idle=10 shortens the 5-minute scythe idle for testing */
+    var q = new URLSearchParams(window.location.search);
+    var idleOverride = parseFloat(q.get('idle'));
+    this.idleUnlockSeconds = (isFinite(idleOverride) && idleOverride > 0) ? idleOverride : D.IDLE_UNLOCK_SECONDS;
+    this.debug = q.get('debug') === '1';
+    var startTrial = parseInt(q.get('trial'), 10);
+    this.forceTrial = (isFinite(startTrial) && startTrial > 0) ? startTrial : 0;
+  }
+
+  /* ================================================================== boot */
+  Game.prototype.start = function () {
+    var self = this;
+    Input.init(this.canvas);
+    this.resize();
+    window.addEventListener('resize', function () { self.resize(); });
+    window.addEventListener('orientationchange', function () { setTimeout(function () { self.resize(); }, 120); });
+
+    /* audio needs a gesture */
+    var unlock = function () {
+      Audio.init();
+      Audio.resume();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+
+    this.setScene(new S.StartScene(this));
+    this.running = true;
+    this.last = performance.now();
+    requestAnimationFrame(function (t) { self.frame(t); });
+  };
+
+  Game.prototype.resize = function () {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    var w = this.canvas.clientWidth || window.innerWidth;
+    var h = this.canvas.clientHeight || window.innerHeight;
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.dpr = dpr;
+    this.cw = w; this.ch = h;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+
+  Game.prototype.frame = function (now) {
+    var self = this;
+    var dt = Math.min((now - this.last) / 1000, 0.05);
+    this.last = now;
+
+    Input.update();
+    if (this.scene && this.scene.update) this.scene.update(dt);
+
+    var ctx = this.ctx;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, this.cw, this.ch);
+    if (this.scene && this.scene.render) this.scene.render(ctx, this.cw, this.ch);
+
+    if (this.debug) {
+      UI.text(ctx, Math.round(1 / Math.max(dt, 0.0001)) + ' fps', 8, this.ch - 10, { size: 10, colour: '#0f0' });
+    }
+
+    Input.endFrame();
+    requestAnimationFrame(function (t) { self.frame(t); });
+  };
+
+  Game.prototype.setScene = function (scene) {
+    this.scene = scene;
+    Input.stickEnabled = false;
+    Input.down = {};
+    Input.stick.active = false;
+  };
+
+  Game.prototype.persist = function () { Save.write(this.save); };
+
+  /* ============================================================== run flow */
+  Game.prototype.newGame = function () {
+    this.save = Save.newGame(this.save);
+    this.persist();
+    if (this.forceTrial) {
+      this.save.trial = this.forceTrial;
+      this.save.gem = { id: D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)] };
+      this.save.seenIntro = true;
+      this.persist();
+      return this.setScene(new S.RoomScene(this, 'hub'));
+    }
+    this.setScene(new S.RoomScene(this, 'intro'));
+  };
+
+  Game.prototype.continueRun = function () {
+    if (!this.save.started) return;
+    if (!this.save.seenIntro) return this.setScene(new S.RoomScene(this, 'intro'));
+    this.setScene(new S.RoomScene(this, 'hub'));
+  };
+
+  Game.prototype.startAbduction = function () {
+    this.setScene(new S.CutsceneScene(this, 'abduction'));
+  };
+
+  Game.prototype.cutsceneDone = function (kind) {
+    if (kind === 'abduction') {
+      this.save.seenIntro = true;
+      this.persist();
+      /* GDD 8: the gem is granted once, at random, no player input */
+      if (!this.save.gem) {
+        var id = D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)];
+        this.save.gem = { id: id };
+        this.persist();
+        return this.setScene(new S.GemScene(this, id));
+      }
+      return this.enterTrial();
+    }
+    /* endgame cutscene */
+    this.enterTrial();
+  };
+
+  Game.prototype.gemTaken = function () { this.enterTrial(); };
+
+  /* ---------------------------------------------------------- trial specs */
+  Game.prototype.makeSpec = function (index) {
+    var sv = this.save;
+    var seed = U.hash('velthiros:' + sv.resets + ':' + index);
+    var envIndex = U.hash('env:' + seed) % D.ENVIRONMENTS.length;
+    var env = D.ENVIRONMENTS[envIndex];
+
+    if (sv.endgame) {
+      var wave = sv.endgameWave;
+      if (wave >= 4) {
+        return {
+          index: D.TOTAL_TRIALS + 4, type: 'boss', boss: true, finalBoss: true,
+          env: D.ENVIRONMENTS[2], seed: seed, label: 'Aurelith'
+        };
+      }
+      return {
+        index: D.TOTAL_TRIALS + wave, type: 'defeat', boss: false,
+        env: D.ENVIRONMENTS[(wave + 3) % D.ENVIRONMENTS.length], seed: seed,
+        label: 'Wave ' + wave + ' / 3', endgame: true
+      };
+    }
+
+    var isBoss = (index % D.BOSS_EVERY === 0);
+    if (isBoss) {
+      return {
+        index: index, type: 'boss', boss: true, env: env, seed: seed,
+        label: 'Trial ' + index + ' - Reaper'
+      };
+    }
+    var type = D.TRIAL_ROTATION[(index - 1) % D.TRIAL_ROTATION.length];
+    var typeDef = null;
+    for (var i = 0; i < D.TRIAL_TYPES.length; i++) if (D.TRIAL_TYPES[i].id === type) typeDef = D.TRIAL_TYPES[i];
+    return {
+      index: index, type: type, boss: false, env: env, seed: seed,
+      label: 'Trial ' + index + ' - ' + (typeDef ? typeDef.name : type)
+    };
+  };
+
+  Game.prototype.enterTrial = function () {
+    var spec = this.makeSpec(this.save.trial);
+    var trial = new V.Trial(this, spec);
+    this.setScene(new TrialScene(this, trial));
+  };
+
+  /* ------------------------------------------------------------- outcomes */
+  Game.prototype.onTrialFinished = function (result) {
+    var sv = this.save;
+    var outcome = result.tier.outcome;
+
+    if (result.died) {
+      sv.deaths++;
+      sv.stats.trialsFailed++;
+    }
+    sv.stats.bestRank = Math.min(sv.stats.bestRank, result.percentile);
+
+    if (outcome === 'reward') {
+      /* GDD 6.2: only the top 25% is paid */
+      var base = 45 + result.trial.index * 7;
+      var overPar = U.clamp(result.score / Math.max(1, result.par), 0, 2.2);
+      result.payout = Math.round(base * (0.8 + overPar * 0.6)) + result.bonusCoins;
+      sv.currency += result.payout;
+      sv.lifetimeEarned += result.payout;
+    } else {
+      result.payout = result.bonusCoins;
+      if (result.bonusCoins) { sv.currency += result.bonusCoins; sv.lifetimeEarned += result.bonusCoins; }
+    }
+
+    if (outcome !== 'fail') {
+      /* passive income from Reality Shop businesses (GDD 9) */
+      var income = Save.passiveIncome(sv);
+      if (income > 0) {
+        result.income = income;
+        sv.currency += income;
+        sv.lifetimeEarned += income;
+      }
+      sv.cleared++;
+      sv.debuff = null;
+    } else {
+      /* GDD 6.2: potential debuff on the reattempt */
+      if (Math.random() < 0.7) {
+        var db = D.DEBUFFS[Math.floor(Math.random() * D.DEBUFFS.length)];
+        sv.debuff = db.id;
+        result.debuffName = db.name + ' (' + db.desc + ')';
+      } else {
+        sv.debuff = null;
+      }
+    }
+
+    sv.lastRank = result.percentile;
+    sv.stats.kills += result.kills;
+    this.pendingResult = result;
+    this.persist();
+    this.setScene(new S.RankingScene(this, result));
+  };
+
+  Game.prototype.leaveRanking = function () {
+    var sv = this.save;
+    var r = this.pendingResult;
+
+    /* GDD 9: 25 deaths in a run wipes everything */
+    if (sv.deaths >= D.DEATH_LIMIT) return this.setScene(new S.ResetScene(this));
+
+    var survived = r.tier.outcome !== 'fail';
+
+    if (!survived) {
+      /* death or below-40%: rerun the same trial */
+      return this.enterTrial();
+    }
+
+    if (sv.endgame) {
+      if (r.trial.finalBoss) {
+        sv.beatenGame = true;
+        this.persist();
+        return this.setScene(new S.VictoryScene(this));
+      }
+      sv.endgameWave++;
+      this.persist();
+      return this.enterTrial();
+    }
+
+    sv.trial++;
+    if (sv.trial > D.TOTAL_TRIALS) {
+      /* GDD 10: escalating waves, then the final boss */
+      sv.endgame = true;
+      sv.endgameWave = 1;
+      this.persist();
+      return this.setScene(new S.CutsceneScene(this, 'endgame'));
+    }
+    this.persist();
+    this.setScene(new S.RoomScene(this, 'hub'));
+  };
+
+  Game.prototype.confirmFullReset = function () {
+    this.save = Save.fullReset(this.save);
+    this.setScene(new S.StartScene(this));
+  };
+
+  /* ----------------------------------------------------------------- shop */
+  Game.prototype.buy = function (item) {
+    var sv = this.save;
+    var count = Save.ownedCount(sv, item.id);
+    if (!item.stack && count > 0) return { ok: false, message: 'Already owned.' };
+    if (item.needs && !Save.ownedCount(sv, item.needs)) return { ok: false, message: 'Requires an earlier upgrade.' };
+    if (sv.currency < item.price) return { ok: false, message: 'Not enough ' + D.CURRENCY.name + '.' };
+
+    sv.currency -= item.price;
+    sv.owned[item.id] = item.stack ? count + 1 : true;
+
+    if (item.weapon) {
+      sv.weapons[item.weapon] = true;
+      sv.weapon = item.weapon;
+    }
+    if (item.tint) sv.equippedTint = item.tint;
+    if (item.decor) sv.decor[item.decor] = true;
+
+    this.persist();
+    return { ok: true, message: item.name + ' bought.' + (item.weapon ? ' Equipped.' : '') };
+  };
+
+  Game.prototype.spendConsumable = function (id) {
+    var n = Save.ownedCount(this.save, id);
+    if (n > 0) {
+      this.save.owned[id] = n - 1;
+      if (this.save.owned[id] <= 0) delete this.save.owned[id];
+      this.persist();
+    }
+  };
+
+  Game.prototype.consumableCounts = function () {
+    return {
+      potion: Save.ownedCount(this.save, 'c_potion'),
+      tonic: Save.ownedCount(this.save, 'c_tonic'),
+      smoke: Save.ownedCount(this.save, 'c_smoke')
+    };
+  };
+
+  Game.prototype.playerTint = function () { return this.save.equippedTint || '#4f8fd6'; };
+
+  /* GDD 7.1: the scythe unlock lasts for the rest of this run only. */
+  Game.prototype.unlockScythe = function () {
+    this.save.scytheUnlocked = true;
+    this.save.weapons.scythe = true;
+    this.save.weapon = 'scythe';
+    this.persist();
+  };
+
+  Game.prototype.cycleWeapon = function () {
+    var owned = [];
+    for (var i = 0; i < D.WEAPON_ORDER.length; i++) {
+      var id = D.WEAPON_ORDER[i];
+      if (this.save.weapons[id]) owned.push(id);
+    }
+    if (owned.length < 2) return;
+    var idx = owned.indexOf(this.save.weapon);
+    this.save.weapon = owned[(idx + 1) % owned.length];
+    this.persist();
+  };
+
+  /* ============================================================ TRIAL SCENE */
+  function TrialScene(game, trial) {
+    this.game = game;
+    this.trial = trial;
+  }
+  TrialScene.prototype.update = function (dt) {
+    if (V.Input.wasPressed('back')) this.trial.paused = !this.trial.paused;
+    this.trial.update(dt);
+  };
+  TrialScene.prototype.render = function (ctx, cw, ch) {
+    this.trial.render(ctx, cw, ch);
+    V.HUD.draw(ctx, this.trial, cw, ch);
+  };
+
+  V.Game = Game;
+  V.TrialScene = TrialScene;
+})(window.V = window.V || {});
+
+/* ===== src/js/main.js ===== */
+/* Velthiros - bootstrap */
+(function () {
+  'use strict';
+  function boot() {
+    var canvas = document.getElementById('game');
+    var game = new window.V.Game(canvas);
+    window.VELTHIROS = game;
+    game.start();
+    var splash = document.getElementById('boot');
+    if (splash) {
+      splash.classList.add('gone');
+      setTimeout(function () { splash.parentNode && splash.parentNode.removeChild(splash); }, 500);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+</script>
