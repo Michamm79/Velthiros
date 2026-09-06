@@ -191,10 +191,14 @@ async function main() {
     /* 1. move: stand on the waypoint */
     t.player.x = t.tut.waypoint.x; t.player.y = t.tut.waypoint.y;
     step(); guard('weapon');
-    /* 2. weapon: stand on the sword pedestal */
-    t.player.x = t.tut.picks[0].x; t.player.y = t.tut.picks[0].y;
+    /* 2. weapon: take the BATTLEAXE. Deliberately not the sword - a blank save
+       already reads `weapon: 'sword'`, so only a non-default pick can show
+       that nothing has been written yet. A pedestal is a fitting, so an
+       accidental circle has to cost nothing. */
+    t.player.x = t.tut.picks[1].x; t.player.y = t.tut.picks[1].y;
     step();
-    const gotWeapon = { player: t.player.weaponId, save: g.save.weapon };
+    const firstPick = { player: t.player.weaponId, save: g.save.weapon,
+                        owns: Object.keys(g.save.weapons).filter((k) => g.save.weapons[k]) };
     guard('strike');
     /* 3. strike: the dummy must be inert - it should never have moved */
     const dummy = t.tut.dummy;
@@ -202,7 +206,19 @@ async function main() {
     for (let i = 0; i < 120; i++) t.update(1 / 60);
     const dummyMoved = Math.abs(dummy.x - dummyStart.x) + Math.abs(dummy.y - dummyStart.y);
     const stillStrike = t.tut.beatId === 'strike';
-    dummy.hurt(999, 0, 0, t.player);
+    /* try the sword mid-beat, then the bow, then go back to the battleaxe -
+       this is the "I stepped in the wrong circle, let me try them" path */
+    t.player.x = t.tut.picks[0].x; t.player.y = t.tut.picks[0].y;
+    step();
+    const swapped = { player: t.player.weaponId, save: g.save.weapon };
+    t.player.x = t.tut.picks[2].x; t.player.y = t.tut.picks[2].y;
+    step();
+    const swappedAgain = t.player.weaponId;
+    /* settle on the battleaxe, which is what should actually be granted */
+    t.player.x = t.tut.picks[1].x; t.player.y = t.tut.picks[1].y;
+    step();
+    const dummySurvived = !dummy.dead;
+    for (let h = 0; h < 3; h++) dummy.hurt(5, 0, 0, t.player);
     step(); guard('fight');
     /* 4. fight: both goblins down */
     t.tut.foes.forEach((f) => f.hurt(999, 0, 0, t.player));
@@ -229,9 +245,19 @@ async function main() {
     t.player.x = t.tut.gemSpot.x; t.player.y = t.tut.gemSpot.y;
     step();
     const gem = g.save.gem && g.save.gem.id;
+    /* the gem beat closes the pedestals - only now is the weapon really yours */
+    const committed = { save: g.save.weapon, player: t.player.weaponId,
+                        owns: Object.keys(g.save.weapons).filter((k) => g.save.weapons[k]),
+                        locked: !!t.tut.weaponLocked,
+                        ringsHidden: t.tut.picks.every((m) => m.hidden) };
+    /* standing on a closed pedestal must no longer change anything */
+    t.player.x = t.tut.picks[2].x; t.player.y = t.tut.picks[2].y;
+    step();
+    committed.afterClosed = t.player.weaponId;
     guard('warden');
     return {
-      order, gotWeapon, dummyMoved: Math.round(dummyMoved), stillStrike, halfWay, gem, wasHidden,
+      order, firstPick, swapped, swappedAgain, dummySurvived, committed,
+      dummyMoved: Math.round(dummyMoved), stillStrike, halfWay, gem, wasHidden,
       wardenAlive: !!t.tut.warden && !t.tut.warden.dead
     };
   });
@@ -239,9 +265,22 @@ async function main() {
   check('the beats advance in order, and only when their own test passes',
     beatsInOrder && beatWalk.stillStrike && beatWalk.halfWay === 'dodge',
     JSON.stringify(beatWalk.order));
-  check('picking a pedestal grants that weapon',
-    beatWalk.gotWeapon.player === 'sword' && beatWalk.gotWeapon.save === 'sword',
-    JSON.stringify(beatWalk.gotWeapon));
+  check('a pedestal only lends the weapon - nothing reaches the save yet',
+    beatWalk.firstPick.player === 'battleaxe' && beatWalk.firstPick.save === 'sword' &&
+    beatWalk.firstPick.owns.join(',') === 'sword',
+    JSON.stringify(beatWalk.firstPick));
+  check('you can walk back and swap weapons, including mid-beat',
+    beatWalk.swapped.player === 'sword' && beatWalk.swappedAgain === 'bow' &&
+    beatWalk.swapped.save === 'sword',
+    JSON.stringify({ swapped: beatWalk.swapped, then: beatWalk.swappedAgain }));
+  check('the dummy outlasts a weapon, so all three can be tried on it',
+    beatWalk.dummySurvived === true);
+  check('only the weapon you walk away with is granted, and the pedestals then close',
+    beatWalk.committed.save === 'battleaxe' && beatWalk.committed.player === 'battleaxe' &&
+    beatWalk.committed.owns.sort().join(',') === 'battleaxe,sword' &&
+    beatWalk.committed.locked && beatWalk.committed.ringsHidden &&
+    beatWalk.committed.afterClosed === 'battleaxe',
+    JSON.stringify(beatWalk.committed));
   check('the training dummy never moves or fights back', beatWalk.dummyMoved === 0,
     'drifted ' + beatWalk.dummyMoved + 'u');
   check('the hide beat plants cover you can actually vanish into', beatWalk.wasHidden === true);

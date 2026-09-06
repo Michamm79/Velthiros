@@ -414,6 +414,9 @@
       this.moving = false;
       this.facing = Math.atan2(p.y - this.y, p.x - this.x);
       this.vx = 0; this.vy = 0;
+      /* separate() runs after this and will shove it around like any other
+         body, so put it back on its post every frame */
+      this.x = this.homeX; this.y = this.homeY;
       return;
     }
 

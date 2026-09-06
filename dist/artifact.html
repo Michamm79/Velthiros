@@ -3183,6 +3183,9 @@ html, body {
       this.moving = false;
       this.facing = Math.atan2(p.y - this.y, p.x - this.x);
       this.vx = 0; this.vy = 0;
+      /* separate() runs after this and will shove it around like any other
+         body, so put it back on its post every frame */
+      this.x = this.homeX; this.y = this.homeY;
       return;
     }
 
@@ -4588,6 +4591,7 @@ html, body {
     { id: 'bow', x: 250, y: -70, label: 'BOW' }
   ];
 
+
   /* ------------------------------------------------------------- helpers */
 
   /* Randomly-scattered cover would otherwise land on top of a pedestal or in
@@ -4660,39 +4664,34 @@ html, body {
       id: 'weapon',
       enter: function (tr) {
         lock(tr, []);
-        say(tr, 'Three of them left something behind. Stand on one to take it - the other two stay for sale.');
+        say(tr, 'Three of them left something behind. Stand on a circle to pick that one up - '
+              + 'you can walk back and swap as often as you like.');
         tr.tut.picks = [];
+        tr.tut.pickLabels = [];
         for (var i = 0; i < PEDESTALS.length; i++) {
           var pd = PEDESTALS[i];
           var m = marker(tr, pd.x, pd.y, 80, '#ffe45c');
           m.weapon = pd.id;
           tr.tut.picks.push(m);
-          label(tr, pd.x, pd.y, pd.label, '#ffe45c', -46);
+          tr.tut.pickLabels.push(label(tr, pd.x, pd.y, pd.label, '#ffe45c', -46));
         }
       },
-      done: function (tr) {
-        for (var i = 0; i < tr.tut.picks.length; i++) {
-          var m = tr.tut.picks[i];
-          if (!inMarker(tr, m)) continue;
-          T.takeWeapon(tr, m.weapon);
-          return true;
-        }
-        return false;
-      },
-      exit: function (tr) {
-        for (var i = 0; i < tr.tut.picks.length; i++) tr.tut.picks[i].active = false;
-      }
+      done: function (tr) { return !!tr.tut.chosenWeapon; }
     },
 
     {
       id: 'strike',
       enter: function (tr) {
         lock(tr, ['attack']);
-        say(tr, 'Tap ATK to swing. You strike where you are facing - break the dummy.');
-        tr.tut.dummy = tr.spawnEnemy('dummy', 0, -330, { hpScale: 1 });
+        say(tr, 'Tap ATK to swing - you strike where you are facing. Land three hits. '
+              + 'The pedestals are still open, so try all three on it if you want.');
+        tr.tut.hits = 0;
+        /* The dummy is a range, not a kill. It has to outlast a battleaxe so
+           that trying every weapon on it is actually possible. */
+        tr.tut.dummy = tr.spawnEnemy('dummy', 0, -330, { hpScale: 20 });
         tr.guideTarget = tr.tut.dummy;
       },
-      done: function (tr) { return tr.tut.dummy.dead; },
+      done: function (tr) { return tr.tut.hits >= 3; },
       exit: function (tr) {
         tr.guideTarget = null;
         tr.setMessage('Good. Now something that hits back.', 2.4);
@@ -4703,7 +4702,8 @@ html, body {
       id: 'fight',
       enter: function (tr) {
         lock(tr, ['attack', 'special']);
-        say(tr, 'Two of them. SPECIAL is slower and costs stamina, but it clears a crowd. Put both down.');
+        say(tr, 'Two of them. SPECIAL is slower and costs stamina, but it clears a crowd. Put both down - '
+              + 'and swap weapon at the pedestals any time you want to feel the difference.');
         tr.tut.foes = [
           tr.spawnEnemy('goblin', -190, -340, { hpScale: 0.8, dmgScale: 0.6 }),
           tr.spawnEnemy('goblin', 190, -340, { hpScale: 0.8, dmgScale: 0.6 })
@@ -4773,6 +4773,9 @@ html, body {
       id: 'gem',
       enter: function (tr) {
         lock(tr, ['attack', 'special', 'dodge', 'item']);
+        /* Last call: the pedestals close here, and whatever is in your hands
+           now is the weapon you leave with. */
+        T.commitWeapon(tr);
         var sv = tr.game.save;
         if (!sv.gem) sv.gem = { id: D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)] };
         tr.tut.gemDef = D.GEMS[sv.gem.id];
@@ -4883,6 +4886,15 @@ html, body {
     /* dying is never the end of a tutorial */
     if (trial.player.dead) { revive(trial); return; }
 
+    /* Swapping is not part of any one beat: the pedestals stay live from the
+       moment they appear until the gem beat closes them, so an accidental
+       circle costs nothing and every weapon can be tried in a real fight. */
+    if (tut.picks && !tut.weaponLocked) {
+      for (var i = 0; i < tut.picks.length; i++) {
+        if (inMarker(trial, tut.picks[i])) T.takeWeapon(trial, tut.picks[i].weapon);
+      }
+    }
+
     /* the hide beat needs a running total, not a single frame */
     if (tut.beatId === 'hide') {
       if (trial.player.hidden) tut.hideTime += dt;
@@ -4895,9 +4907,10 @@ html, body {
 
   /* Called from Enemy.hurt, so it fires for arrows as well as melee. */
   T.onEnemyHurt = function (trial, enemy) {
-    if (trial.tut && trial.tut.beatId === 'strike' && enemy === trial.tut.dummy) {
-      trial.setMessage('That is a hit. Keep going.', 1.4);
-    }
+    var tut = trial.tut;
+    if (!tut || tut.beatId !== 'strike' || enemy !== tut.dummy) return;
+    tut.hits++;
+    trial.floater(enemy.x, enemy.y - 62, Math.min(tut.hits, 3) + ' / 3', '#cfe8ff');
   };
 
   T.onPlayerDodge = function (trial) {
@@ -4952,16 +4965,52 @@ html, body {
 
   /* ------------------------------------------------------------- rewards */
 
+  /* Standing on a pedestal is a fitting, not a purchase. Nothing is written to
+     the save until commitWeapon, so stepping on the wrong circle costs you
+     nothing and you can keep swapping - including mid-fight - right up until
+     the pedestals close. */
   T.takeWeapon = function (trial, id) {
+    var tut = trial.tut;
+    if (tut.chosenWeapon === id) return false;
+    tut.chosenWeapon = id;
+    trial.player.weaponId = id;
+    /* a swing or a cooldown belonging to the weapon you just put down */
+    trial.player.atkState = null;
+    trial.player.atkDef = null;
+    trial.player.specialCd = 0;
+    for (var i = 0; i < tut.picks.length; i++) {
+      var m = tut.picks[i];
+      m.colour = m.weapon === id ? '#7fe08a' : '#ffe45c';
+    }
+    trial.burst(trial.player.x, trial.player.y - 20, 20, '#ffe45c');
+    trial.floater(trial.player.x, trial.player.y - 54, D.WEAPONS[id].name, '#ffe45c');
+    Audio.play('confirm');
+    trial.setMessage(D.WEAPONS[id].name + ' - ' + D.WEAPONS[id].blurb, 4);
+    return true;
+  };
+
+  /* Closes the pedestals and writes the held weapon to the save. Only the one
+     you walk away with is granted - the other two stay in the Trial Shop. */
+  T.commitWeapon = function (trial) {
+    var tut = trial.tut;
+    if (tut.weaponLocked) return;
+    tut.weaponLocked = true;
+    var id = tut.chosenWeapon || 'sword';
     var sv = trial.game.save;
     sv.weapons[id] = true;
     sv.weapon = id;
     trial.player.weaponId = id;
     V.Save.write(sv);
-    trial.burst(trial.player.x, trial.player.y - 20, 20, '#ffe45c');
-    trial.floater(trial.player.x, trial.player.y - 54, D.WEAPONS[id].name, '#ffe45c');
-    Audio.play('confirm');
-    trial.setMessage(D.WEAPONS[id].name + ' - ' + D.WEAPONS[id].blurb, 4);
+    for (var i = 0; tut.picks && i < tut.picks.length; i++) {
+      tut.picks[i].active = false;
+      tut.picks[i].hidden = true;
+    }
+    for (var j = 0; tut.pickLabels && j < tut.pickLabels.length; j++) tut.pickLabels[j].hidden = true;
+    if (tut.dummy && !tut.dummy.dead) {
+      trial.burst(tut.dummy.x, tut.dummy.y - 20, 18, '#d8c188');
+      tut.dummy.dead = true;
+    }
+    trial.setMessage('You are keeping the ' + D.WEAPONS[id].name + '.', 3);
   };
 
   /* Pause-menu escape hatch. Hands over everything the beats would have given
@@ -4969,6 +5018,7 @@ html, body {
      penalty - and never leaves you standing in trial 1 empty-handed. */
   T.skip = function (trial) {
     var sv = trial.game.save;
+    T.commitWeapon(trial);
     if (!sv.weapons.sword) sv.weapons.sword = true;
     if (!sv.weapon || sv.weapon === 'none') sv.weapon = 'sword';
     if (!sv.gem) sv.gem = { id: D.GEM_IDS[Math.floor(Math.random() * D.GEM_IDS.length)] };
