@@ -558,6 +558,71 @@ async function main() {
     onTitle.hits[0].y - onTitle.h * onTitle.hits[0].scale > 0,
     JSON.stringify(onTitle.hits[0]) + ' in ' + onTitle.ch + 'px');
 
+  /* --- the install offer: present only where it leads somewhere ---
+         Driven through the live loop and real pointer events, because that is
+         the path a player takes; headless Chromium fires no
+         beforeinstallprompt, so the browser's side of it is stubbed. */
+  const hasInstallZone = () => page.evaluate(
+    () => (window.V.Input.lastZones || []).some((z) => z.id === 'install'));
+
+  await page.evaluate(() => {
+    const g = window.VELTHIROS;
+    g.setScene(new window.V.S.StartScene(g));
+  });
+  await wait(250);
+  check('no install button where installing would do nothing',
+    (await hasInstallZone()) === false);
+
+  await page.evaluate(() => {
+    window.__prompted = 0;
+    window.V.Install.deferred = {
+      prompt: () => { window.__prompted++; },
+      userChoice: Promise.resolve({ outcome: 'accepted' })
+    };
+  });
+  await wait(250);
+  check('the install button appears once the browser offers a prompt',
+    (await hasInstallZone()) === true);
+
+  await tapZone('install');
+  const tapped = await page.evaluate(() => ({
+    prompted: window.__prompted,
+    spent: window.V.Install.deferred === null,
+    said: window.VELTHIROS.scene.installResult
+  }));
+  check('tapping it fires the real prompt, once, and spends the event',
+    tapped.prompted === 1 && tapped.spent,
+    'prompted ' + tapped.prompted + 'x, cleared: ' + tapped.spent);
+  check('an accepted install is confirmed on screen',
+    !!tapped.said, JSON.stringify(tapped.said));
+
+  /* iOS never fires the event, so the offer has to become instructions */
+  await page.evaluate(() => {
+    window.__realUA = navigator.userAgent;
+    Object.defineProperty(navigator, 'userAgent', { value: 'iPhone', configurable: true });
+    window.VELTHIROS.scene.installResult = null;
+  });
+  await wait(250);
+  const iosMode = await page.evaluate(() => window.V.Install.mode());
+  check('iOS gets instructions rather than a dead button',
+    iosMode === 'manual' && (await hasInstallZone()) === true, 'mode=' + iosMode);
+
+  await tapZone('install');
+  const card = await page.evaluate(() => ({
+    open: window.VELTHIROS.scene.showInstallHelp,
+    zones: (window.V.Input.lastZones || []).map((z) => z.id)
+  }));
+  check('the card opens and swallows the menu behind it',
+    card.open === true && card.zones.length === 1 && card.zones[0] === 'installclose',
+    JSON.stringify(card.zones));
+
+  await tapZone('installclose');
+  const closed = await page.evaluate(() => {
+    Object.defineProperty(navigator, 'userAgent', { value: window.__realUA, configurable: true });
+    return window.VELTHIROS.scene.showInstallHelp;
+  });
+  check('the card closes again', closed === false);
+
   /* --- pushing a stone with the joystick off-centre must not slide you past --- */
   const push = await page.evaluate(() => {
     const g = window.VELTHIROS, D = window.V.D, In = window.V.Input;

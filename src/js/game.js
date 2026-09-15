@@ -112,6 +112,82 @@
     this._wakeLock = null;
   };
 
+  /* ============================================================== INSTALL
+     Adding the game to a home screen is the closest thing it has to being
+     downloaded, so the start screen offers it - but only where the offer
+     leads somewhere.
+
+     Chrome and Edge fire beforeinstallprompt, which can be held and replayed
+     from a real tap later. Safari fires nothing and has no programmatic
+     install at all, so iOS gets instructions instead of a button that would
+     do nothing. Everywhere else, and once it is already installed, the button
+     is simply absent: an install button that cannot install is worse than no
+     button. */
+  var Install = {
+    deferred: null,
+    dismissed: false,
+
+    /* Already running as an installed app? Then there is nothing to offer.
+       iOS reports this through navigator.standalone rather than the media
+       query, which it does not implement for this. */
+    installed: function () {
+      if (typeof navigator !== 'undefined' && navigator.standalone) return true;
+      if (typeof window === 'undefined' || !window.matchMedia) return false;
+      return window.matchMedia('(display-mode: standalone)').matches ||
+             window.matchMedia('(display-mode: fullscreen)').matches;
+    },
+
+    /* iOS Safari: installable by hand, never programmatically. Chrome on iOS
+       is also WebKit and also cannot do it, so this deliberately tests the
+       platform rather than the browser. */
+    isIOS: function () {
+      if (typeof navigator === 'undefined') return false;
+      var ua = navigator.userAgent || '';
+      return /iPad|iPhone|iPod/.test(ua) ||
+             (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    },
+
+    /* What the button should do, or nothing at all. */
+    mode: function () {
+      if (this.installed()) return null;
+      if (this.deferred) return 'prompt';
+      if (this.isIOS()) return 'manual';
+      return null;
+    },
+
+    /* Returns a promise for the outcome. The held event is single-use: once
+       it has been prompted it cannot be prompted again, so it is cleared
+       either way. */
+    run: function () {
+      var e = this.deferred;
+      if (!e) return Promise.resolve('unavailable');
+      this.deferred = null;
+      try {
+        e.prompt();
+        return Promise.resolve(e.userChoice).then(function (c) {
+          return (c && c.outcome) || 'dismissed';
+        });
+      } catch (err) {
+        return Promise.resolve('failed');
+      }
+    },
+
+    bind: function () {
+      if (typeof window === 'undefined') return;
+      var self = this;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        /* without this Chrome shows its own mini-infobar over the game */
+        e.preventDefault();
+        self.deferred = e;
+      });
+      window.addEventListener('appinstalled', function () {
+        self.deferred = null;
+      });
+    }
+  };
+  Install.bind();
+  V.Install = Install;
+
   /* env(safe-area-inset-*) is only legible from CSS, so #safe-probe wears it
      as padding and we measure that. Falls back to zeroes everywhere it is not
      supported, which is every desktop browser. */
