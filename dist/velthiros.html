@@ -7,6 +7,10 @@
 <meta name="description" content="Velthiros - a trial-based mobile action RPG.">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1030'/%3E%3Cpath d='M9 22 L23 8' stroke='%23c9f0ea' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M23 8 q6 3 3 10 q-1-6-7-7z' fill='%23c9f0ea'/%3E%3C/svg%3E">
 <title>Velthiros</title>
 <style>
 /* Velthiros - the page is a frame around a single full-bleed canvas */
@@ -58,26 +62,28 @@ html, body {
   color: #ffe9c9;
 }
 #boot p { margin: 0; font-size: 12px; opacity: 0.5; }
-/* nudge for portrait phones - the game plays best in landscape */
-#rotate {
+/* The canvas is full-bleed under the notch and the home indicator, so the
+   HUD has to inset itself. env() is only readable from CSS, so park it on a
+   zero-size probe and let the game measure its padding on every resize. */
+#safe-probe {
   position: fixed;
-  left: 50%;
-  bottom: 6px;
-  transform: translateX(-50%);
-  font-size: 11px;
-  opacity: 0.4;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
   pointer-events: none;
-  display: none;
-  z-index: 5;
-}
-@media (orientation: portrait) and (max-width: 560px) {
-  #rotate { display: block; }
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
 }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="rotate">turn sideways for the full arena</div>
+<div id="safe-probe" aria-hidden="true"></div>
 <div id="boot"><h1>VELTHIROS</h1><p>loading the arena</p></div>
 <script>
 /* ===== src/js/util.js ===== */
@@ -419,10 +425,10 @@ html, body {
   /* ---------------------------------------------------------------- shops
      GDD 9. One shared currency across both shops. */
   D.REALITY_SHOP = [
-    { id: 'shirt_red',   cat: 'Clothes', name: 'Crimson Tunic',  price: 60,  desc: 'A red tunic. Purely for the watchers.', tint: '#d84a4a' },
-    { id: 'shirt_blue',  cat: 'Clothes', name: 'Deepwater Coat', price: 60,  desc: 'Cold blue. Suits the snowfields.',     tint: '#4a7fd8' },
-    { id: 'shirt_gold',  cat: 'Clothes', name: 'Gilded Vest',    price: 180, desc: 'Loud. Expensive. Slightly ridiculous.', tint: '#e8c14a' },
-    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',   price: 320, desc: 'Woven from a Reaper cloak.',            tint: '#3b3550' },
+    { id: 'shirt_red',   cat: 'Clothes', name: 'Crimson Sleeves', price: 60,  desc: 'Red sleeves. Purely for the watchers.', tint: '#d84a4a' },
+    { id: 'shirt_blue',  cat: 'Clothes', name: 'Deepwater Sleeves', price: 60, desc: 'Cold blue. Suits the snowfields.',   tint: '#4a7fd8' },
+    { id: 'shirt_gold',  cat: 'Clothes', name: 'Gilded Sleeves', price: 180, desc: 'Loud. Expensive. Slightly ridiculous.', tint: '#e8c14a' },
+    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',   price: 320, desc: 'Cut from a Reaper cloak.',              tint: '#3b3550' },
     { id: 'decor_rug',   cat: 'Decor',   name: 'Woven Rug',      price: 80,  desc: 'The floor is less cold now.',           decor: 'rug' },
     { id: 'decor_plant', cat: 'Decor',   name: 'Corner Fern',    price: 70,  desc: 'It is alive. Probably.',                decor: 'plant' },
     { id: 'decor_lamp',  cat: 'Decor',   name: 'Warm Lamp',      price: 110, desc: 'Makes the room feel like a home.',      decor: 'lamp' },
@@ -520,6 +526,7 @@ html, body {
       decor: {},
       debuff: null,            /* { id } applied to the next attempt only */
       lastRank: null,
+      haptics: true,           /* vibration on damage; Android only */
       seenIntro: false,
       tutorialDone: false,     /* cleared the guided opening; resets with a New Game */
       tutorialStage: null,     /* 'intro' | 'square' | 'trial' - where Continue resumes */
@@ -1015,6 +1022,15 @@ html, body {
     calm:  { root: 220.00, scale: [0, 4, 7, 11, 14], tempo: 900, type: 'sine', vol: 0.08 }
   };
 
+  /* Park the current mood so a phone call or a tab switch can silence the
+     game and then put it back exactly as it was. */
+  Audio.hush = function () {
+    if (currentMood) { Audio.held = currentMood; Audio.music(null); }
+  };
+  Audio.unhush = function () {
+    if (Audio.held) { var m = Audio.held; Audio.held = null; Audio.music(m); }
+  };
+
   Audio.music = function (mood) {
     if (mood === currentMood) return;
     currentMood = mood;
@@ -1036,6 +1052,23 @@ html, body {
     }, m.tempo);
   };
 
+  /* ------------------------------------------------------------- haptics
+     Android only - iOS Safari has no Vibration API at all - and deliberately
+     short. A game that buzzes on every swing is a game people silence at the
+     OS level, so this fires on damage and death, not on contact. Kept separate
+     from the sound toggle: playing muted on a bus is exactly when you most
+     want the buzz. */
+  var Haptics = {
+    enabled: true,
+    supported: typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'
+  };
+
+  Haptics.buzz = function (pattern) {
+    if (!Haptics.enabled || !Haptics.supported) return;
+    try { navigator.vibrate(pattern); } catch (e) { /* some UAs refuse outright */ }
+  };
+
+  V.Haptics = Haptics;
   V.Audio = Audio;
 })(window.V = window.V || {});
 
@@ -1972,7 +2005,10 @@ html, body {
     'M': '#332d40',   /* interior floor dark */
     'V': '#4a4356',   /* interior floor mid */
     'E': '#1d2430',   /* cave / HQ shadow */
-    'x': '#6b7480'    /* cool stone mid-dark */
+    'x': '#6b7480',   /* cool stone mid-dark */
+    'L': '#1b1622',   /* black hair / black denim */
+    'l': '#342d44',   /* the sheen on both */
+    'U': '#0f0d14'    /* boot black, the darkest value in the set */
   });
 
   function cached(key, build) {
@@ -1982,77 +2018,148 @@ html, body {
 
   /* =============================================================== ACTORS */
 
-  /* Shared humanoid. dir: 'down' | 'up' | 'side'. frame: 0 idle, 1/2 walk. */
+  /* The hero wears an open long-sleeve top: it covers the arms and the upper
+     back and nothing else. So the front view is chest and abs, the back view
+     is black across the shoulders with skin below, and the side view shows the
+     shirt only as a strip down the spine. Drawn after the torso base so the
+     definition lines survive. */
+  function bareTorso(g, o, top, bot) {
+    var belt = bot - 1;                              /* a one-row belt buys a row of abs */
+    if (o.dir === 'up') {
+      g.rect(o.cloth, 6, top, 6, 2);                 /* the shirt, across the shoulders */
+      g.set(11, top, o.clothDark); g.set(11, top + 1, o.clothDark);
+      g.rect('f', 6, top + 2, 6, belt - top - 2);    /* the small of the back, bare */
+      g.rect('F', 11, top + 2, 1, belt - top - 2);
+      g.rect('F', 9, top + 3, 1, belt - top - 3);    /* spine */
+    } else {
+      g.rect('f', 6, top, 6, belt - top);
+      g.rect('F', 11, top, 1, belt - top);           /* lit from the left */
+      g.set(7, top, 'F'); g.set(10, top, 'F');       /* collarbones */
+      g.rect('F', 7, top + 2, 4, 1);                 /* under the pecs */
+      g.rect('F', 7, top + 4, 4, 1);                 /* the ab line */
+      g.set(9, top + 3, 'F');                        /* linea alba */
+      g.set(9, top + 5, 'F');
+      if (o.dir === 'side') g.rect(o.cloth, 6, top, 1, belt - top);  /* shirt down the spine */
+      else g.set(9, top + 1, 'Y');                   /* the pendant, at the sternum */
+    }
+    g.rect(o.belt, 6, belt, 6, 1);
+    g.set(9, belt, 'a');                             /* buckle */
+  }
+
+  /* Shared humanoid. dir: 'down' | 'up' | 'side'. frame: 0 idle, 1/2 walk.
+     `bare` picks the hero's build; without it you get an ordinary clothed
+     person, which is what the square crowd needs. */
   function humanoidGrid(o) {
     var W = 18, H = 28;
     var g = new Px.Grid(W, H);
-    (function (g) {
-      var cx = 9;
-      var bob = (o.frame === 1 || o.frame === 2) ? 1 : 0;
-      var legTop = 20, legBot = 25;
-      var bodyTop = 12 + bob, bodyBot = 19 + bob;
-      var headCy = 8 + bob;
+    var cx = 9;
+    var bob = (o.frame === 1 || o.frame === 2) ? 1 : 0;
+    var legTop = 20, legBot = 25;
+    var bodyTop = 12 + bob, bodyBot = 19 + bob;
+    var headCy = 8 + bob;
+    var torsoH = bodyBot - bodyTop;
 
-      /* ---- legs (planted; the walk lifts one at a time) ---- */
-      var lx = 6, rx = 9, lTop = legTop, rTop = legTop;
-      if (o.frame === 1) { lx = 5; lTop = legTop + 1; }
-      if (o.frame === 2) { rx = 10; rTop = legTop + 1; }
-      g.rect(o.trouser, lx, lTop, 3, legBot - lTop);
-      g.rect(o.trouser, rx, rTop, 3, legBot - rTop);
-      g.rect(o.boot, lx, legBot, 3, 2);
-      g.rect(o.boot, rx, legBot, 3, 2);
+    /* ---- legs (planted; the walk lifts one at a time) ---- */
+    var lx = 6, rx = 9, lTop = legTop, rTop = legTop;
+    if (o.frame === 1) { lx = 5; lTop = legTop + 1; }
+    if (o.frame === 2) { rx = 10; rTop = legTop + 1; }
+    g.rect(o.trouser, lx, lTop, 3, legBot - lTop);
+    g.rect(o.trouser, rx, rTop, 3, legBot - rTop);
+    if (o.trouserLite) {                       /* a seam of light down each leg */
+      g.rect(o.trouserLite, lx, lTop, 1, legBot - lTop);
+      g.rect(o.trouserLite, rx, rTop, 1, legBot - rTop);
+    }
+    g.rect(o.boot, lx, legBot, 3, 2);
+    g.rect(o.boot, rx, legBot, 3, 2);
 
-      /* ---- torso ---- */
-      g.rect(o.cloth, 6, bodyTop, 6, bodyBot - bodyTop);
-      /* shaded right side + a belt */
-      g.rect(o.clothDark, 10, bodyTop + 1, 2, bodyBot - bodyTop - 1);
+    /* ---- torso ---- */
+    if (o.bare) {
+      bareTorso(g, o, bodyTop, bodyBot);
+    } else {
+      g.rect(o.cloth, 6, bodyTop, 6, torsoH);
+      g.rect(o.clothDark, 10, bodyTop + 1, 2, torsoH - 1);
       g.rect(o.belt, 6, bodyBot - 2, 6, 2);
       if (o.chest) g.rect(o.chest, 7, bodyTop + 2, 2, 3);
+    }
 
-      /* ---- arms ---- */
-      if (o.dir === 'side') {
-        g.rect(o.cloth, 11, bodyTop + 1, 2, 4);
-        g.rect('f', 11, bodyTop + 5, 2, 3);
-      } else {
-        g.rect(o.cloth, 4, bodyTop + 1, 2, 4);
-        g.rect(o.cloth, 12, bodyTop + 1, 2, 4);
-        g.rect('f', 4, bodyTop + 5, 2, 3);
-        g.rect('f', 12, bodyTop + 5, 2, 3);
+    /* ---- arms. A long sleeve runs almost to the wrist, so only the hand
+           is skin; a short one leaves the forearm bare. ---- */
+    var sleeve = o.bare ? 5 : 4;
+    var hand = 7 - sleeve;
+    if (o.dir === 'side') {
+      g.rect(o.cloth, 11, bodyTop + 1, 2, sleeve);
+      g.rect('f', 11, bodyTop + 1 + sleeve, 2, hand);
+    } else {
+      g.rect(o.cloth, 4, bodyTop + 1, 2, sleeve);
+      g.rect(o.cloth, 12, bodyTop + 1, 2, sleeve);
+      g.rect('f', 4, bodyTop + 1 + sleeve, 2, hand);
+      g.rect('f', 12, bodyTop + 1 + sleeve, 2, hand);
+    }
+
+    /* ---- head ---- */
+    g.oval('f', cx, headCy, 4, 4);
+    g.rect('F', cx + 2, headCy - 1, 2, 4);          /* cheek shade */
+
+    /* ---- hair ---- */
+    if (o.dir === 'up') {
+      g.oval(o.hair, cx, headCy - 1, 4, 4);
+      g.rect(o.hair, cx - 4, headCy - 1, 9, 4);
+      if (o.hairLite) { g.set(cx - 2, headCy - 3, o.hairLite); g.set(cx + 1, headCy - 4, o.hairLite); }
+    } else {
+      /* Black hair swallows a face that brown hair only frames, so the hero's
+         fringe sits a row higher and shallower than everyone else's. */
+      g.oval(o.hair, cx, headCy - (o.curly ? 3 : 2), 4, o.curly ? 2 : 3);
+      g.rect(o.hair, cx - 4, headCy - 4, 9, 3);
+      g.rect(o.hair, cx - 4, headCy - 2, 2, o.curly ? 2 : 3);
+      g.rect(o.hair, cx + 3, headCy - 2, 2, o.curly ? 2 : 3);
+      if (o.curly) {
+        /* break the silhouette so it reads as curl rather than a helmet.
+           Kept strictly above the eyeline - in black, anything lower closes
+           the face up entirely. */
+        g.set(cx - 5, headCy - 3, o.hair);
+        g.set(cx + 4, headCy - 3, o.hair);
+        g.set(cx - 1, headCy - 5, o.hair);
+        g.set(cx + 2, headCy - 5, o.hair);
       }
-
-      /* ---- head ---- */
-      g.oval('f', cx, headCy, 4, 4);
-      g.rect('F', cx + 2, headCy - 1, 2, 4);          /* cheek shade */
-
-      /* ---- hair ---- */
-      if (o.dir === 'up') {
-        g.oval(o.hair, cx, headCy - 1, 4, 4);
-        g.rect(o.hair, cx - 4, headCy - 1, 9, 4);
-      } else {
-        g.oval(o.hair, cx, headCy - 2, 4, 3);
-        g.rect(o.hair, cx - 4, headCy - 4, 9, 3);
-        g.rect(o.hair, cx - 4, headCy - 2, 2, 3);
-        g.rect(o.hair, cx + 3, headCy - 2, 2, 3);
+      if (o.hairLite) {
+        g.set(cx - 2, headCy - 4, o.hairLite);
+        g.set(cx - 1, headCy - 4, o.hairLite);
+        g.set(cx + 2, headCy - 3, o.hairLite);
       }
+    }
 
-      /* ---- face ---- */
-      if (o.dir === 'down') {
-        g.set(cx - 2, headCy + 1, 'K');
-        g.set(cx + 2, headCy + 1, 'K');
-      } else if (o.dir === 'side') {
-        g.set(cx + 2, headCy + 1, 'K');
-        g.rect(o.hair, cx - 4, headCy - 2, 3, 5);     /* back of the head */
-      }
+    /* ---- face ---- */
+    if (o.dir === 'down') {
+      g.set(cx - 2, headCy + 1, 'K');
+      g.set(cx + 2, headCy + 1, 'K');
+    } else if (o.dir === 'side') {
+      g.set(cx + 2, headCy + 1, 'K');
+      g.rect(o.hair, cx - 4, headCy - 2, 3, 5);     /* back of the head */
+    }
 
-      g.outline('K');
-    })(g);
+    g.outline('K');
     return g;
   }
 
-  /* the tunic colour is a shop purchase, so bake one variant per tint */
+  /* The hero. `tint` recolours the shirt only - the shop sells sleeves, not
+     tunics - so the hair, denim and skin stay put across every purchase. */
   Spr.player = function (dir, frame, tint) {
-    tint = tint || '#3d6fa8';
+    tint = tint || '#17141c';
     return cached('pl:' + dir + ':' + frame + ':' + tint, function () {
+      var g = humanoidGrid({
+        dir: dir, frame: frame, bare: true, curly: true,
+        cloth: 'm', clothDark: 'B', belt: 'U', trouser: 'M', trouserLite: 'V',
+        boot: 'U', hair: 'L', hairLite: 'l'
+      });
+      return Px.bake(g, { pal: { 'm': tint, 'B': shade(tint, -18) } });
+    });
+  };
+
+  /* Everybody else. Ordinary clothes, ordinary hair - the square crowd is
+     meant to read as a street full of people, not a street full of heroes. */
+  Spr.civilian = function (dir, frame, tint) {
+    tint = tint || '#3d6fa8';
+    return cached('cv:' + dir + ':' + frame + ':' + tint, function () {
       var g = humanoidGrid({
         dir: dir, frame: frame,
         cloth: 'm', clothDark: 'B', belt: 'W', trouser: 'B', boot: 'W',
@@ -3052,7 +3159,8 @@ html, body {
     this.world.shake(7, 0.22);
     this.world.floater(this.x, this.y - 44, '-' + Math.round(real), '#ff7a7a');
     Audio.play('hurt');
-    if (this.hp <= 0) { this.hp = 0; this.dead = true; }
+    V.Haptics.buzz(18);
+    if (this.hp <= 0) { this.hp = 0; this.dead = true; V.Haptics.buzz([40, 70, 120]); }
     return true;
   };
 
@@ -3361,6 +3469,7 @@ html, body {
     var w = this.world;
     w.burst(this.x, this.y - 18, 16, this.def.colour);
     V.Audio.play('kill');
+    if (!this.def.inert) V.Haptics.buzz(this.def.boss ? 60 : 12);
     if (src) src.kills++;
     w.onEnemyKilled && w.onEnemyKilled(this);
   };
@@ -4288,6 +4397,16 @@ html, body {
     this.cam.x = U.lerp(this.cam.x, tx, 0.2);
     this.cam.y = U.lerp(this.cam.y, ty, 0.2);
 
+    /* Keep the view inside the arena. Standing near an edge used to show a
+       screenful of nothing past the barrier - badly so in portrait, where the
+       3/4 squash makes the vertical view over 2500 units tall, taller than the
+       arena itself. Where the arena no longer fills the view, lock that axis
+       to centre rather than letting the camera drift off the map. */
+    var limX = Math.max(0, this.barrierR + 90 - (cw / 2) / ZOOM);
+    var limY = Math.max(0, this.barrierR + 90 - (ch / 2) / (ZOOM * Art.SQUASH));
+    this.cam.x = U.clamp(this.cam.x, -limX, limX);
+    this.cam.y = U.clamp(this.cam.y, -limY, limY);
+
     var shakeX = 0, shakeY = 0;
     if (this.shakeTime > 0) {
       shakeX = Math.round((Math.random() - 0.5) * this.shakeAmt * ZOOM * 2);
@@ -5069,6 +5188,10 @@ html, body {
   UI.FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
   UI.scale = 1;
 
+  /* Overwritten by Game.resize; these are the desktop defaults. */
+  UI.inset = { top: 0, right: 0, bottom: 0, left: 0 };
+  UI.portrait = false;
+
   UI.setScale = function (cw, ch) {
     UI.scale = U.clamp(Math.min(cw, ch) / 400, 0.82, 1.7);
     return UI.scale;
@@ -5254,25 +5377,38 @@ html, body {
     }
     ctx.globalAlpha = 1;
 
-    /* ---- top-left: health + stamina (GDD 12) ---- */
-    var barW = Math.min(150 * s, cw * 0.34);
-    UI.bar(ctx, pad, pad + 4, barW, 11 * s, p.hp / p.stats.maxHp, '#ff5f6d');
-    UI.bar(ctx, pad, pad + 22 * s, barW * 0.86, 8 * s, p.stamina / p.stats.maxStamina, '#7fe08a');
-    UI.text(ctx, Math.ceil(p.hp) + '/' + p.stats.maxHp, pad + barW + 8, pad + 9 * s, { size: 11, colour: 'rgba(255,255,255,0.9)' });
-
-    /* ---- top-middle: timer (a dash when the trial has no clock) ---- */
+    /* ---- the top block ----
+       Landscape spreads bars / timer / label across one row. Portrait has no
+       room for that - at 390pt the three collide into each other - so the
+       timer moves right, the trial label drops (it is already on the intro
+       card), and pause tucks under the bars where a thumb can reach it. */
+    var ins = UI.inset;
+    var padL = pad + ins.left, padR = pad + ins.right;
+    var padT = pad + ins.top, padB = pad + ins.bottom;
+    var tall = UI.portrait;
     var warn = !trial.untimed && trial.timeLeft < 15;
-    UI.text(ctx, trial.untimed ? '--:--' : U.fmtTime(trial.timeLeft), cw / 2, pad + 12 * s, {
-      size: 26, align: 'center', weight: '800',
-      colour: trial.untimed ? 'rgba(255,255,255,0.45)' : (warn ? '#ff8a8a' : '#fff')
-    });
+    var clock = trial.untimed ? '--:--' : U.fmtTime(trial.timeLeft);
+    var clockCol = trial.untimed ? 'rgba(255,255,255,0.45)' : (warn ? '#ff8a8a' : '#fff');
 
-    /* ---- top-right: trial label + objective progress ---- */
-    UI.text(ctx, trial.spec.label, cw - pad, pad + 6 * s, { size: 13, align: 'right', colour: 'rgba(255,255,255,0.85)' });
-    UI.text(ctx, HUD.progressText(trial), cw - pad, pad + 24 * s, { size: 13, align: 'right', colour: '#ffe45c' });
+    var barW = Math.min(150 * s, cw * (tall ? 0.40 : 0.34));
+    UI.bar(ctx, padL, padT + 4, barW, 11 * s, p.hp / p.stats.maxHp, '#ff5f6d');
+    UI.bar(ctx, padL, padT + 22 * s, barW * 0.86, 8 * s, p.stamina / p.stats.maxStamina, '#7fe08a');
+    UI.text(ctx, Math.ceil(p.hp) + '/' + p.stats.maxHp, padL + barW + 8, padT + 9 * s,
+      { size: 11, colour: 'rgba(255,255,255,0.9)' });
 
-    /* ---- pause ---- */
-    if (UI.button(ctx, 'pause', cw - pad - 34 * s, pad + 38 * s, 34 * s, 26 * s, '| |', { size: 13 })) {
+    var pauseX, pauseY;
+    if (tall) {
+      UI.text(ctx, clock, cw - padR, padT + 10 * s, { size: 22, align: 'right', weight: '800', colour: clockCol });
+      UI.text(ctx, HUD.progressText(trial), cw - padR, padT + 30 * s, { size: 12, align: 'right', colour: '#ffe45c' });
+      pauseX = padL; pauseY = padT + 38 * s;
+    } else {
+      UI.text(ctx, clock, cw / 2, padT + 12 * s, { size: 26, align: 'center', weight: '800', colour: clockCol });
+      UI.text(ctx, trial.spec.label, cw - padR, padT + 6 * s, { size: 13, align: 'right', colour: 'rgba(255,255,255,0.85)' });
+      UI.text(ctx, HUD.progressText(trial), cw - padR, padT + 24 * s, { size: 13, align: 'right', colour: '#ffe45c' });
+      pauseX = cw - padR - 34 * s; pauseY = padT + 38 * s;
+    }
+
+    if (UI.button(ctx, 'pause', pauseX, pauseY, 34 * s, 26 * s, '| |', { size: 13 })) {
       trial.paused = !trial.paused;
     }
 
@@ -5280,11 +5416,12 @@ html, body {
        Instruction has to stay put: trial.message auto-clears after a couple of
        seconds, which is right for a combat nudge and useless for "here is how
        to move". persistentPrompt sits underneath and only the beat clears it. */
+    var bannerTop = padT + (tall ? 70 : 34) * s;
     if (trial.t < 6 || trial.message) {
-      HUD.banner(ctx, trial.message || trial.objective.text, cw, pad + 34 * s, s, 14, '#fff');
+      HUD.banner(ctx, trial.message || trial.objective.text, cw, bannerTop, s, 14, '#fff');
     }
     if (trial.persistentPrompt) {
-      var py = pad + (trial.message || trial.t < 6 ? 64 : 34) * s;
+      var py = bannerTop + (trial.message || trial.t < 6 ? 30 : 0) * s;
       HUD.banner(ctx, trial.persistentPrompt, cw, py, s, 13, '#ffe45c');
     }
 
@@ -5304,25 +5441,37 @@ html, body {
     var live = trial.state === 'play' && !trial.paused && !p.dead;
     var lk = trial.lockedActions || {};
     var aR = 44 * s, sR = 31 * s, dR = 26 * s;
-    var ax = cw - pad - aR - 6 * s, ay = ch - pad - aR - 6 * s;
+    var ax = cw - padR - aR - 6 * s, ay = ch - padB - aR - 6 * s;
+
+    /* Laid out on an arc around the thumb, each button placed far enough from
+       its neighbour that their touch zones cannot meet. They used to be packed
+       by hand-tuned offsets and the circles genuinely overlapped: because
+       hit-testing walks the zone list backwards, the left edge of ATK fired
+       Spin instead. `1.08` matches the padding roundButton adds to its zone. */
+    function nextTo(fromX, fromY, r1, r2, deg) {
+      var d = (r1 + r2) * 1.08 + 5 * s;
+      var a = deg * Math.PI / 180;
+      return { x: fromX + Math.cos(a) * d, y: fromY + Math.sin(a) * d };
+    }
+    var spc = nextTo(ax, ay, aR, sR, 198);        /* left of ATK, a little high */
+    var ddg = nextTo(ax, ay, aR, dR, 275);        /* straight above ATK */
+    var itm = nextTo(spc.x, spc.y, sR, dR, 250);  /* up and in from the special */
+
     if (UI.roundButton(ctx, 'attack', ax, ay, aR, 'ATK', { disabled: !live || lk.attack, size: 16 })
       && live && !lk.attack) p.tryAttack(false);
 
-    var sx = ax - aR - sR + 6 * s, sy = ay - 12 * s;
     var wpn = D.WEAPONS[p.weaponId];
-    if (UI.roundButton(ctx, 'special', sx, sy, sR, wpn.special.name, {
+    if (UI.roundButton(ctx, 'special', spc.x, spc.y, sR, wpn.special.name, {
       disabled: !live || lk.special, size: 11, cooldown: p.specialCd, cooldownMax: wpn.special.cooldown
     }) && live && !lk.special) p.tryAttack(true);
 
-    var dx = ax - 6 * s, dy = ay - aR - dR - 4 * s;
-    if (UI.roundButton(ctx, 'dodge', dx, dy, dR, 'DODGE', {
+    if (UI.roundButton(ctx, 'dodge', ddg.x, ddg.y, dR, 'DODGE', {
       disabled: !live || lk.dodge, size: 9, cooldown: p.dodgeCd,
       cooldownMax: V.E.DODGE_COOLDOWN * p.stats.dodgeCdMul
     }) && live && !lk.dodge) p.tryDodge();
 
     var items = trial.consumables.potion + trial.consumables.tonic + trial.consumables.smoke;
-    var ix = sx - sR - dR + 2 * s, iy = sy - 6 * s;
-    if (UI.roundButton(ctx, 'item', ix, iy, dR, 'ITEM ' + items, {
+    if (UI.roundButton(ctx, 'item', itm.x, itm.y, dR, 'ITEM ' + items, {
       disabled: !live || lk.item || items <= 0, size: 9
     }) && live && !lk.item) trial.useConsumable();
 
@@ -5425,8 +5574,21 @@ html, body {
       { size: 12, align: 'center', colour: 'rgba(255,255,255,0.65)' });
 
     if (UI.button(ctx, 'resume', x + 20 * s, y + 76 * s, w - 40 * s, 38 * s, 'Resume')) trial.paused = false;
-    if (UI.button(ctx, 'sound', x + 20 * s, y + 122 * s, w - 40 * s, 34 * s,
-      'Sound: ' + (Audio.enabled ? 'on' : 'off'))) Audio.setEnabled(!Audio.enabled);
+
+    /* Sound and haptics are separate switches on purpose: playing muted in
+       public is exactly when the buzz earns its keep. Haptics only appears
+       where the device actually has a vibration motor. */
+    var half = (w - 46 * s) / 2;
+    var canBuzz = V.Haptics.supported;
+    if (UI.button(ctx, 'sound', x + 20 * s, y + 122 * s, canBuzz ? half : w - 40 * s, 34 * s,
+      'Sound: ' + (Audio.enabled ? 'on' : 'off'), { size: 13 })) Audio.setEnabled(!Audio.enabled);
+    if (canBuzz && UI.button(ctx, 'haptics', x + 26 * s + half, y + 122 * s, half, 34 * s,
+      'Buzz: ' + (V.Haptics.enabled ? 'on' : 'off'), { size: 13 })) {
+      V.Haptics.enabled = !V.Haptics.enabled;
+      trial.game.save.haptics = V.Haptics.enabled;
+      trial.game.persist();
+      if (V.Haptics.enabled) V.Haptics.buzz(20);
+    }
     /* The tutorial cannot be abandoned - dying there just revives you - so the
        same slot becomes a way out for anyone who already knows the game. */
     if (trial.type === 'tutorial') {
@@ -6247,7 +6409,8 @@ html, body {
         opts.rot = f * 0.6;
         bd.at.y += f * 34;
       }
-      V.Px.draw(ctx, V.Spr.player(view.dir, frame, bd.tint), bd.at.x, bd.at.y, opts);
+      var sprFn = bd.isPlayer ? V.Spr.player : V.Spr.civilian;
+      V.Px.draw(ctx, sprFn(view.dir, frame, bd.tint), bd.at.x, bd.at.y, opts);
     }
 
     /* Garatu comes through the rift above the square */
@@ -6698,7 +6861,13 @@ html, body {
        pixel grid. The HUD is drawn afterwards at full resolution so text stays
        readable on a phone. ?smooth=1 falls back to the old vector look. */
     this.pixelMode = q.get('smooth') !== '1';
-    this.pixelTargetHeight = 240;
+    /* The buffer is sized by AREA, not height. Sizing by height alone meant a
+       portrait phone got a 98px-wide slice of world - a giant player and no
+       warning of anything walking at you. Holding the area constant shows the
+       same amount of arena whichever way the phone is held; it just changes
+       shape. 287 is the geometric mean of the landscape buffer this replaces,
+       so the common landscape sizes come out byte-identical. */
+    this.pixelTargetSpan = 287;
     var startTrial = parseInt(q.get('trial'), 10);
     this.forceTrial = (isFinite(startTrial) && startTrial > 0) ? startTrial : 0;
   }
@@ -6721,11 +6890,76 @@ html, body {
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
 
+    V.Haptics.enabled = this.save.haptics !== false;
+    this.bindLifecycle();
+
     this.setScene(new S.StartScene(this));
     this.running = true;
     this.last = performance.now();
     requestAnimationFrame(function (t) { self.frame(t); });
   };
+
+  /* ------------------------------------------------- device integration */
+
+  /* A call, a notification or a tab switch must not cost you a trial: hide
+     means pause, and coming back resumes exactly where you left off. */
+  Game.prototype.bindLifecycle = function () {
+    var self = this;
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) self.suspend();
+      else self.wake();
+    });
+    window.addEventListener('pagehide', function () { self.suspend(); });
+  };
+
+  Game.prototype.suspend = function () {
+    var sc = this.scene;
+    if (sc && sc.trial && sc.trial.state === 'play') sc.trial.paused = true;
+    Audio.hush();
+    this.releaseWakeLock();
+  };
+
+  Game.prototype.wake = function () {
+    this.last = performance.now();     /* never bill the player for time away */
+    Audio.unhush();
+    if (this.scene && this.scene.trial) this.requestWakeLock();
+  };
+
+  /* Trials run minutes long, which is easily enough for a phone to dim
+     mid-fight. Best-effort throughout: the API is missing on older Safari and
+     is refused outright while the page is hidden, and neither is worth a
+     message to the player. */
+  Game.prototype.requestWakeLock = function () {
+    var self = this;
+    if (!navigator.wakeLock || this._wakeLock || document.hidden) return;
+    try {
+      navigator.wakeLock.request('screen').then(function (lock) {
+        self._wakeLock = lock;
+        lock.addEventListener('release', function () { self._wakeLock = null; });
+      }, function () { /* denied */ });
+    } catch (e) { /* unsupported */ }
+  };
+
+  Game.prototype.releaseWakeLock = function () {
+    if (!this._wakeLock) return;
+    try { this._wakeLock.release(); } catch (e) { /* already released */ }
+    this._wakeLock = null;
+  };
+
+  /* env(safe-area-inset-*) is only legible from CSS, so #safe-probe wears it
+     as padding and we measure that. Falls back to zeroes everywhere it is not
+     supported, which is every desktop browser. */
+  function readInsets() {
+    var probe = document.getElementById('safe-probe');
+    if (!probe || !window.getComputedStyle) return { top: 0, right: 0, bottom: 0, left: 0 };
+    var cs = window.getComputedStyle(probe);
+    return {
+      top: parseFloat(cs.paddingTop) || 0,
+      right: parseFloat(cs.paddingRight) || 0,
+      bottom: parseFloat(cs.paddingBottom) || 0,
+      left: parseFloat(cs.paddingLeft) || 0
+    };
+  }
 
   Game.prototype.resize = function () {
     var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -6736,13 +6970,18 @@ html, body {
     this.dpr = dpr;
     this.cw = w; this.ch = h;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    /* the HUD lays itself out against these */
+    this.inset = readInsets();
+    UI.inset = this.inset;
+    UI.portrait = h > w * 1.08;
   };
 
   /* ------------------------------------------------------- pixel pipeline */
   Game.prototype.worldTarget = function () {
     if (!this.pixelMode) { this.pixScale = 1; return { ctx: this.ctx, w: this.cw, h: this.ch, direct: true }; }
 
-    var scale = Math.max(2, Math.round(this.ch / this.pixelTargetHeight));
+    var scale = Math.max(2, Math.round(Math.sqrt(this.cw * this.ch) / this.pixelTargetSpan));
     var bw = Math.ceil(this.cw / scale);
     var bh = Math.ceil(this.ch / scale);
 
@@ -6793,6 +7032,7 @@ html, body {
   };
 
   Game.prototype.setScene = function (scene) {
+    if (scene && scene.trial) this.requestWakeLock(); else this.releaseWakeLock();
     this.scene = scene;
     Input.stickEnabled = false;
     Input.down = {};
@@ -7051,7 +7291,8 @@ html, body {
     };
   };
 
-  Game.prototype.playerTint = function () { return this.save.equippedTint || '#4f8fd6'; };
+  /* The shirt, not the whole outfit - see Spr.player. Black by default. */
+  Game.prototype.playerTint = function () { return this.save.equippedTint || '#17141c'; };
 
   /* GDD 7.1: the scythe unlock lasts for the rest of this run only. */
   Game.prototype.unlockScythe = function () {
@@ -7112,6 +7353,15 @@ html, body {
   else boot();
 })();
 
+
+/* ===== offline ===== */
+if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () {
+      /* offline play is a bonus, not a requirement - never surface this */
+    });
+  });
+}
 </script>
 </body>
 </html>

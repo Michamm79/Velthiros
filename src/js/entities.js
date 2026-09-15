@@ -272,7 +272,8 @@
     this.world.shake(7, 0.22);
     this.world.floater(this.x, this.y - 44, '-' + Math.round(real), '#ff7a7a');
     Audio.play('hurt');
-    if (this.hp <= 0) { this.hp = 0; this.dead = true; }
+    V.Haptics.buzz(18);
+    if (this.hp <= 0) { this.hp = 0; this.dead = true; V.Haptics.buzz([40, 70, 120]); }
     return true;
   };
 
@@ -581,6 +582,7 @@
     var w = this.world;
     w.burst(this.x, this.y - 18, 16, this.def.colour);
     V.Audio.play('kill');
+    if (!this.def.inert) V.Haptics.buzz(this.def.boss ? 60 : 12);
     if (src) src.kills++;
     w.onEnemyKilled && w.onEnemyKilled(this);
   };

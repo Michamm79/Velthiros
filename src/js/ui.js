@@ -8,6 +8,10 @@
   UI.FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
   UI.scale = 1;
 
+  /* Overwritten by Game.resize; these are the desktop defaults. */
+  UI.inset = { top: 0, right: 0, bottom: 0, left: 0 };
+  UI.portrait = false;
+
   UI.setScale = function (cw, ch) {
     UI.scale = U.clamp(Math.min(cw, ch) / 400, 0.82, 1.7);
     return UI.scale;
@@ -193,25 +197,38 @@
     }
     ctx.globalAlpha = 1;
 
-    /* ---- top-left: health + stamina (GDD 12) ---- */
-    var barW = Math.min(150 * s, cw * 0.34);
-    UI.bar(ctx, pad, pad + 4, barW, 11 * s, p.hp / p.stats.maxHp, '#ff5f6d');
-    UI.bar(ctx, pad, pad + 22 * s, barW * 0.86, 8 * s, p.stamina / p.stats.maxStamina, '#7fe08a');
-    UI.text(ctx, Math.ceil(p.hp) + '/' + p.stats.maxHp, pad + barW + 8, pad + 9 * s, { size: 11, colour: 'rgba(255,255,255,0.9)' });
-
-    /* ---- top-middle: timer (a dash when the trial has no clock) ---- */
+    /* ---- the top block ----
+       Landscape spreads bars / timer / label across one row. Portrait has no
+       room for that - at 390pt the three collide into each other - so the
+       timer moves right, the trial label drops (it is already on the intro
+       card), and pause tucks under the bars where a thumb can reach it. */
+    var ins = UI.inset;
+    var padL = pad + ins.left, padR = pad + ins.right;
+    var padT = pad + ins.top, padB = pad + ins.bottom;
+    var tall = UI.portrait;
     var warn = !trial.untimed && trial.timeLeft < 15;
-    UI.text(ctx, trial.untimed ? '--:--' : U.fmtTime(trial.timeLeft), cw / 2, pad + 12 * s, {
-      size: 26, align: 'center', weight: '800',
-      colour: trial.untimed ? 'rgba(255,255,255,0.45)' : (warn ? '#ff8a8a' : '#fff')
-    });
+    var clock = trial.untimed ? '--:--' : U.fmtTime(trial.timeLeft);
+    var clockCol = trial.untimed ? 'rgba(255,255,255,0.45)' : (warn ? '#ff8a8a' : '#fff');
 
-    /* ---- top-right: trial label + objective progress ---- */
-    UI.text(ctx, trial.spec.label, cw - pad, pad + 6 * s, { size: 13, align: 'right', colour: 'rgba(255,255,255,0.85)' });
-    UI.text(ctx, HUD.progressText(trial), cw - pad, pad + 24 * s, { size: 13, align: 'right', colour: '#ffe45c' });
+    var barW = Math.min(150 * s, cw * (tall ? 0.40 : 0.34));
+    UI.bar(ctx, padL, padT + 4, barW, 11 * s, p.hp / p.stats.maxHp, '#ff5f6d');
+    UI.bar(ctx, padL, padT + 22 * s, barW * 0.86, 8 * s, p.stamina / p.stats.maxStamina, '#7fe08a');
+    UI.text(ctx, Math.ceil(p.hp) + '/' + p.stats.maxHp, padL + barW + 8, padT + 9 * s,
+      { size: 11, colour: 'rgba(255,255,255,0.9)' });
 
-    /* ---- pause ---- */
-    if (UI.button(ctx, 'pause', cw - pad - 34 * s, pad + 38 * s, 34 * s, 26 * s, '| |', { size: 13 })) {
+    var pauseX, pauseY;
+    if (tall) {
+      UI.text(ctx, clock, cw - padR, padT + 10 * s, { size: 22, align: 'right', weight: '800', colour: clockCol });
+      UI.text(ctx, HUD.progressText(trial), cw - padR, padT + 30 * s, { size: 12, align: 'right', colour: '#ffe45c' });
+      pauseX = padL; pauseY = padT + 38 * s;
+    } else {
+      UI.text(ctx, clock, cw / 2, padT + 12 * s, { size: 26, align: 'center', weight: '800', colour: clockCol });
+      UI.text(ctx, trial.spec.label, cw - padR, padT + 6 * s, { size: 13, align: 'right', colour: 'rgba(255,255,255,0.85)' });
+      UI.text(ctx, HUD.progressText(trial), cw - padR, padT + 24 * s, { size: 13, align: 'right', colour: '#ffe45c' });
+      pauseX = cw - padR - 34 * s; pauseY = padT + 38 * s;
+    }
+
+    if (UI.button(ctx, 'pause', pauseX, pauseY, 34 * s, 26 * s, '| |', { size: 13 })) {
       trial.paused = !trial.paused;
     }
 
@@ -219,11 +236,12 @@
        Instruction has to stay put: trial.message auto-clears after a couple of
        seconds, which is right for a combat nudge and useless for "here is how
        to move". persistentPrompt sits underneath and only the beat clears it. */
+    var bannerTop = padT + (tall ? 70 : 34) * s;
     if (trial.t < 6 || trial.message) {
-      HUD.banner(ctx, trial.message || trial.objective.text, cw, pad + 34 * s, s, 14, '#fff');
+      HUD.banner(ctx, trial.message || trial.objective.text, cw, bannerTop, s, 14, '#fff');
     }
     if (trial.persistentPrompt) {
-      var py = pad + (trial.message || trial.t < 6 ? 64 : 34) * s;
+      var py = bannerTop + (trial.message || trial.t < 6 ? 30 : 0) * s;
       HUD.banner(ctx, trial.persistentPrompt, cw, py, s, 13, '#ffe45c');
     }
 
@@ -243,25 +261,37 @@
     var live = trial.state === 'play' && !trial.paused && !p.dead;
     var lk = trial.lockedActions || {};
     var aR = 44 * s, sR = 31 * s, dR = 26 * s;
-    var ax = cw - pad - aR - 6 * s, ay = ch - pad - aR - 6 * s;
+    var ax = cw - padR - aR - 6 * s, ay = ch - padB - aR - 6 * s;
+
+    /* Laid out on an arc around the thumb, each button placed far enough from
+       its neighbour that their touch zones cannot meet. They used to be packed
+       by hand-tuned offsets and the circles genuinely overlapped: because
+       hit-testing walks the zone list backwards, the left edge of ATK fired
+       Spin instead. `1.08` matches the padding roundButton adds to its zone. */
+    function nextTo(fromX, fromY, r1, r2, deg) {
+      var d = (r1 + r2) * 1.08 + 5 * s;
+      var a = deg * Math.PI / 180;
+      return { x: fromX + Math.cos(a) * d, y: fromY + Math.sin(a) * d };
+    }
+    var spc = nextTo(ax, ay, aR, sR, 198);        /* left of ATK, a little high */
+    var ddg = nextTo(ax, ay, aR, dR, 275);        /* straight above ATK */
+    var itm = nextTo(spc.x, spc.y, sR, dR, 250);  /* up and in from the special */
+
     if (UI.roundButton(ctx, 'attack', ax, ay, aR, 'ATK', { disabled: !live || lk.attack, size: 16 })
       && live && !lk.attack) p.tryAttack(false);
 
-    var sx = ax - aR - sR + 6 * s, sy = ay - 12 * s;
     var wpn = D.WEAPONS[p.weaponId];
-    if (UI.roundButton(ctx, 'special', sx, sy, sR, wpn.special.name, {
+    if (UI.roundButton(ctx, 'special', spc.x, spc.y, sR, wpn.special.name, {
       disabled: !live || lk.special, size: 11, cooldown: p.specialCd, cooldownMax: wpn.special.cooldown
     }) && live && !lk.special) p.tryAttack(true);
 
-    var dx = ax - 6 * s, dy = ay - aR - dR - 4 * s;
-    if (UI.roundButton(ctx, 'dodge', dx, dy, dR, 'DODGE', {
+    if (UI.roundButton(ctx, 'dodge', ddg.x, ddg.y, dR, 'DODGE', {
       disabled: !live || lk.dodge, size: 9, cooldown: p.dodgeCd,
       cooldownMax: V.E.DODGE_COOLDOWN * p.stats.dodgeCdMul
     }) && live && !lk.dodge) p.tryDodge();
 
     var items = trial.consumables.potion + trial.consumables.tonic + trial.consumables.smoke;
-    var ix = sx - sR - dR + 2 * s, iy = sy - 6 * s;
-    if (UI.roundButton(ctx, 'item', ix, iy, dR, 'ITEM ' + items, {
+    if (UI.roundButton(ctx, 'item', itm.x, itm.y, dR, 'ITEM ' + items, {
       disabled: !live || lk.item || items <= 0, size: 9
     }) && live && !lk.item) trial.useConsumable();
 
@@ -364,8 +394,21 @@
       { size: 12, align: 'center', colour: 'rgba(255,255,255,0.65)' });
 
     if (UI.button(ctx, 'resume', x + 20 * s, y + 76 * s, w - 40 * s, 38 * s, 'Resume')) trial.paused = false;
-    if (UI.button(ctx, 'sound', x + 20 * s, y + 122 * s, w - 40 * s, 34 * s,
-      'Sound: ' + (Audio.enabled ? 'on' : 'off'))) Audio.setEnabled(!Audio.enabled);
+
+    /* Sound and haptics are separate switches on purpose: playing muted in
+       public is exactly when the buzz earns its keep. Haptics only appears
+       where the device actually has a vibration motor. */
+    var half = (w - 46 * s) / 2;
+    var canBuzz = V.Haptics.supported;
+    if (UI.button(ctx, 'sound', x + 20 * s, y + 122 * s, canBuzz ? half : w - 40 * s, 34 * s,
+      'Sound: ' + (Audio.enabled ? 'on' : 'off'), { size: 13 })) Audio.setEnabled(!Audio.enabled);
+    if (canBuzz && UI.button(ctx, 'haptics', x + 26 * s + half, y + 122 * s, half, 34 * s,
+      'Buzz: ' + (V.Haptics.enabled ? 'on' : 'off'), { size: 13 })) {
+      V.Haptics.enabled = !V.Haptics.enabled;
+      trial.game.save.haptics = V.Haptics.enabled;
+      trial.game.persist();
+      if (V.Haptics.enabled) V.Haptics.buzz(20);
+    }
     /* The tutorial cannot be abandoned - dying there just revives you - so the
        same slot becomes a way out for anyone who already knows the game. */
     if (trial.type === 'tutorial') {

@@ -802,6 +802,16 @@
     this.cam.x = U.lerp(this.cam.x, tx, 0.2);
     this.cam.y = U.lerp(this.cam.y, ty, 0.2);
 
+    /* Keep the view inside the arena. Standing near an edge used to show a
+       screenful of nothing past the barrier - badly so in portrait, where the
+       3/4 squash makes the vertical view over 2500 units tall, taller than the
+       arena itself. Where the arena no longer fills the view, lock that axis
+       to centre rather than letting the camera drift off the map. */
+    var limX = Math.max(0, this.barrierR + 90 - (cw / 2) / ZOOM);
+    var limY = Math.max(0, this.barrierR + 90 - (ch / 2) / (ZOOM * Art.SQUASH));
+    this.cam.x = U.clamp(this.cam.x, -limX, limX);
+    this.cam.y = U.clamp(this.cam.y, -limY, limY);
+
     var shakeX = 0, shakeY = 0;
     if (this.shakeTime > 0) {
       shakeX = Math.round((Math.random() - 0.5) * this.shakeAmt * ZOOM * 2);

@@ -507,7 +507,8 @@ async function main() {
     };
     for (const dir of ['down', 'up', 'side']) {
       for (const f of [0, 1, 2]) {
-        check(Spr.player(dir, f, '#3d6fa8'), `player:${dir}:${f}`);
+        check(Spr.player(dir, f, '#17141c'), `player:${dir}:${f}`);
+        check(Spr.civilian(dir, f, '#a8563d'), `civilian:${dir}:${f}`);
         check(Spr.goblin(dir, f), `goblin:${dir}:${f}`);
         check(Spr.minotaur(dir, f), `minotaur:${dir}:${f}`);
         check(Spr.reaper(dir, f), `reaper:${dir}:${f}`);

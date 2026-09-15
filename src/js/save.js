@@ -28,6 +28,7 @@
       decor: {},
       debuff: null,            /* { id } applied to the next attempt only */
       lastRank: null,
+      haptics: true,           /* vibration on damage; Android only */
       seenIntro: false,
       tutorialDone: false,     /* cleared the guided opening; resets with a New Game */
       tutorialStage: null,     /* 'intro' | 'square' | 'trial' - where Continue resumes */

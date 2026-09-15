@@ -47,18 +47,20 @@ html, body {
   color: #ffe9c9;
 }
 #boot p { margin: 0; font-size: 12px; opacity: 0.5; }
-/* nudge for portrait phones - the game plays best in landscape */
-#rotate {
+/* The canvas is full-bleed under the notch and the home indicator, so the
+   HUD has to inset itself. env() is only readable from CSS, so park it on a
+   zero-size probe and let the game measure its padding on every resize. */
+#safe-probe {
   position: fixed;
-  left: 50%;
-  bottom: 6px;
-  transform: translateX(-50%);
-  font-size: 11px;
-  opacity: 0.4;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
   pointer-events: none;
-  display: none;
-  z-index: 5;
-}
-@media (orientation: portrait) and (max-width: 560px) {
-  #rotate { display: block; }
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
 }
