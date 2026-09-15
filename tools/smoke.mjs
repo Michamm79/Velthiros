@@ -515,6 +515,7 @@ async function main() {
         check(Spr.warden(dir, f), `warden:${dir}:${f}`);
       }
     }
+    check(Spr.portrait(), 'portrait');
     check(Spr.aurelith(0), 'aurelith:0');
     check(Spr.aurelith(1), 'aurelith:1');
     for (const k of ['tree', 'pine', 'cactus', 'crate', 'fence', 'wall', 'rock',
@@ -530,6 +531,54 @@ async function main() {
   });
   check('every sprite bakes against the locked palette',
     sprites.problems.length === 0, sprites.count + ' sprites; ' + sprites.problems.slice(0, 4).join(' | '));
+
+  /* --- the hero's key art: derived from a photo, but it has to be ordinary
+         sprite data by the time it ships, and it has to be on screen --- */
+  const art = await page.evaluate(() => {
+    const P = window.V.Portrait, Px = window.V.Px, Spr = window.V.Spr;
+    const pal = Px.PALETTE;
+    const bad = new Set();
+    let opaque = 0;
+    for (const row of P.ROWS) {
+      for (const ch of row) {
+        if (ch === '.') continue;
+        opaque++;
+        if (!(ch in pal)) bad.add(ch);
+      }
+    }
+    const spr = Spr.portrait();
+    /* the silver ramp is the hair - it must have survived the remap */
+    const silver = P.ROWS.join('').split('').filter((c) => 'Ljl'.includes(c)).length;
+    return {
+      w: P.W, h: P.H, rows: P.ROWS.length,
+      widths: new Set(P.ROWS.map((r) => r.length)).size,
+      bad: [...bad], opaque, silver,
+      baked: !!(spr && spr.canvas && spr.w === P.W && spr.h === P.H)
+    };
+  });
+  check('the portrait is a well-formed sprite grid',
+    art.rows === art.h && art.widths === 1 && art.bad.length === 0 && art.baked,
+    JSON.stringify({ size: art.w + 'x' + art.h, rows: art.rows, rowWidths: art.widths, unknown: art.bad }));
+  check('the portrait is a figure, not a blank or a full rectangle',
+    art.opaque > art.w * art.h * 0.3 && art.opaque < art.w * art.h * 0.92,
+    Math.round(art.opaque / (art.w * art.h) * 100) + '% opaque');
+  check('the portrait wears the silver hair, not the photo\'s black',
+    art.silver > 150, art.silver + ' silver pixels');
+
+  const onTitle = await page.evaluate(() => {
+    const g = window.VELTHIROS;
+    g.setScene(new window.V.S.StartScene(g));
+    let drew = 0;
+    const real = window.V.Px.draw;
+    window.V.Px.draw = function (ctx, spr) {
+      if (spr === window.V.Spr.portrait()) drew++;
+      return real.apply(this, arguments);
+    };
+    g.scene.render(g.ctx, g.cw, g.ch);
+    window.V.Px.draw = real;
+    return drew;
+  });
+  check('the title screen shows the hero', onTitle === 1, 'drawn ' + onTitle + ' times');
 
   /* --- pushing a stone with the joystick off-centre must not slide you past --- */
   const push = await page.evaluate(() => {
