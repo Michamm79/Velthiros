@@ -1,0 +1,107 @@
+# Velthiros — press kit
+
+**Play it:** https://michamm79.github.io/Velthiros/
+
+---
+
+## Cover art
+
+`cover-1024.png` — square, 1024×1024.
+
+Regenerate at any size with `node tools/cover.mjs <size>` (`OUT=path.png` to choose the
+file). It is composed from the game's **own sprites and palette** rather than drawn
+separately, so the cover cannot drift away from what the game actually looks like — Garatu
+and the hero on it are the same sprites you meet in the game, at a whole-number scale.
+
+What is in the frame, and why:
+
+- **Garatu**, large and looming. He is the one who takes you, and the only watcher you
+  ever actually see.
+- **Eyes in the dark**, dozens of them, dimmer toward the edges. The premise is that unseen
+  watchers score every run, and by definition they have no sprite — so they are eyes, and
+  they are everywhere.
+- **The city**, because the abduction happens off an ordinary street. It is what he is
+  taken from.
+- **The hero, small, in a ring of light.** The only bright thing in the picture, and
+  deliberately dwarfed by everything above him. That is the game.
+
+---
+
+## The description
+
+### One line
+
+> Abducted by a demon, graded by an audience you will never see. Get good, or get poor.
+
+### Short (store blurb, ~90 words)
+
+> You were having a perfectly normal evening. Then Garatu showed up, and now you are in
+> the trials.
+>
+> Watchers you will never meet score every run. Finish in the top 25% and they pay you.
+> Come in under 40% and you go again — same trial, except now you are weaker, because
+> apparently that is entertainment. Die twenty-five times and they take everything you own.
+>
+> So you get good, or you get poor.
+>
+> Runs in your phone browser. No download, no store, no install.
+
+### Long (the full pitch)
+
+> You were having a perfectly normal evening. Then Garatu showed up, and now you are in
+> the trials.
+>
+> Here is the arrangement. Somewhere out there, watchers you will never meet are scoring
+> every single run you make. Finish in the top 25% and they pay you in Vel. Land in the
+> middle and you survive with nothing. Come in under 40% and you go again — same trial,
+> except now you are carrying a debuff, because apparently that is entertainment. Die
+> twenty-five times across the whole run and they take everything you own. Gems, gear, the
+> lot. Gone.
+>
+> So you get good, or you get poor.
+>
+> Fifty trials, and they do not all want the same thing from you. Some want a body count.
+> Some want you to hold a patch of ground while it is actively being taken off you. Some
+> hide a relic somewhere and expect you to go and find it. One wants you to solve a riddle.
+> One just wants you to not be seen, and being seen is the entire failure condition.
+>
+> You start with a sword. There is an axe and a bow if you save up. And there is a scythe
+> that is not for sale at any price, that nobody will tell you about, and that you will
+> only ever hold if you work out what the start screen is waiting for.
+>
+> Drag anywhere to move, tap to swing, dodge like you mean it. It is a real action-RPG that
+> happens to live in a browser tab — click the link and you are in, on a phone, with no
+> download and no app store between you and it. Add it to your home screen and it works
+> with the wifi off.
+>
+> They are watching. Give them something to score.
+
+---
+
+## Facts
+
+| | |
+|---|---|
+| Genre | Trial-based action-RPG |
+| Platform | Any browser; built for phones. Installs as a PWA, plays offline |
+| Controls | Touch (drag to move, tap to attack/dodge) or keyboard |
+| Content | 50 trials across 9 types, 4 weapons, 4 enemy types, a tutorial and a boss |
+| Currency | Vel (◆) |
+| Rules | Top 25% paid · under 40% repeats with a debuff · 25 deaths wipes the run |
+| Built with | Vanilla JavaScript and HTML5 canvas. No engine, no libraries |
+| Size | One self-contained 283 KB HTML file, no external assets |
+| Art | All 93 sprites authored in code against a locked 40-colour palette |
+| Audio | Synthesised at runtime through WebAudio; no audio files |
+| Status | Playable vertical slice |
+
+## Screenshots
+
+Generate fresh ones straight from the game rather than keeping stale copies here:
+
+```
+node tools/cover.mjs 1024          # the square cover
+```
+
+The title screen and in-game shots are easiest to grab by opening
+`dist/velthiros.html` and using the browser's own screenshot tool, at a phone-shaped
+window for portrait shots and a wide one for landscape.
