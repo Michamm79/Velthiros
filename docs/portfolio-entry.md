@@ -6,6 +6,31 @@ that repo actually uses as of this writing.
 
 ---
 
+## Scope: strictly additive
+
+**This adds one project. It does not edit, reorder, restyle or refactor any existing
+project, component or shared code.** Every instruction below is a new line in an existing
+file. Nothing already in `src/App.jsx` is modified or deleted.
+
+The complete set of changes:
+
+| # | Change | Kind |
+|---|---|---|
+| 1 | `src/assets/Velthiros_Visual.jpg` | new file |
+| 2 | One `import` line beside the other asset imports | new line |
+| 3 | One entry **appended** to the end of `PROJECTS` (index 7) | new lines |
+| 4 | One entry added to `CODE_SNIPPETS` | new lines |
+| 5 | One new JSX card block in the work section | new lines |
+
+Not touched: `CodeCard`, the lucide-react import line, the existing `PROJECTS` entries
+0–6, their JSX blocks, their snippets, the CSS, or any other file.
+
+**Verified safe:** `PROJECTS` currently holds exactly 7 entries (ids 0–6), and the JSX
+references run `PROJECTS[0]` through `PROJECTS[6]`. Appending at index 7 collides with
+nothing.
+
+---
+
 ## ⚠️ Read this first: the portfolio does NOT map over `PROJECTS`
 
 `src/App.jsx` renders each project as a **hand-written JSX block** that reaches into the
@@ -48,7 +73,8 @@ import Velthiros_Visual from './assets/Velthiros_Visual.jpg'
     description: 'A demon called Garatu takes you out of an ordinary evening, and the trials begin. Clear them well and watchers you never see pay you; finish below 40% and you run it again with a debuff; die twenty-five times and everything you own is gone. Velthiros is a trial-based action-RPG built for phones — touch controls, portrait or landscape, installable to a home screen and playable offline. It is built with no engine and no dependencies: ~7,300 lines of vanilla JavaScript across 15 modules, rendering to an HTML5 canvas. There are no art files and no audio files in the project. Every one of the 93 sprites is authored in code as a grid of characters resolved against a locked 40-colour palette, and every sound is synthesised at runtime through WebAudio. The whole game ships as one 283 KB HTML file that can be emailed, copied to a USB stick, or uploaded to a portal as-is.',
     tags: ['JavaScript', 'HTML5 Canvas', 'Mobile Web', 'PWA', 'Procedural Pixel Art', 'WebAudio', 'Playwright', 'Playable Vertical Slice'],
     github: 'https://github.com/Michamm79/Velthiros',
-    codeDownload: 'https://michamm79.github.io/Velthiros/',
+    codeDownload: 'https://github.com/Michamm79/Velthiros/archive/refs/heads/main.zip',
+    liveDemo: 'https://michamm79.github.io/Velthiros/',
     media: [{ type: 'image', src: Velthiros_Visual, label: 'Title Screen', system: 'Presentation' }],
     recruiterHighlights: [
       'Playable in any phone browser with no install and no app store — one 283 KB self-contained HTML file with zero dependencies and zero binary assets.',
@@ -136,13 +162,20 @@ display order, the array order does not.**
                     <img key={i} src={src} alt="Velthiros" loading="lazy" onClick={() => openMedia(PROJECTS[7], i)} />
                   ))}
                 </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', padding: '0 1rem 8px' }}>
+                  <a className="media-open-btn" href={PROJECTS[7].liveDemo}
+                     target="_blank" rel="noopener noreferrer"
+                     onClick={e => e.stopPropagation()}>
+                    <ExternalLink size={12} /> Play it in your browser
+                  </a>
+                </div>
                 <CodeCard snippet={CODE_SNIPPETS.velthiros_buffer} github={PROJECTS[7].github} codeDownload={PROJECTS[7].codeDownload} />
               </div>
 ```
 
 ---
 
-## 5. Give it a "Play" button (confirmed necessary)
+## 5. The "Play it" button — inside the new block only
 
 `CodeCard` hardcodes its second link's label:
 
@@ -154,47 +187,35 @@ display order, the array order does not.**
 )}
 ```
 
-So pointing `codeDownload` at the live build renders a **Download** button that actually
-opens a game. That is the wrong affordance for the one project on this portfolio that a
-recruiter can play in a single click — it deserves better than being disguised as a zip.
+So `codeDownload` cannot carry the live build without rendering a **Download** button that
+actually opens a game — the wrong affordance for the one project here you can play in a
+single click.
 
-Two options:
+Adding a `liveDemo` prop to `CodeCard` would fix it, but `CodeCard` is shared by all seven
+existing cards, and this change is meant to touch none of them. **So the Play link goes in
+the Velthiros card's own JSX instead**, in its own row above `<CodeCard>`. That is new code
+in a new block: `CodeCard` is untouched, and so is every existing card.
 
-**Option A — add a `liveDemo` prop (recommended).** Three small edits, and it leaves
-every existing card untouched because the block is gated on the prop being present.
+It reuses the `media-open-btn` class and the `ExternalLink` icon, both **already imported
+and already in use** — so even the lucide import line stays exactly as it is.
 
-1. Extend the signature:
-   ```jsx
-   function CodeCard({ snippet, snippets, github, codeDownload, liveDemo }) {
-   ```
-2. Add `Play` to the lucide import at the top of the file:
-   ```js
-   import { X, ExternalLink, Download, Eye, Play } from 'lucide-react';
-   ```
-3. Add the button just before the `codeDownload` block:
-   ```jsx
-   {liveDemo && (
-     <a className="media-open-btn" href={liveDemo} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
-       <Play size={12} /> Play it
-     </a>
-   )}
-   ```
-   Then in the Velthiros JSX block:
-   ```jsx
-   <CodeCard
-     snippet={CODE_SNIPPETS.velthiros_buffer}
-     github={PROJECTS[7].github}
-     liveDemo="https://michamm79.github.io/Velthiros/"
-     codeDownload="https://github.com/Michamm79/Velthiros/archive/refs/heads/main.zip"
-   />
-   ```
-   If you take this option, change `codeDownload` in the `PROJECTS` entry above to the
-   archive zip and add `liveDemo: 'https://michamm79.github.io/Velthiros/'` beside it, so
-   the data and the JSX agree.
+```jsx
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', padding: '0 1rem 8px' }}>
+                  <a className="media-open-btn" href={PROJECTS[7].liveDemo}
+                     target="_blank" rel="noopener noreferrer"
+                     onClick={e => e.stopPropagation()}>
+                    <ExternalLink size={12} /> Play it in your browser
+                  </a>
+                </div>
+```
 
-**Option B — leave it.** Valtara already points `codeDownload` at an itch.io page rather
-than a file, so a link-not-a-file there is established precedent. Lowest effort, but the
-button still says the wrong word.
+`codeDownload` in the entry above therefore points at the source archive, matching every
+other project, and `liveDemo` carries the playable link. The full JSX block in section 4
+already includes this row.
+
+> If you ever want a Play button on other cards too, that is the `CodeCard` change — a
+> `liveDemo` prop and a gated block. Deliberately **not** done here, because it is a shared
+> component and this change adds a project rather than editing the site.
 
 ---
 
