@@ -182,6 +182,20 @@ An earlier version used a pixel portrait converted from a reference photograph. 
 by the sprite, which is the character the game actually plays; the converter and its output are
 in the history rather than the tree.
 
+**The start screen offers to install it, but only where the offer leads somewhere.**
+Chrome and Edge fire `beforeinstallprompt`, which `V.Install` holds (preventing Chrome's own
+mini-infobar from covering the game) and replays from a real tap later. Safari fires nothing
+and has no programmatic install at all, so iOS gets a card with the three taps that do it by
+hand instead of a button that would do nothing. Everywhere else, and once the game is already
+running installed, the button is simply absent — an install button that cannot install is
+worse than no button. iOS reports installed-ness through `navigator.standalone` rather than
+the `display-mode` media query, so both are checked.
+
+Two things the button needed from around it. Garatu is placed against the menu's real bottom
+edge, so that measurement has to include the install row when it exists. And a modal drawn
+over the menu leaves the menu's own hit zones live underneath it, so `Input.clearZones()`
+drops everything registered earlier in the frame before the card registers its own button.
+
 **The game is a phone game, so it is built like one.** The world buffer is sized by area
 rather than by height: sizing by height alone handed a portrait phone a 98-pixel-wide slice
 of arena, which meant a giant player and no warning of anything walking at you. The HUD

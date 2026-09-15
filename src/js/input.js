@@ -209,6 +209,10 @@
   Input.zone = function (id, x, y, w, h) {
     Input.zones.push({ id: id, x: x, y: y, w: w, h: h });
   };
+  /* Drop everything registered so far this frame. A modal drawn over the menu
+     still leaves the menu's zones live otherwise, and a tap outside the panel
+     would reach the button underneath it. */
+  Input.clearZones = function () { Input.zones.length = 0; };
   Input.circleZone = function (id, x, y, r) {
     Input.zones.push({ id: id, x: x, y: y, r: r });
   };

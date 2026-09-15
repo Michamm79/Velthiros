@@ -885,6 +885,10 @@ html, body {
   Input.zone = function (id, x, y, w, h) {
     Input.zones.push({ id: id, x: x, y: y, w: w, h: h });
   };
+  /* Drop everything registered so far this frame. A modal drawn over the menu
+     still leaves the menu's zones live otherwise, and a tap outside the panel
+     would reach the button underneath it. */
+  Input.clearZones = function () { Input.zones.length = 0; };
   Input.circleZone = function (id, x, y, r) {
     Input.zones.push({ id: id, x: x, y: y, r: r });
   };
@@ -5617,6 +5621,8 @@ html, body {
     this.promptShown = false;
     this.comboProgress = 0;
     this.unlockFlash = 0;
+    this.showInstallHelp = false;
+    this.installResult = null;
     this.combo = D.COMBOS[game.save.comboIndex % D.COMBOS.length];
     this.stars = [];
     for (var i = 0; i < 60; i++) {
@@ -5720,7 +5726,11 @@ html, body {
     var bx = uiX - bwid / 2;
     var by = ch * 0.235;
     var bh = 46 * s;
-    var menuBottom = by + (bh + 14 * s) * 2 + 34 * s;
+    /* the install row only exists where installing leads somewhere, and Garatu
+       is placed against the menu's real bottom edge, so it has to be measured
+       with the row rather than without it */
+    var installMode = V.Install.mode();
+    var menuBottom = by + (bh + 14 * s) * 2 + 34 * s + (installMode ? 44 * s : 0);
 
     /* Garatu, watching from the far side, at an integer scale so the pixels
        stay square on the full-resolution canvas. On a wide screen he clears
@@ -5767,6 +5777,29 @@ html, body {
       this.game.setScene(new S.HelpScene(this.game));
     }
 
+    /* Install. Absent unless it would actually do something - see V.Install. */
+    if (installMode) {
+      var iw = bwid * 0.72, ix = uiX - iw / 2, iy = oy + 44 * s;
+      var label = installMode === 'manual' ? 'Add to Home Screen' : 'Install app';
+      if (UI.button(ctx, 'install', ix, iy, iw, 32 * s, label,
+        { size: 14, fill: 'rgba(38,48,66,0.9)', stroke: 'rgba(126,214,233,0.45)' })) {
+        if (installMode === 'manual') {
+          this.showInstallHelp = true;
+          Audio.play('confirm');
+        } else {
+          var self = this;
+          V.Install.run().then(function (outcome) {
+            self.installResult = outcome === 'accepted' ? 'Installing...' : null;
+            Audio.play(outcome === 'accepted' ? 'unlock' : 'deny');
+          });
+        }
+      }
+    }
+    if (this.installResult) {
+      UI.text(ctx, this.installResult, uiX, oy + 62 * s,
+        { size: 12, align: 'center', colour: 'rgba(126,214,233,0.85)' });
+    }
+
     /* footer state */
     var sv = this.game.save;
     UI.text(ctx, 'deaths ' + sv.deaths + '/' + D.DEATH_LIMIT + '   ' + D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency) +
@@ -5778,6 +5811,8 @@ html, body {
         { size: 22, align: 'center', weight: '800', colour: '#c9f0ea' });
     }
 
+    if (this.showInstallHelp) return this.drawInstallHelp(ctx, cw, ch, s);
+
     if (this.promptShown) this.drawCombo(ctx, cw, ch, s);
     else if (!this.game.save.scytheUnlocked) {
       /* the faintest nudge - the mechanic is meant to be discovered */
@@ -5785,6 +5820,37 @@ html, body {
       if (left < 30) {
         UI.text(ctx, '. . .', uiX, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
       }
+    }
+  };
+
+  /* iOS has no install API at all, so the only honest thing to offer is the
+     three taps that do it by hand. */
+  StartScene.prototype.drawInstallHelp = function (ctx, cw, ch, s) {
+    Input.clearZones();               /* the menu is behind this panel */
+    UI.dim(ctx, cw, ch, 0.8);
+    var w = Math.min(340 * s, cw - 30), x = cw / 2 - w / 2;
+    var h = Math.min(300 * s, ch - 80 * s), y = ch / 2 - h / 2;
+    UI.panel(ctx, x, y, w, h, { fill: 'rgba(18,14,26,0.96)', stroke: 'rgba(126,214,233,0.5)' });
+
+    UI.text(ctx, 'Add to Home Screen', cw / 2, y + 30 * s,
+      { size: 18, align: 'center', weight: '800', colour: '#c9f0ea' });
+    UI.text(ctx, 'It runs full screen and works offline.', cw / 2, y + 54 * s,
+      { size: 12, align: 'center', colour: 'rgba(255,255,255,0.6)' });
+
+    var steps = [
+      '1.  Tap the Share button',
+      '2.  Scroll to "Add to Home Screen"',
+      '3.  Tap Add'
+    ];
+    for (var i = 0; i < steps.length; i++) {
+      UI.text(ctx, steps[i], x + 26 * s, y + 92 * s + i * 30 * s,
+        { size: 14, colour: 'rgba(255,255,255,0.88)' });
+    }
+    UI.text(ctx, 'Safari only - other iOS browsers cannot add it.', cw / 2, y + h - 62 * s,
+      { size: 11, align: 'center', colour: 'rgba(255,255,255,0.4)' });
+
+    if (UI.button(ctx, 'installclose', cw / 2 - 70 * s, y + h - 46 * s, 140 * s, 34 * s, 'Got it')) {
+      this.showInstallHelp = false;
     }
   };
 
@@ -6971,6 +7037,82 @@ html, body {
     try { this._wakeLock.release(); } catch (e) { /* already released */ }
     this._wakeLock = null;
   };
+
+  /* ============================================================== INSTALL
+     Adding the game to a home screen is the closest thing it has to being
+     downloaded, so the start screen offers it - but only where the offer
+     leads somewhere.
+
+     Chrome and Edge fire beforeinstallprompt, which can be held and replayed
+     from a real tap later. Safari fires nothing and has no programmatic
+     install at all, so iOS gets instructions instead of a button that would
+     do nothing. Everywhere else, and once it is already installed, the button
+     is simply absent: an install button that cannot install is worse than no
+     button. */
+  var Install = {
+    deferred: null,
+    dismissed: false,
+
+    /* Already running as an installed app? Then there is nothing to offer.
+       iOS reports this through navigator.standalone rather than the media
+       query, which it does not implement for this. */
+    installed: function () {
+      if (typeof navigator !== 'undefined' && navigator.standalone) return true;
+      if (typeof window === 'undefined' || !window.matchMedia) return false;
+      return window.matchMedia('(display-mode: standalone)').matches ||
+             window.matchMedia('(display-mode: fullscreen)').matches;
+    },
+
+    /* iOS Safari: installable by hand, never programmatically. Chrome on iOS
+       is also WebKit and also cannot do it, so this deliberately tests the
+       platform rather than the browser. */
+    isIOS: function () {
+      if (typeof navigator === 'undefined') return false;
+      var ua = navigator.userAgent || '';
+      return /iPad|iPhone|iPod/.test(ua) ||
+             (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    },
+
+    /* What the button should do, or nothing at all. */
+    mode: function () {
+      if (this.installed()) return null;
+      if (this.deferred) return 'prompt';
+      if (this.isIOS()) return 'manual';
+      return null;
+    },
+
+    /* Returns a promise for the outcome. The held event is single-use: once
+       it has been prompted it cannot be prompted again, so it is cleared
+       either way. */
+    run: function () {
+      var e = this.deferred;
+      if (!e) return Promise.resolve('unavailable');
+      this.deferred = null;
+      try {
+        e.prompt();
+        return Promise.resolve(e.userChoice).then(function (c) {
+          return (c && c.outcome) || 'dismissed';
+        });
+      } catch (err) {
+        return Promise.resolve('failed');
+      }
+    },
+
+    bind: function () {
+      if (typeof window === 'undefined') return;
+      var self = this;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        /* without this Chrome shows its own mini-infobar over the game */
+        e.preventDefault();
+        self.deferred = e;
+      });
+      window.addEventListener('appinstalled', function () {
+        self.deferred = null;
+      });
+    }
+  };
+  Install.bind();
+  V.Install = Install;
 
   /* env(safe-area-inset-*) is only legible from CSS, so #safe-probe wears it
      as padding and we measure that. Falls back to zeroes everywhere it is not
