@@ -168,7 +168,11 @@ now use sprites. A tiled interior is the remaining art job.
 
 **The title screen's key art is the hero sprite itself**, `Spr.player('down', 0)`, drawn at a
 whole-number scale so its pixels stay square, standing on the skyline with the menu centred
-above him and Garatu watching from the far side. Garatu is placed around the menu rather than
+above him and Garatu watching from the far side. He is sized off the **short edge**, the way
+`UI.setScale` sizes everything else. Off the height he came out more than twice as tall in
+portrait as in landscape, because the height is the dimension that changes when the phone
+turns; the short edge barely moves, so he is the same figure either way up. A device check
+holds the two orientations to the same pixel height. Garatu is placed around the menu rather than
 at a fixed spot: on a wide screen he clears it by sitting to its right, but on a narrow one his
 wingspan reaches into the menu's column, so there he drops below it instead. Because the hero,
 his shirt and his denim are all dark and the skyline behind them is darker still, a warm radial

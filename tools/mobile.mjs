@@ -136,6 +136,36 @@ async function main() {
   check('portrait and landscape show the same amount of arena',
     spread < 0.15, `portrait=${buffers.portrait}px2 landscape=${buffers.landscape}px2 (${Math.round(spread * 100)}% apart)`);
 
+  /* The title hero is sized off the SHORT edge, so he is the same figure
+     whichever way the phone is held. Sized off the height he came out more
+     than twice as tall in portrait, because the height is the dimension that
+     changes when the phone turns. */
+  const heroAt = {};
+  for (const [label, w, h] of [['portrait', 390, 844], ['landscape', 844, 390]]) {
+    const c = await browser.newContext({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+    const pg = await c.newPage();
+    await pg.goto(`http://127.0.0.1:${dev.port}/index.html`);
+    await wait(700);
+    heroAt[label] = await pg.evaluate(() => {
+      const g = window.VELTHIROS;
+      g.setScene(new window.V.S.StartScene(g));
+      const hero = window.V.Spr.player('down', 0, g.playerTint());
+      let px = 0;
+      const real = window.V.Px.draw;
+      window.V.Px.draw = function (ctx, spr, x, y, opts) {
+        if (spr === hero) px = hero.h * ((opts && opts.scale) || 1);
+        return real.apply(this, arguments);
+      };
+      g.scene.render(g.ctx, g.cw, g.ch);
+      window.V.Px.draw = real;
+      return px;
+    });
+    await c.close();
+  }
+  check('the title hero is the same size whichever way the phone is held',
+    heroAt.portrait > 0 && heroAt.portrait === heroAt.landscape,
+    `portrait=${heroAt.portrait}px landscape=${heroAt.landscape}px`);
+
   /* ---------------- safe-area insets actually move the HUD ---------------- */
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();

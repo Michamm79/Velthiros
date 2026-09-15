@@ -5707,11 +5707,13 @@ html, body {
     /* ---- the hero, standing on the skyline, left of the menu ----
        The same 18x28 sprite the game plays, blown up at an integer scale so
        the pixels stay square. Px anchors him at his feet, so he is positioned
-       by where he stands rather than by a corner. Sized off the screen HEIGHT
-       and pushed far enough right that a narrow phone does not clip his arm,
-       while the menu stays centred and clear of him in both orientations. */
+       by where he stands rather than by a corner. Sized off the SHORT edge,
+       the way UI.setScale sizes everything else: off the height he came out
+       more than twice as tall in portrait as in landscape, because the height
+       is the dimension that changes when the phone turns. The short edge
+       barely moves, so he is the same figure whichever way it is held. */
     var hero = V.Spr.player('down', 0, this.game.playerTint());
-    var hScale = Math.max(3, Math.round((ch * 0.36) / hero.h));
+    var hScale = Math.max(3, Math.round((Math.min(cw, ch) * 0.36) / hero.h));
     var heroW = hero.w * hScale, heroH = hero.h * hScale;
     var heroY = ch - 26 * s;
     var heroX = Math.round(Math.max(heroW * 0.6 + 8 * s, cw * 0.24));
@@ -5731,7 +5733,7 @@ html, body {
     /* the menu's box, measured here because Garatu has to be placed around it */
     var bwid = Math.min(230 * s, cw * 0.62);
     var bx = uiX - bwid / 2;
-    var by = ch * 0.3;
+    var by = ch * 0.235;
     var bh = 46 * s;
     var menuBottom = by + (bh + 14 * s) * 2 + 34 * s;
 
@@ -5760,7 +5762,8 @@ html, body {
       size: 13, align: 'center', colour: 'rgba(255,220,190,0.7)'
     });
 
-    /* stacked buttons, centred and held above his head in both orientations */
+    /* stacked buttons, tucked under the title - he stands far enough below
+       them now that they no longer have to be pushed down to meet him */
     if (UI.button(ctx, 'newgame', bx, by, bwid, bh, 'New Game')) this.game.newGame();
     var canContinue = Save.hasContinue(this.game.save);
     var resumeAt = !this.game.save.tutorialDone ? 'the opening'
