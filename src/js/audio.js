@@ -108,6 +108,15 @@
     calm:  { root: 220.00, scale: [0, 4, 7, 11, 14], tempo: 900, type: 'sine', vol: 0.08 }
   };
 
+  /* Park the current mood so a phone call or a tab switch can silence the
+     game and then put it back exactly as it was. */
+  Audio.hush = function () {
+    if (currentMood) { Audio.held = currentMood; Audio.music(null); }
+  };
+  Audio.unhush = function () {
+    if (Audio.held) { var m = Audio.held; Audio.held = null; Audio.music(m); }
+  };
+
   Audio.music = function (mood) {
     if (mood === currentMood) return;
     currentMood = mood;
@@ -129,5 +138,22 @@
     }, m.tempo);
   };
 
+  /* ------------------------------------------------------------- haptics
+     Android only - iOS Safari has no Vibration API at all - and deliberately
+     short. A game that buzzes on every swing is a game people silence at the
+     OS level, so this fires on damage and death, not on contact. Kept separate
+     from the sound toggle: playing muted on a bus is exactly when you most
+     want the buzz. */
+  var Haptics = {
+    enabled: true,
+    supported: typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'
+  };
+
+  Haptics.buzz = function (pattern) {
+    if (!Haptics.enabled || !Haptics.supported) return;
+    try { navigator.vibrate(pattern); } catch (e) { /* some UAs refuse outright */ }
+  };
+
+  V.Haptics = Haptics;
   V.Audio = Audio;
 })(window.V = window.V || {});

@@ -22,7 +22,10 @@
     'M': '#332d40',   /* interior floor dark */
     'V': '#4a4356',   /* interior floor mid */
     'E': '#1d2430',   /* cave / HQ shadow */
-    'x': '#6b7480'    /* cool stone mid-dark */
+    'x': '#6b7480',   /* cool stone mid-dark */
+    'L': '#1b1622',   /* black hair / black denim */
+    'l': '#342d44',   /* the sheen on both */
+    'U': '#0f0d14'    /* boot black, the darkest value in the set */
   });
 
   function cached(key, build) {
@@ -32,77 +35,148 @@
 
   /* =============================================================== ACTORS */
 
-  /* Shared humanoid. dir: 'down' | 'up' | 'side'. frame: 0 idle, 1/2 walk. */
+  /* The hero wears an open long-sleeve top: it covers the arms and the upper
+     back and nothing else. So the front view is chest and abs, the back view
+     is black across the shoulders with skin below, and the side view shows the
+     shirt only as a strip down the spine. Drawn after the torso base so the
+     definition lines survive. */
+  function bareTorso(g, o, top, bot) {
+    var belt = bot - 1;                              /* a one-row belt buys a row of abs */
+    if (o.dir === 'up') {
+      g.rect(o.cloth, 6, top, 6, 2);                 /* the shirt, across the shoulders */
+      g.set(11, top, o.clothDark); g.set(11, top + 1, o.clothDark);
+      g.rect('f', 6, top + 2, 6, belt - top - 2);    /* the small of the back, bare */
+      g.rect('F', 11, top + 2, 1, belt - top - 2);
+      g.rect('F', 9, top + 3, 1, belt - top - 3);    /* spine */
+    } else {
+      g.rect('f', 6, top, 6, belt - top);
+      g.rect('F', 11, top, 1, belt - top);           /* lit from the left */
+      g.set(7, top, 'F'); g.set(10, top, 'F');       /* collarbones */
+      g.rect('F', 7, top + 2, 4, 1);                 /* under the pecs */
+      g.rect('F', 7, top + 4, 4, 1);                 /* the ab line */
+      g.set(9, top + 3, 'F');                        /* linea alba */
+      g.set(9, top + 5, 'F');
+      if (o.dir === 'side') g.rect(o.cloth, 6, top, 1, belt - top);  /* shirt down the spine */
+      else g.set(9, top + 1, 'Y');                   /* the pendant, at the sternum */
+    }
+    g.rect(o.belt, 6, belt, 6, 1);
+    g.set(9, belt, 'a');                             /* buckle */
+  }
+
+  /* Shared humanoid. dir: 'down' | 'up' | 'side'. frame: 0 idle, 1/2 walk.
+     `bare` picks the hero's build; without it you get an ordinary clothed
+     person, which is what the square crowd needs. */
   function humanoidGrid(o) {
     var W = 18, H = 28;
     var g = new Px.Grid(W, H);
-    (function (g) {
-      var cx = 9;
-      var bob = (o.frame === 1 || o.frame === 2) ? 1 : 0;
-      var legTop = 20, legBot = 25;
-      var bodyTop = 12 + bob, bodyBot = 19 + bob;
-      var headCy = 8 + bob;
+    var cx = 9;
+    var bob = (o.frame === 1 || o.frame === 2) ? 1 : 0;
+    var legTop = 20, legBot = 25;
+    var bodyTop = 12 + bob, bodyBot = 19 + bob;
+    var headCy = 8 + bob;
+    var torsoH = bodyBot - bodyTop;
 
-      /* ---- legs (planted; the walk lifts one at a time) ---- */
-      var lx = 6, rx = 9, lTop = legTop, rTop = legTop;
-      if (o.frame === 1) { lx = 5; lTop = legTop + 1; }
-      if (o.frame === 2) { rx = 10; rTop = legTop + 1; }
-      g.rect(o.trouser, lx, lTop, 3, legBot - lTop);
-      g.rect(o.trouser, rx, rTop, 3, legBot - rTop);
-      g.rect(o.boot, lx, legBot, 3, 2);
-      g.rect(o.boot, rx, legBot, 3, 2);
+    /* ---- legs (planted; the walk lifts one at a time) ---- */
+    var lx = 6, rx = 9, lTop = legTop, rTop = legTop;
+    if (o.frame === 1) { lx = 5; lTop = legTop + 1; }
+    if (o.frame === 2) { rx = 10; rTop = legTop + 1; }
+    g.rect(o.trouser, lx, lTop, 3, legBot - lTop);
+    g.rect(o.trouser, rx, rTop, 3, legBot - rTop);
+    if (o.trouserLite) {                       /* a seam of light down each leg */
+      g.rect(o.trouserLite, lx, lTop, 1, legBot - lTop);
+      g.rect(o.trouserLite, rx, rTop, 1, legBot - rTop);
+    }
+    g.rect(o.boot, lx, legBot, 3, 2);
+    g.rect(o.boot, rx, legBot, 3, 2);
 
-      /* ---- torso ---- */
-      g.rect(o.cloth, 6, bodyTop, 6, bodyBot - bodyTop);
-      /* shaded right side + a belt */
-      g.rect(o.clothDark, 10, bodyTop + 1, 2, bodyBot - bodyTop - 1);
+    /* ---- torso ---- */
+    if (o.bare) {
+      bareTorso(g, o, bodyTop, bodyBot);
+    } else {
+      g.rect(o.cloth, 6, bodyTop, 6, torsoH);
+      g.rect(o.clothDark, 10, bodyTop + 1, 2, torsoH - 1);
       g.rect(o.belt, 6, bodyBot - 2, 6, 2);
       if (o.chest) g.rect(o.chest, 7, bodyTop + 2, 2, 3);
+    }
 
-      /* ---- arms ---- */
-      if (o.dir === 'side') {
-        g.rect(o.cloth, 11, bodyTop + 1, 2, 4);
-        g.rect('f', 11, bodyTop + 5, 2, 3);
-      } else {
-        g.rect(o.cloth, 4, bodyTop + 1, 2, 4);
-        g.rect(o.cloth, 12, bodyTop + 1, 2, 4);
-        g.rect('f', 4, bodyTop + 5, 2, 3);
-        g.rect('f', 12, bodyTop + 5, 2, 3);
+    /* ---- arms. A long sleeve runs almost to the wrist, so only the hand
+           is skin; a short one leaves the forearm bare. ---- */
+    var sleeve = o.bare ? 5 : 4;
+    var hand = 7 - sleeve;
+    if (o.dir === 'side') {
+      g.rect(o.cloth, 11, bodyTop + 1, 2, sleeve);
+      g.rect('f', 11, bodyTop + 1 + sleeve, 2, hand);
+    } else {
+      g.rect(o.cloth, 4, bodyTop + 1, 2, sleeve);
+      g.rect(o.cloth, 12, bodyTop + 1, 2, sleeve);
+      g.rect('f', 4, bodyTop + 1 + sleeve, 2, hand);
+      g.rect('f', 12, bodyTop + 1 + sleeve, 2, hand);
+    }
+
+    /* ---- head ---- */
+    g.oval('f', cx, headCy, 4, 4);
+    g.rect('F', cx + 2, headCy - 1, 2, 4);          /* cheek shade */
+
+    /* ---- hair ---- */
+    if (o.dir === 'up') {
+      g.oval(o.hair, cx, headCy - 1, 4, 4);
+      g.rect(o.hair, cx - 4, headCy - 1, 9, 4);
+      if (o.hairLite) { g.set(cx - 2, headCy - 3, o.hairLite); g.set(cx + 1, headCy - 4, o.hairLite); }
+    } else {
+      /* Black hair swallows a face that brown hair only frames, so the hero's
+         fringe sits a row higher and shallower than everyone else's. */
+      g.oval(o.hair, cx, headCy - (o.curly ? 3 : 2), 4, o.curly ? 2 : 3);
+      g.rect(o.hair, cx - 4, headCy - 4, 9, 3);
+      g.rect(o.hair, cx - 4, headCy - 2, 2, o.curly ? 2 : 3);
+      g.rect(o.hair, cx + 3, headCy - 2, 2, o.curly ? 2 : 3);
+      if (o.curly) {
+        /* break the silhouette so it reads as curl rather than a helmet.
+           Kept strictly above the eyeline - in black, anything lower closes
+           the face up entirely. */
+        g.set(cx - 5, headCy - 3, o.hair);
+        g.set(cx + 4, headCy - 3, o.hair);
+        g.set(cx - 1, headCy - 5, o.hair);
+        g.set(cx + 2, headCy - 5, o.hair);
       }
-
-      /* ---- head ---- */
-      g.oval('f', cx, headCy, 4, 4);
-      g.rect('F', cx + 2, headCy - 1, 2, 4);          /* cheek shade */
-
-      /* ---- hair ---- */
-      if (o.dir === 'up') {
-        g.oval(o.hair, cx, headCy - 1, 4, 4);
-        g.rect(o.hair, cx - 4, headCy - 1, 9, 4);
-      } else {
-        g.oval(o.hair, cx, headCy - 2, 4, 3);
-        g.rect(o.hair, cx - 4, headCy - 4, 9, 3);
-        g.rect(o.hair, cx - 4, headCy - 2, 2, 3);
-        g.rect(o.hair, cx + 3, headCy - 2, 2, 3);
+      if (o.hairLite) {
+        g.set(cx - 2, headCy - 4, o.hairLite);
+        g.set(cx - 1, headCy - 4, o.hairLite);
+        g.set(cx + 2, headCy - 3, o.hairLite);
       }
+    }
 
-      /* ---- face ---- */
-      if (o.dir === 'down') {
-        g.set(cx - 2, headCy + 1, 'K');
-        g.set(cx + 2, headCy + 1, 'K');
-      } else if (o.dir === 'side') {
-        g.set(cx + 2, headCy + 1, 'K');
-        g.rect(o.hair, cx - 4, headCy - 2, 3, 5);     /* back of the head */
-      }
+    /* ---- face ---- */
+    if (o.dir === 'down') {
+      g.set(cx - 2, headCy + 1, 'K');
+      g.set(cx + 2, headCy + 1, 'K');
+    } else if (o.dir === 'side') {
+      g.set(cx + 2, headCy + 1, 'K');
+      g.rect(o.hair, cx - 4, headCy - 2, 3, 5);     /* back of the head */
+    }
 
-      g.outline('K');
-    })(g);
+    g.outline('K');
     return g;
   }
 
-  /* the tunic colour is a shop purchase, so bake one variant per tint */
+  /* The hero. `tint` recolours the shirt only - the shop sells sleeves, not
+     tunics - so the hair, denim and skin stay put across every purchase. */
   Spr.player = function (dir, frame, tint) {
-    tint = tint || '#3d6fa8';
+    tint = tint || '#17141c';
     return cached('pl:' + dir + ':' + frame + ':' + tint, function () {
+      var g = humanoidGrid({
+        dir: dir, frame: frame, bare: true, curly: true,
+        cloth: 'm', clothDark: 'B', belt: 'U', trouser: 'M', trouserLite: 'V',
+        boot: 'U', hair: 'L', hairLite: 'l'
+      });
+      return Px.bake(g, { pal: { 'm': tint, 'B': shade(tint, -18) } });
+    });
+  };
+
+  /* Everybody else. Ordinary clothes, ordinary hair - the square crowd is
+     meant to read as a street full of people, not a street full of heroes. */
+  Spr.civilian = function (dir, frame, tint) {
+    tint = tint || '#3d6fa8';
+    return cached('cv:' + dir + ':' + frame + ':' + tint, function () {
       var g = humanoidGrid({
         dir: dir, frame: frame,
         cloth: 'm', clothDark: 'B', belt: 'W', trouser: 'B', boot: 'W',

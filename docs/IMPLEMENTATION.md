@@ -154,12 +154,33 @@ what keeps pixel art from shimmering when the camera moves. The arena's world zo
 at 0.26 buffer pixels per world unit to hold that relationship.
 
 Characters have three authored views — down, up and side, with side mirrored for the other
-direction — and a three-frame walk. Weapons are separate sprites pivoted at the grip and
-rotated through the swing. The test suite bakes all 65 sprites and fails on any unknown
+direction — and a three-frame walk. The hero and the crowd share one builder: `Spr.player`
+draws an open long-sleeve top over a bare torso (so the back view is black across the
+shoulders and skin below it), while `Spr.civilian` keeps the ordinary clothed build the
+square needs. The shop's tints recolour the hero's sleeves, not a tunic. Weapons are separate sprites pivoted at the grip and
+rotated through the swing. The test suite bakes all 93 sprites and fails on any unknown
 palette key, which is the main defence against a typo in hand-placed pixel data.
 
 What is not yet converted: the bedroom and hub interior furniture. The title and cutscene
 now use sprites. A tiled interior is the remaining art job.
+
+**The game is a phone game, so it is built like one.** The world buffer is sized by area
+rather than by height: sizing by height alone handed a portrait phone a 98-pixel-wide slice
+of arena, which meant a giant player and no warning of anything walking at you. The HUD
+reads `env(safe-area-inset-*)` off a hidden probe element — the only way to get those values
+into JavaScript — and lays itself out inside them, stacking the top row in portrait where
+bars, clock and label will not fit on one line. The action buttons sit on an arc with a
+guaranteed gap: they used to overlap, and because hit-testing walks the zone list backwards,
+the left edge of ATK fired the special instead. A camera clamp keeps the view inside the
+barrier, which matters most in portrait, where the 3/4 squash makes the visible strip taller
+than the arena itself.
+
+Beyond layout: a screen wake lock holds the display on through a trial, `visibilitychange`
+pauses the run and parks the music when a call arrives, and short vibrations fire on damage
+and death (Android only — iOS has no Vibration API). `tools/build.mjs` assembles `dist/site`,
+which is the whole installable app: the bundled page, a manifest with maskable icons, and a
+service worker whose cache name carries a hash of the bundle, so every deploy lands in a
+fresh cache and plays with the network gone. `tools/mobile.mjs` guards all of it.
 
 **Stones are pushed on a locked axis.** Physical puzzles originally moved stones through the
 generic collision separation, which shoved them along whatever vector separated the two

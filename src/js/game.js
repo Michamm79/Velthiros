@@ -27,7 +27,13 @@
        pixel grid. The HUD is drawn afterwards at full resolution so text stays
        readable on a phone. ?smooth=1 falls back to the old vector look. */
     this.pixelMode = q.get('smooth') !== '1';
-    this.pixelTargetHeight = 240;
+    /* The buffer is sized by AREA, not height. Sizing by height alone meant a
+       portrait phone got a 98px-wide slice of world - a giant player and no
+       warning of anything walking at you. Holding the area constant shows the
+       same amount of arena whichever way the phone is held; it just changes
+       shape. 287 is the geometric mean of the landscape buffer this replaces,
+       so the common landscape sizes come out byte-identical. */
+    this.pixelTargetSpan = 287;
     var startTrial = parseInt(q.get('trial'), 10);
     this.forceTrial = (isFinite(startTrial) && startTrial > 0) ? startTrial : 0;
   }
@@ -50,11 +56,76 @@
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
 
+    V.Haptics.enabled = this.save.haptics !== false;
+    this.bindLifecycle();
+
     this.setScene(new S.StartScene(this));
     this.running = true;
     this.last = performance.now();
     requestAnimationFrame(function (t) { self.frame(t); });
   };
+
+  /* ------------------------------------------------- device integration */
+
+  /* A call, a notification or a tab switch must not cost you a trial: hide
+     means pause, and coming back resumes exactly where you left off. */
+  Game.prototype.bindLifecycle = function () {
+    var self = this;
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) self.suspend();
+      else self.wake();
+    });
+    window.addEventListener('pagehide', function () { self.suspend(); });
+  };
+
+  Game.prototype.suspend = function () {
+    var sc = this.scene;
+    if (sc && sc.trial && sc.trial.state === 'play') sc.trial.paused = true;
+    Audio.hush();
+    this.releaseWakeLock();
+  };
+
+  Game.prototype.wake = function () {
+    this.last = performance.now();     /* never bill the player for time away */
+    Audio.unhush();
+    if (this.scene && this.scene.trial) this.requestWakeLock();
+  };
+
+  /* Trials run minutes long, which is easily enough for a phone to dim
+     mid-fight. Best-effort throughout: the API is missing on older Safari and
+     is refused outright while the page is hidden, and neither is worth a
+     message to the player. */
+  Game.prototype.requestWakeLock = function () {
+    var self = this;
+    if (!navigator.wakeLock || this._wakeLock || document.hidden) return;
+    try {
+      navigator.wakeLock.request('screen').then(function (lock) {
+        self._wakeLock = lock;
+        lock.addEventListener('release', function () { self._wakeLock = null; });
+      }, function () { /* denied */ });
+    } catch (e) { /* unsupported */ }
+  };
+
+  Game.prototype.releaseWakeLock = function () {
+    if (!this._wakeLock) return;
+    try { this._wakeLock.release(); } catch (e) { /* already released */ }
+    this._wakeLock = null;
+  };
+
+  /* env(safe-area-inset-*) is only legible from CSS, so #safe-probe wears it
+     as padding and we measure that. Falls back to zeroes everywhere it is not
+     supported, which is every desktop browser. */
+  function readInsets() {
+    var probe = document.getElementById('safe-probe');
+    if (!probe || !window.getComputedStyle) return { top: 0, right: 0, bottom: 0, left: 0 };
+    var cs = window.getComputedStyle(probe);
+    return {
+      top: parseFloat(cs.paddingTop) || 0,
+      right: parseFloat(cs.paddingRight) || 0,
+      bottom: parseFloat(cs.paddingBottom) || 0,
+      left: parseFloat(cs.paddingLeft) || 0
+    };
+  }
 
   Game.prototype.resize = function () {
     var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -65,13 +136,18 @@
     this.dpr = dpr;
     this.cw = w; this.ch = h;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    /* the HUD lays itself out against these */
+    this.inset = readInsets();
+    UI.inset = this.inset;
+    UI.portrait = h > w * 1.08;
   };
 
   /* ------------------------------------------------------- pixel pipeline */
   Game.prototype.worldTarget = function () {
     if (!this.pixelMode) { this.pixScale = 1; return { ctx: this.ctx, w: this.cw, h: this.ch, direct: true }; }
 
-    var scale = Math.max(2, Math.round(this.ch / this.pixelTargetHeight));
+    var scale = Math.max(2, Math.round(Math.sqrt(this.cw * this.ch) / this.pixelTargetSpan));
     var bw = Math.ceil(this.cw / scale);
     var bh = Math.ceil(this.ch / scale);
 
@@ -122,6 +198,7 @@
   };
 
   Game.prototype.setScene = function (scene) {
+    if (scene && scene.trial) this.requestWakeLock(); else this.releaseWakeLock();
     this.scene = scene;
     Input.stickEnabled = false;
     Input.down = {};
@@ -380,7 +457,8 @@
     };
   };
 
-  Game.prototype.playerTint = function () { return this.save.equippedTint || '#4f8fd6'; };
+  /* The shirt, not the whole outfit - see Spr.player. Black by default. */
+  Game.prototype.playerTint = function () { return this.save.equippedTint || '#17141c'; };
 
   /* GDD 7.1: the scythe unlock lasts for the rest of this run only. */
   Game.prototype.unlockScythe = function () {

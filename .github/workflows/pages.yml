@@ -45,12 +45,13 @@ jobs:
       - name: Bundle the game
         run: node tools/build.mjs
 
+      # `node tools/build.mjs` already assembled dist/site - index.html, the
+      # manifest, the icons and a cache-versioned service worker - so the
+      # workflow just adds the design document and ships the folder.
       - name: Assemble the site
         run: |
-          mkdir -p site
-          cp dist/velthiros.html site/index.html
-          cp docs/game-design-document.md site/design-document.md
-          echo "Velthiros - open site/index.html" > site/README.txt
+          cp docs/game-design-document.md dist/site/design-document.md
+          ls -R dist/site
 
       - uses: actions/configure-pages@v5
         with:
@@ -58,7 +59,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: dist/site
 
       - id: deploy
         uses: actions/deploy-pages@v4

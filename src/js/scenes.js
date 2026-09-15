@@ -795,7 +795,8 @@
         opts.rot = f * 0.6;
         bd.at.y += f * 34;
       }
-      V.Px.draw(ctx, V.Spr.player(view.dir, frame, bd.tint), bd.at.x, bd.at.y, opts);
+      var sprFn = bd.isPlayer ? V.Spr.player : V.Spr.civilian;
+      V.Px.draw(ctx, sprFn(view.dir, frame, bd.tint), bd.at.x, bd.at.y, opts);
     }
 
     /* Garatu comes through the rift above the square */

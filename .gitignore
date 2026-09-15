@@ -6,3 +6,8 @@ node_modules/
 # uploads it as a build artifact. dist/ is deliberately NOT ignored: it is
 # the file people actually open.
 tests/shots/
+
+# dist/site is assembled on every build from dist/velthiros.html plus the
+# committed icons and manifest, and the Pages workflow rebuilds it before
+# deploying, so there is nothing here worth tracking.
+dist/site/
