@@ -39,15 +39,29 @@ Do these in order. Each one feeds the next.
 You already have `graysongamedev.itch.io` with Valtara on it, so this is the shortest
 path from "a GitHub Pages link" to "a real store page".
 
-- Upload `dist/velthiros.html` as an HTML5 project. It is one file, well inside the
-  limits (1,000 files / 500 MB / 200 MB per file).
+- Run `npm run itch`. It builds and writes `dist/velthiros-itch.zip` — `index.html` at
+  the root (itch requires that name at the top level), plus the service worker, manifest
+  and icons so offline play works there too. 9 files, 758 KB, against limits of
+  1,000 files / 500 MB / 200 MB per file.
+- Upload that zip as an HTML5 project and tick **"This file will be played in the
+  browser"**.
 - **Tick "Mobile friendly"** in the embed settings. On a phone, itch then forces
   click-to-launch fullscreen regardless of your desktop embed config.
 - Set the canvas size, tick the touchscreen option, enable the fullscreen button, and
   set orientation to **Auto** — the game genuinely works both ways up.
-- Pricing: **"Pay what you want" with a $0 minimum.** A paywall on an unknown solo
+- Pricing: **"$0 or donate"** — pay-what-you-want with a $0 minimum. That *is* the
+  donation model; there is no separate donate switch. A paywall on an unknown solo
   browser game kills the play count you need for everything below.
+- Set the **suggested** amount to **$3–5, not $1**: processing runs about 2.9% + $0.30,
+  so a $1 tip nets roughly $0.37 once fees and itch's cut come out.
 - itch's cut is whatever you set it to, 0–100%, defaulting to 10%.
+
+**Set payments up before you publish, not after.** Pick a payout mode in seller settings:
+*Direct to you* sends each purchase straight to your PayPal or Stripe and needs those
+configured first, or *Collected by itch.io* takes donations immediately but will not let
+you withdraw until you have completed the **tax interview** and linked PayPal or Payoneer.
+Manual payouts have a **$5 minimum**. Collecting donations you cannot claim is the usual
+way this goes wrong.
 
 **What you get:** a linkable store page, comments, a devlog, and a download counter.
 **What you will not get:** meaningful revenue. Discovery on itch is weak unless you
