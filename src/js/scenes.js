@@ -87,32 +87,52 @@
       ctx.fillStyle = '#150d22';
     }
 
-    /* ---- the hero, bottom-left, bleeding off the edge ----
-       Px bakes the portrait anchored top-left, so it is positioned by its
-       corner rather than its centre. Sized off the screen HEIGHT at an integer
-       scale, which keeps his pixels square and keeps him clear of the menu:
-       the buttons sit in the upper middle, above his shoulder, in both
-       orientations. */
-    var por = V.Spr.portrait();
-    var pScale = Math.max(2, Math.round((ch * 0.5) / por.h));
-    var porW = por.w * pScale, porH = por.h * pScale;
-    var porX = Math.round(-porW * 0.12);
-    V.Px.draw(ctx, por, porX, ch - porH, { scale: pScale });
-    /* let the skyline swallow his feet rather than cutting him off flat */
-    var hem = ctx.createLinearGradient(0, ch - porH * 0.18, 0, ch);
-    hem.addColorStop(0, 'rgba(21,13,34,0)');
-    hem.addColorStop(1, 'rgba(21,13,34,0.9)');
-    ctx.fillStyle = hem;
-    ctx.fillRect(0, ch - porH * 0.18, porX + porW + 4, porH * 0.18);
+    /* ---- the hero, standing on the skyline, left of the menu ----
+       The same 18x28 sprite the game plays, blown up at an integer scale so
+       the pixels stay square. Px anchors him at his feet, so he is positioned
+       by where he stands rather than by a corner. Sized off the SHORT edge,
+       the way UI.setScale sizes everything else: off the height he came out
+       more than twice as tall in portrait as in landscape, because the height
+       is the dimension that changes when the phone turns. The short edge
+       barely moves, so he is the same figure whichever way it is held. */
+    var hero = V.Spr.player('down', 0, this.game.playerTint());
+    var hScale = Math.max(3, Math.round((Math.min(cw, ch) * 0.36) / hero.h));
+    var heroW = hero.w * hScale, heroH = hero.h * hScale;
+    var heroY = ch - 26 * s;
+    var heroX = Math.round(Math.max(heroW * 0.6 + 8 * s, cw * 0.24));
+    /* a wash of light behind him: his hair, shirt and denim are all dark and
+       the skyline behind them is darker still, so without it he sinks into it */
+    var halo = ctx.createRadialGradient(heroX, heroY - heroH * 0.5, 0,
+      heroX, heroY - heroH * 0.5, heroH * 0.8);
+    halo.addColorStop(0, 'rgba(255,214,170,0.20)');
+    halo.addColorStop(1, 'rgba(255,214,170,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(heroX - heroH, heroY - heroH * 1.35, heroH * 2, heroH * 1.7);
+    V.Px.shadow(ctx, heroX, heroY, heroW * 0.42, 0.38);
+    V.Px.draw(ctx, hero, heroX, heroY, { scale: hScale });
 
     var uiX = cw / 2;
 
-    /* Garatu drifting behind the title, drawn at an integer scale so the
-       pixels stay square on the full-resolution canvas */
+    /* the menu's box, measured here because Garatu has to be placed around it */
+    var bwid = Math.min(230 * s, cw * 0.62);
+    var bx = uiX - bwid / 2;
+    var by = ch * 0.235;
+    var bh = 46 * s;
+    var menuBottom = by + (bh + 14 * s) * 2 + 34 * s;
+
+    /* Garatu, watching from the far side, at an integer scale so the pixels
+       stay square on the full-resolution canvas. On a wide screen he clears
+       the menu by sitting right of it; on a narrow one his wingspan reaches
+       into the menu's column, so there he drops below it instead. */
+    var gar = V.Spr.garatu(Math.floor(t * 2) % 2);
     var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
+    var garX = cw - Math.max(46, cw * 0.12);
+    var garY = ch * 0.6;
+    if (garX - gar.w * gScale / 2 < bx + bwid) {
+      garY = Math.max(garY, menuBottom + gar.h * gScale + 16 * s);
+    }
     ctx.globalAlpha = 0.34 + 0.06 * Math.sin(t * 0.9);
-    V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 2) % 2),
-      cw - Math.max(46, cw * 0.12), ch * 0.5 + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
+    V.Px.draw(ctx, gar, garX, garY + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
     ctx.globalAlpha = 1;
 
     /* title - sized to fit the width rather than a fixed 48, which ran off
@@ -125,12 +145,8 @@
       size: 13, align: 'center', colour: 'rgba(255,220,190,0.7)'
     });
 
-    /* stacked buttons, held in the upper middle so they clear his shoulder */
-    var bwid = Math.min(230 * s, cw * 0.62);
-    var bx = uiX - bwid / 2;
-    var by = ch * 0.235;
-    var bh = 46 * s;
-
+    /* stacked buttons, tucked under the title - he stands far enough below
+       them now that they no longer have to be pushed down to meet him */
     if (UI.button(ctx, 'newgame', bx, by, bwid, bh, 'New Game')) this.game.newGame();
     var canContinue = Save.hasContinue(this.game.save);
     var resumeAt = !this.game.save.tutorialDone ? 'the opening'

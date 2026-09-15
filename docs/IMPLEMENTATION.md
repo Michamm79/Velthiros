@@ -166,21 +166,21 @@ palette key, which is the main defence against a typo in hand-placed pixel data.
 What is not yet converted: the bedroom and hub interior furniture. The title and cutscene
 now use sprites. A tiled interior is the remaining art job.
 
-**The title screen's key art is derived from a photograph, but no photograph ships.**
-`tools/portrait.mjs` is run by hand, once, against a reference image kept outside the repo.
-It crops, warm-balances (the source was lit cold enough that every skin tone quantised into
-the dirt browns), removes the room, quantises to the locked palette, and remaps the hair onto
-the silver ramp so the portrait matches the sprite rather than the photo. What it writes is
-`src/js/portrait.js`: a grid of palette characters, authored exactly like every other sprite
-and editable the same way. The test suite validates it against the palette alongside
-everything else.
+**The title screen's key art is the hero sprite itself**, `Spr.player('down', 0)`, drawn at a
+whole-number scale so its pixels stay square, standing on the skyline with the menu centred
+above him and Garatu watching from the far side. He is sized off the **short edge**, the way
+`UI.setScale` sizes everything else. Off the height he came out more than twice as tall in
+portrait as in landscape, because the height is the dimension that changes when the phone
+turns; the short edge barely moves, so he is the same figure either way up. A device check
+holds the two orientations to the same pixel height. Garatu is placed around the menu rather than
+at a fixed spot: on a wide screen he clears it by sitting to its right, but on a narrow one his
+wingspan reaches into the menu's column, so there he drops below it instead. Because the hero,
+his shirt and his denim are all dark and the skyline behind them is darker still, a warm radial
+wash sits behind him — without it he sinks into the buildings.
 
-Two things the colour rules could not do alone. Enclosed pockets of room — seen through the
-open shirt, under the jaw — are unreachable by a border flood, so every backdrop candidate is
-cleared and the largest connected component kept. And a slab of doorframe sits against his jaw
-at the same luminance as skin, separable by nothing; that is cleared by coordinate in a
-documented `PATCHES` list, so a regeneration reproduces the same portrait rather than needing
-the output edited by hand.
+An earlier version used a pixel portrait converted from a reference photograph. It was replaced
+by the sprite, which is the character the game actually plays; the converter and its output are
+in the history rather than the tree.
 
 **The game is a phone game, so it is built like one.** The world buffer is sized by area
 rather than by height: sizing by height alone handed a portrait phone a 98-pixel-wide slice

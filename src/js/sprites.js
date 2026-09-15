@@ -898,23 +898,6 @@
   }
   Spr.weapon = function (id) { return cached('wp:' + id, function () { return weaponSprite(id); }); };
 
-  /* The hero's key art, from src/js/portrait.js. Baked once like everything
-     else, so it obeys the same palette validation as every hand-drawn sprite. */
-  Spr.portrait = function () {
-    return cached('portrait', function () {
-      var P = V.Portrait;
-      return Px.make(P.W, P.H, function (g) {
-        for (var y = 0; y < P.H; y++) {
-          var row = P.ROWS[y];
-          for (var x = 0; x < P.W; x++) {
-            var ch = row.charAt(x);
-            if (ch && ch !== '.') g.set(x, y, ch);
-          }
-        }
-      }, { ax: 0, ay: 0 });
-    });
-  };
-
   Spr.clearCache = function () { cache = {}; };
   Spr.cacheSize = function () { return Object.keys(cache).length; };
 
