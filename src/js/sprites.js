@@ -23,8 +23,9 @@
     'V': '#4a4356',   /* interior floor mid */
     'E': '#1d2430',   /* cave / HQ shadow */
     'x': '#6b7480',   /* cool stone mid-dark */
-    'L': '#1b1622',   /* black hair / black denim */
-    'l': '#342d44',   /* the sheen on both */
+    'L': '#9098ab',   /* silver hair, mid */
+    'l': '#dbe1ef',   /* silver hair, the light catching the top */
+    'j': '#5c6376',   /* silver hair, underside and the back of the head */
     'U': '#0f0d14'    /* boot black, the darkest value in the set */
   });
 
@@ -127,8 +128,10 @@
          fringe sits a row higher and shallower than everyone else's. */
       g.oval(o.hair, cx, headCy - (o.curly ? 3 : 2), 4, o.curly ? 2 : 3);
       g.rect(o.hair, cx - 4, headCy - 4, 9, 3);
-      g.rect(o.hair, cx - 4, headCy - 2, 2, o.curly ? 2 : 3);
-      g.rect(o.hair, cx + 3, headCy - 2, 2, o.curly ? 2 : 3);
+      /* the sides fall away from the light, so they take the darker tone */
+      var side = o.hairDark || o.hair;
+      g.rect(side, cx - 4, headCy - 2, 2, o.curly ? 2 : 3);
+      g.rect(side, cx + 3, headCy - 2, 2, o.curly ? 2 : 3);
       if (o.curly) {
         /* break the silhouette so it reads as curl rather than a helmet.
            Kept strictly above the eyeline - in black, anything lower closes
@@ -151,7 +154,7 @@
       g.set(cx + 2, headCy + 1, 'K');
     } else if (o.dir === 'side') {
       g.set(cx + 2, headCy + 1, 'K');
-      g.rect(o.hair, cx - 4, headCy - 2, 3, 5);     /* back of the head */
+      g.rect(o.hairDark || o.hair, cx - 4, headCy - 2, 3, 5);   /* back of the head */
     }
 
     g.outline('K');
@@ -159,14 +162,14 @@
   }
 
   /* The hero. `tint` recolours the shirt only - the shop sells sleeves, not
-     tunics - so the hair, denim and skin stay put across every purchase. */
+     tunics - so the silver hair, denim and skin stay put across every purchase. */
   Spr.player = function (dir, frame, tint) {
     tint = tint || '#17141c';
     return cached('pl:' + dir + ':' + frame + ':' + tint, function () {
       var g = humanoidGrid({
         dir: dir, frame: frame, bare: true, curly: true,
         cloth: 'm', clothDark: 'B', belt: 'U', trouser: 'M', trouserLite: 'V',
-        boot: 'U', hair: 'L', hairLite: 'l'
+        boot: 'U', hair: 'L', hairLite: 'l', hairDark: 'j'
       });
       return Px.bake(g, { pal: { 'm': tint, 'B': shade(tint, -18) } });
     });
@@ -894,6 +897,23 @@
     }, { ax: 1, ay: 13 });
   }
   Spr.weapon = function (id) { return cached('wp:' + id, function () { return weaponSprite(id); }); };
+
+  /* The hero's key art, from src/js/portrait.js. Baked once like everything
+     else, so it obeys the same palette validation as every hand-drawn sprite. */
+  Spr.portrait = function () {
+    return cached('portrait', function () {
+      var P = V.Portrait;
+      return Px.make(P.W, P.H, function (g) {
+        for (var y = 0; y < P.H; y++) {
+          var row = P.ROWS[y];
+          for (var x = 0; x < P.W; x++) {
+            var ch = row.charAt(x);
+            if (ch && ch !== '.') g.set(x, y, ch);
+          }
+        }
+      }, { ax: 0, ay: 0 });
+    });
+  };
 
   Spr.clearCache = function () { cache = {}; };
   Spr.cacheSize = function () { return Object.keys(cache).length; };

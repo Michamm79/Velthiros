@@ -2006,8 +2006,9 @@ html, body {
     'V': '#4a4356',   /* interior floor mid */
     'E': '#1d2430',   /* cave / HQ shadow */
     'x': '#6b7480',   /* cool stone mid-dark */
-    'L': '#1b1622',   /* black hair / black denim */
-    'l': '#342d44',   /* the sheen on both */
+    'L': '#9098ab',   /* silver hair, mid */
+    'l': '#dbe1ef',   /* silver hair, the light catching the top */
+    'j': '#5c6376',   /* silver hair, underside and the back of the head */
     'U': '#0f0d14'    /* boot black, the darkest value in the set */
   });
 
@@ -2110,8 +2111,10 @@ html, body {
          fringe sits a row higher and shallower than everyone else's. */
       g.oval(o.hair, cx, headCy - (o.curly ? 3 : 2), 4, o.curly ? 2 : 3);
       g.rect(o.hair, cx - 4, headCy - 4, 9, 3);
-      g.rect(o.hair, cx - 4, headCy - 2, 2, o.curly ? 2 : 3);
-      g.rect(o.hair, cx + 3, headCy - 2, 2, o.curly ? 2 : 3);
+      /* the sides fall away from the light, so they take the darker tone */
+      var side = o.hairDark || o.hair;
+      g.rect(side, cx - 4, headCy - 2, 2, o.curly ? 2 : 3);
+      g.rect(side, cx + 3, headCy - 2, 2, o.curly ? 2 : 3);
       if (o.curly) {
         /* break the silhouette so it reads as curl rather than a helmet.
            Kept strictly above the eyeline - in black, anything lower closes
@@ -2134,7 +2137,7 @@ html, body {
       g.set(cx + 2, headCy + 1, 'K');
     } else if (o.dir === 'side') {
       g.set(cx + 2, headCy + 1, 'K');
-      g.rect(o.hair, cx - 4, headCy - 2, 3, 5);     /* back of the head */
+      g.rect(o.hairDark || o.hair, cx - 4, headCy - 2, 3, 5);   /* back of the head */
     }
 
     g.outline('K');
@@ -2142,14 +2145,14 @@ html, body {
   }
 
   /* The hero. `tint` recolours the shirt only - the shop sells sleeves, not
-     tunics - so the hair, denim and skin stay put across every purchase. */
+     tunics - so the silver hair, denim and skin stay put across every purchase. */
   Spr.player = function (dir, frame, tint) {
     tint = tint || '#17141c';
     return cached('pl:' + dir + ':' + frame + ':' + tint, function () {
       var g = humanoidGrid({
         dir: dir, frame: frame, bare: true, curly: true,
         cloth: 'm', clothDark: 'B', belt: 'U', trouser: 'M', trouserLite: 'V',
-        boot: 'U', hair: 'L', hairLite: 'l'
+        boot: 'U', hair: 'L', hairLite: 'l', hairDark: 'j'
       });
       return Px.bake(g, { pal: { 'm': tint, 'B': shade(tint, -18) } });
     });
@@ -2878,10 +2881,204 @@ html, body {
   }
   Spr.weapon = function (id) { return cached('wp:' + id, function () { return weaponSprite(id); }); };
 
+  /* The hero's key art, from src/js/portrait.js. Baked once like everything
+     else, so it obeys the same palette validation as every hand-drawn sprite. */
+  Spr.portrait = function () {
+    return cached('portrait', function () {
+      var P = V.Portrait;
+      return Px.make(P.W, P.H, function (g) {
+        for (var y = 0; y < P.H; y++) {
+          var row = P.ROWS[y];
+          for (var x = 0; x < P.W; x++) {
+            var ch = row.charAt(x);
+            if (ch && ch !== '.') g.set(x, y, ch);
+          }
+        }
+      }, { ax: 0, ay: 0 });
+    });
+  };
+
   Spr.clearCache = function () { cache = {}; };
   Spr.cacheSize = function () { return Object.keys(cache).length; };
 
   V.Spr = Spr;
+})(window.V = window.V || {});
+
+/* ===== src/js/portrait.js ===== */
+/* Velthiros - the main character's portrait.
+
+   Derived once from a reference photograph by tools/portrait.mjs and then
+   hand-corrected. What ships is only this: a grid of palette characters,
+   authored exactly like every other sprite in the game. The photograph is not
+   in the repository and is never served.
+
+   Every character below is a key in Px.PALETTE; '.' is transparent. Edit it
+   like any other sprite - the test suite validates it against the palette. */
+(function (V) {
+  'use strict';
+
+  V.Portrait = {
+    W: 76,
+    H: 156,
+    ROWS: [
+      '............................................................................',
+      '............................................................................',
+      '............................................................................',
+      '............................................................................',
+      '............................................................................',
+      '............................................................................',
+      '............................................................................',
+      '............................................................................',
+      '................................L.L.jjL.....................................',
+      '.............................LjLLjLjjjjjjjjjjLL.............................',
+      '............................jjjjjjjjjjjjjjjjjjjjjj..........................',
+      '..........................LjjjjjjjjjjjjjjjjjjjjjjjjL........................',
+      '.........................LjjjjjjjjjjjjjjjjjjjjjjjjjjjL......................',
+      '.......................LjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjL.....................',
+      '.......................jjjjjjjjjjjjjjjjjjjLKjjjjjjjjjjLL....................',
+      '.....................LjjjjjjjjjjjjjjjjjjKMkFFFKjjjjjjjjLL...................',
+      '....................LjjjjjjjjjjjjjjjjjjkkFFFFFFFFLjjjjjjL...................',
+      '...................LjjjjjjjjjjjjjjjjjLKKFFFFFFFFFFjjjjjjj...................',
+      '....................jjjjjjjjjjjjjjjLjFFFFFFFFFFFFFFLjjjjj...................',
+      '....................jjjjjjjjjjjjjjjLKFFFFFFFFFFFFFFFjjjjj...................',
+      '...................LjjjjjjjjLjjjjjjjFFFFFFFFFFFFFFFFFjjjjLL.................',
+      '...................jjjjjjjjjjjjjjLKFFFFFFFFFFFFFFFFFFKjjLj..................',
+      '...................jjjjjjjjjjjjjjjkFFFFFFFFFFFFFFFFFFFLjjLj.................',
+      '...................jjjjjjjjjjjjjKFFFFFFFFFFFFFFFFFFFFFMjjjL.................',
+      '...................jjjjjjjjjjjjKFFFFFFFFFFFFFFFFFFFFFFFjjL..................',
+      '...................LjjjjjjjjjjjkFFFFFFFFFFFFkkFFFFFFFFFL....................',
+      '...................LjjMFFFjjkjUkFFFFFFFFFFFFFFKKFFFFFFFl....................',
+      '....................jjFFFFFFFKKkFFFFFFFFFFFFFFFFFFFFFFFl....................',
+      '....................jkFFFFFFkkKkFFFFFFFFFFFFFFFFFFFFFFFl....................',
+      '....................LFFFFFFFFFkFFFFFFFFFFKkkkkkFFFFFFFkL....................',
+      '....................jkFFFFFFFFFFFFFFFFFFFFFjjUkFFFFFkkKj....................',
+      '.....................jFFFFFFFFFFFFFFFFFFFFFFFkFFFFFKFFFFL...................',
+      '...................LLjFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF....................',
+      '.....................jkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFjjF.....................',
+      '......................jFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFjj.....................',
+      '......................jjFFFFFFFFFFFFFFFFFFFFFFFFFFFFFL......................',
+      '.......................jjFFFFFFFFFFFFFFFFFFFFFFFFFFFFF......................',
+      '.......................jjKKKFFFFFFFFFFFFFFFFFFFFFFFFFF......................',
+      '.......................UUKkUkFFFFFFFFFFFFFFFFFFFFkFFFF......................',
+      '.......................UUKFFFFFFFFFFFFFFFFFFFFFFFFFFFF......................',
+      '.......................MUKFFFFFFFFFFFFFFFFFFFFFFFFFFFF......................',
+      '.......................kUKFFFFFFFFFFFFFFFFFFFFFFFFFFFF......................',
+      '.......................kUKFFFFFFFFFFFFFFFFFFFFFFFFFFF.......................',
+      '........................KMFFFkFFFFFFFFFFFFFFFFFFkKKkF.......................',
+      '........................VkFFFkFFFFFFFFFFFFFFFFFFFFkKF.......................',
+      '........................kkFFFFKkFFFFFFFFFFFFFFFFFFFk........................',
+      '........................MkFFFFFKkFFFFFFFFFFFFFFFFFFF........................',
+      '........................kkFFFFFFKKkFFFFFFFFFFFFFFFFF........................',
+      '........................VkFFFFFFFkMKKkFFFFFFFFFFFFF.........................',
+      '.........................kFFFFFFFFFFkKKkkFFFFFFFFFF.........................',
+      '.........................kFFFFFFFFFFFFKKKKKFFFFFFFF.........................',
+      '........................FFFFFFFFFFFFFFFkkKKKMkFFFFF.........................',
+      '........................FFFFFFFFFFFFFFFkkkkMKKKMkk..........................',
+      '........................FFFFFFFFFFFFFFFFFkkKKKKKM...........................',
+      '.......................FFFFFFFFFFFFFFFFFFFFkKKM.V...........................',
+      '.......................FFFFFFFFFFFFFFFFFFFFFkM..V...........................',
+      '....................PVFFFFFFFFFFFFFFFFFFFFFFFk..VV..........................',
+      '....................UMFFFFFFFFFFFFFFFFFFFFFFFk...V..........................',
+      '....................UUKFFFFFFFFFFFFFFFFFFFFFkkPPKk..........................',
+      '...................PUUKFFFFFFFFFFFFFFFFFFFFFkFUUUP..........................',
+      '..................MUUUMMFFFFFFFFFFFFFFFFFFFFFkUUUUP.........................',
+      '.................UUUUUMKFFFFFFFFFFFFFFFFFFFFFVKPKKP.........................',
+      '................KUUUUUKKFFFFFFFFFFFFFFFFFFFFFV..............................',
+      '...............KUUUUUUKKFFFFFFFFFFFFFFFFFFFFFk..............................',
+      '.............kUUUUUUUUKMKFFFFFFFFFFFFFFFFFFFFkKV............................',
+      '............KUUUUUUUUUKKKFFFFFFFFFFFFFFFFFFFFFkUU...........................',
+      '...........KUUUUUUUUUUKKMFFFFFFFFFFFFFFFFFFFFFFUUUV.........................',
+      '.........VUUUUUUUUUUUUKKkFFFFFFFFFFFFFFFFFFFFFFFUUUK........................',
+      '...F....KKUUUUUUUUUUUUUKkkFFFFFFFFFFFFFFFFFFFFFFFkUUU.......................',
+      '...F..KUUUUUUUUUUUUUUUUUKMFFFFFFFFFFFFFFFFFFFFFFFFFKUUUkk...................',
+      '...KUUUUUUUUUUUUUUUUUUUUKMFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUKKKKKK.............',
+      '.kKUUUUUUUUUUUUUUUUUUUUMUkFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUUUUUKKK...........',
+      'MUUUUUUUUUUUUUUUUUUUUUUUKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUUUUUUUU..........',
+      'KUUUUUUUUUUUUUUUUUUUUUUUUMFFFFFFFFFFFFFFFFFFFFFFFFFFFFFMUUUUUUUUUUUP........',
+      'UUUUUUUUUUUUUUUUUUUUUUUKMkkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUUUUUUUUK.......',
+      'UUUUUUUUUUUUUUUUUUUUUUUUUMkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUUUUUUUUK......',
+      'UUUUUUUUUUUUUUUUUUUUUUUKUKMFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkKUUUUUUUUUUUP.....',
+      'UUUUUUUUUUUUUUUUUUUUUUUUUKMFFFFFFFFFFFFFFFFFFFFFFFFFFkkFFFkUUUUUUUUUUUUM....',
+      'UUUUUUUUUUUUUUUUUUUUUUUKKMMFFFFFFFFFFFFFFFFFFFFFFFFFFMFFkFFkUUUUUUUUUUUU....',
+      'UUUUUUUUUUUUUUUUUUUUUUUUKMkFFFFFFFFFFFFFFFFFFFFFFFFFKFMFFFkFKUUUUUUUUUUUU...',
+      'UUUUUUUUUUUUUUUUUUUUUUUKKKkFFFFFFFFFFFFFFFFFFFFFFFFFKFMFFFFkFKUUUUUUUUUUU...',
+      'UUUUUUUUUUUUUUUUUUUUUUUkkkFFFFFFFFFFFFFFFFFFFFFFFFFFFKKFFkFFkFMUUUUUUUUUUK..',
+      'UUUUUUUUUUUUUUUUUUUUUUUkKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFMMFFFFFkFKUUUUUUUUUU..',
+      'UUUUUUUUUUUUUUUUUUUUUUUKUkkFFFFFFFFFFFFFFFFFFFFFFFkkFFKKFFFFFkFFKUUUUUUUUUM.',
+      'UUUUUUUUUUUUUUUUUUUUUUUKKFFFFFFFFFFFFFFFFFFFFFFFFFkKFFFFkKkFFFFFFUUUUUUUUUKP',
+      'UUUUUUUUUUUUUUUUUUUUUUUUKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKFFFFFkUUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUUkkkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUUUKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUUMKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUKkKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUkMMkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUMUkkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUMKMFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUKKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUKMMKkFFFFFFFFFFFFFKFFFFFFFFFFFFFFFFFFFFFFFFFkKUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUKKKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKKUUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUKKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkKkUUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUKKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkVVUUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUKKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkV..kUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUMMMKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkkk....UUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUKKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFk.....UUUUU',
+      'UUUUUUUUUUUUUUUUUUUUKKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF......UUUU',
+      'UUUUUUUUUUUUUUUUUUUUKMKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF.......KUU',
+      'UUUUUUUUUUUUUUUUUUUUKMKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF.....VKUU',
+      'UUUUUUUUUUUUUUUUUUUUKKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFMUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFMUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkUUUUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUKMFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFMPKUUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF..UUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF..MUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUUKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFV.VUUUU',
+      'UUUUUUUUUUUUUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF..UUUP',
+      'UUUUUUUUUUUUUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF..UUUP',
+      'UUUUUUUUUUUUUUUUUU..UUUUkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF..UUUP',
+      'UUUUUUUUUUUUUUUUUU...MUUKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF..UUUU',
+      'UUUUUUUUUUUUUUUUUU.....UKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF.KUUU',
+      'UUUUUUUUUUUUUUUUUU......KKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUUUU',
+      'UUUUUUUUUUUUUUUUUU.......VKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUU',
+      'UUUUUUUUUUUUUUUUUU........VKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFVUUU',
+      'UUUUUUUUUUUUUUUUUUk........RKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUUU',
+      'UUUUUUUUUUUUUUUUUUk..........KMFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkUU',
+      'UUUUUUUUUUUUUUUUUUV...........KKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFUU',
+      'UUUUUUUUUUUUUUUUUU.............KKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFKU',
+      'UUUUUUUUUUUUUUUUUU..............MKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFMU',
+      'UUUUUUUUUUUUUUUUUU...............kKKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFU',
+      'UUUUUUUUUUUUUUUUUU................VKKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFU',
+      'UUUUUUUUUUUUUUUUUU.................kKKkkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFK',
+      'UUUUUUUUUUUUUUUUUU..................kKMkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFM',
+      'UUUUUUUUUUUUUUUUUUK..................KKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFk',
+      'UUUUUUUUUUUUUUUUUUU...................KKkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFk',
+      'KUUUUUUUUUUUUUUUUUU...................KKkkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFk',
+      'MUUUUUUUUUUUUUUUUUU....................KFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFM',
+      'FUUUUUUUUUUUUUUUUUUUk..................MkFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkU',
+      'FKUUUUUUUUUUUUUUUUUUK..................kKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFkUU',
+      'kFUUUUUUUUUUUUUUUUUUU...............kUKkKkFFFFFFFFFFFFFFFFFFFFFFFFFFFKUUUUUU',
+      'KKKUUUUUUUUUUUUUUUUUUV..............P...VKFFFFFFFFFFFFFFFFKUKUUUUUUUUUUUUUUU',
+      'FFFUUUUUUUUUUUUUUUUUUU..............MkkkMUUKKUKKUUUUUUUUUUUUUUUUUUUUUUUUUUUU',
+      'FFFkUUUUUUUUUUUUUUUUUUM.................VUUUUUUUUUUUUUUUKUUUUUUUUUUUUUUUKUUU',
+      'KKKFKUUUUUUUUUUUUUUUUUU.................VUUUUUUUUUUUUUUUKKKKKKKUUUUUUUUUKUUU',
+      'UUkFFUUUUUUUUUUUUUUUUUUK................kUUUUUUUUUUUUUUKMkkkMKKUUUUUUUKUUUUU',
+      'KFFkFkUUUUUUUUUUUUUUUUUU................PUUUUUUUUUUUUUUKMFFMKUUUUUUUKUUUUUUU',
+      'FFFkFFUUUUUUUUUUUUUUUUUUK...............KUUUUUUUUUUUUUKKMKUUUUUUUUUUUUUUUUUU',
+      'kkkkFFkUUUUUUUUUUUUUUUUUU..............MUUUUUUUUUUUUUUKKUUUUUUUUUUUUUUUUUUUU',
+      'kkkMkFFUUUUUUUUUUUUUUUUUUM.............VUUUUUUUUUUUUUKUKKUUUUUUUUUUUUUUUKUUU',
+      'MkkMkFFFUUUUUUUUUUUUUUUUUU.............xUUUUUUUUUUUUKKKKKKKUUUUUUUUUUUUUKUUU',
+      'MMMMkFFFUUUUUUUUUUUUUUUUUUM............VUUUUUUUUKUUUKKKKKKKUUUUUUUUUUUUUUKUU',
+      'MMMMMkFFFUUUUUUUUUUUUUUUUUU.............UUUUUUUUUUUUUKKKKKKUUUUUUUUUUUUUUKUU',
+      'MMMMkkFFFMUUUUUUUUUUUUUUUUUK............UUUUUUUUUUUUUUUKUUUUUUUUUUUUUUUUUUUU',
+      'MMMkkkFFFFUUUUUUUUUUUUUUUUUU............UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUFUUU',
+      'MkkkkkFFFFFUUUUUUUUUUUUUUUUUV..........PUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUkUUU',
+      'kkFkkkkFFFFMUUUUUUUUUUUUUUUUU..........KUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUkUUUU',
+      'FFFFkkkFFFFFUUUUUUUUUUUUUUUUUK.........UUUUUUUUUUUUUUKUUUUUUUUUUUUUUUUkKUUUU',
+      'FFFFkkkFFFFFFUUUUUUUUUUUUUUUUU..........UUUUUUUUUUUUUKUUUUUUUUUUUUUUKKUUUUUU',
+      'FFFFkkkkFFFFFUUUUUUUUUUUUUUUUUk.........UUUUUUUUUUUUUUUUUKKKKUUUUUUUUUUUUUUU'
+    ]
+  };
 })(window.V = window.V || {});
 
 /* ===== src/js/entities.js ===== */
@@ -5701,26 +5898,48 @@ html, body {
       ctx.fillStyle = '#150d22';
     }
 
+    /* ---- the hero, bottom-left, bleeding off the edge ----
+       Px bakes the portrait anchored top-left, so it is positioned by its
+       corner rather than its centre. Sized off the screen HEIGHT at an integer
+       scale, which keeps his pixels square and keeps him clear of the menu:
+       the buttons sit in the upper middle, above his shoulder, in both
+       orientations. */
+    var por = V.Spr.portrait();
+    var pScale = Math.max(2, Math.round((ch * 0.5) / por.h));
+    var porW = por.w * pScale, porH = por.h * pScale;
+    var porX = Math.round(-porW * 0.12);
+    V.Px.draw(ctx, por, porX, ch - porH, { scale: pScale });
+    /* let the skyline swallow his feet rather than cutting him off flat */
+    var hem = ctx.createLinearGradient(0, ch - porH * 0.18, 0, ch);
+    hem.addColorStop(0, 'rgba(21,13,34,0)');
+    hem.addColorStop(1, 'rgba(21,13,34,0.9)');
+    ctx.fillStyle = hem;
+    ctx.fillRect(0, ch - porH * 0.18, porX + porW + 4, porH * 0.18);
+
+    var uiX = cw / 2;
+
     /* Garatu drifting behind the title, drawn at an integer scale so the
        pixels stay square on the full-resolution canvas */
     var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
     ctx.globalAlpha = 0.34 + 0.06 * Math.sin(t * 0.9);
     V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 2) % 2),
-      cw * 0.78, ch * 0.44 + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
+      cw - Math.max(46, cw * 0.12), ch * 0.5 + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
     ctx.globalAlpha = 1;
 
-    /* title */
-    UI.text(ctx, 'VELTHIROS', cw / 2, ch * 0.22, {
-      size: 48, align: 'center', weight: '800', colour: '#ffe9c9', shadowAlpha: 0.7
+    /* title - sized to fit the width rather than a fixed 48, which ran off
+       the edge of a 390pt phone */
+    var titleSize = Math.min(46, cw / 7.6);
+    UI.text(ctx, 'VELTHIROS', uiX, ch * 0.11, {
+      size: titleSize / s, align: 'center', weight: '800', colour: '#ffe9c9', shadowAlpha: 0.7
     });
-    UI.text(ctx, 'they are watching', cw / 2, ch * 0.22 + 34 * s, {
-      size: 14, align: 'center', colour: 'rgba(255,220,190,0.7)'
+    UI.text(ctx, 'they are watching', uiX, ch * 0.11 + titleSize * 0.72, {
+      size: 13, align: 'center', colour: 'rgba(255,220,190,0.7)'
     });
 
-    /* stacked buttons */
-    var bwid = Math.min(230 * s, cw * 0.7);
-    var bx = cw / 2 - bwid / 2;
-    var by = ch * 0.44;
+    /* stacked buttons, held in the upper middle so they clear his shoulder */
+    var bwid = Math.min(230 * s, cw * 0.62);
+    var bx = uiX - bwid / 2;
+    var by = ch * 0.235;
     var bh = 46 * s;
 
     if (UI.button(ctx, 'newgame', bx, by, bwid, bh, 'New Game')) this.game.newGame();
@@ -5745,10 +5964,10 @@ html, body {
     var sv = this.game.save;
     UI.text(ctx, 'deaths ' + sv.deaths + '/' + D.DEATH_LIMIT + '   ' + D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency) +
       (sv.scytheUnlocked ? '   scythe: unlocked' : ''),
-      cw / 2, ch - 22 * s, { size: 11, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+      cw - 14 * s, ch - 18 * s, { size: 11, align: 'right', colour: 'rgba(255,255,255,0.45)' });
 
     if (this.unlockFlash > 0) {
-      UI.text(ctx, 'THE SCYTHE IS YOURS', cw / 2, ch * 0.35,
+      UI.text(ctx, 'THE SCYTHE IS YOURS', uiX, ch * 0.35,
         { size: 22, align: 'center', weight: '800', colour: '#c9f0ea' });
     }
 
@@ -5757,7 +5976,7 @@ html, body {
       /* the faintest nudge - the mechanic is meant to be discovered */
       var left = Math.max(0, this.game.idleUnlockSeconds - this.idle);
       if (left < 30) {
-        UI.text(ctx, '. . .', cw / 2, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
+        UI.text(ctx, '. . .', uiX, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
       }
     }
   };

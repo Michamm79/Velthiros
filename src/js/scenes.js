@@ -87,26 +87,48 @@
       ctx.fillStyle = '#150d22';
     }
 
+    /* ---- the hero, bottom-left, bleeding off the edge ----
+       Px bakes the portrait anchored top-left, so it is positioned by its
+       corner rather than its centre. Sized off the screen HEIGHT at an integer
+       scale, which keeps his pixels square and keeps him clear of the menu:
+       the buttons sit in the upper middle, above his shoulder, in both
+       orientations. */
+    var por = V.Spr.portrait();
+    var pScale = Math.max(2, Math.round((ch * 0.5) / por.h));
+    var porW = por.w * pScale, porH = por.h * pScale;
+    var porX = Math.round(-porW * 0.12);
+    V.Px.draw(ctx, por, porX, ch - porH, { scale: pScale });
+    /* let the skyline swallow his feet rather than cutting him off flat */
+    var hem = ctx.createLinearGradient(0, ch - porH * 0.18, 0, ch);
+    hem.addColorStop(0, 'rgba(21,13,34,0)');
+    hem.addColorStop(1, 'rgba(21,13,34,0.9)');
+    ctx.fillStyle = hem;
+    ctx.fillRect(0, ch - porH * 0.18, porX + porW + 4, porH * 0.18);
+
+    var uiX = cw / 2;
+
     /* Garatu drifting behind the title, drawn at an integer scale so the
        pixels stay square on the full-resolution canvas */
     var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 190));
     ctx.globalAlpha = 0.34 + 0.06 * Math.sin(t * 0.9);
     V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 2) % 2),
-      cw * 0.78, ch * 0.44 + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
+      cw - Math.max(46, cw * 0.12), ch * 0.5 + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
     ctx.globalAlpha = 1;
 
-    /* title */
-    UI.text(ctx, 'VELTHIROS', cw / 2, ch * 0.22, {
-      size: 48, align: 'center', weight: '800', colour: '#ffe9c9', shadowAlpha: 0.7
+    /* title - sized to fit the width rather than a fixed 48, which ran off
+       the edge of a 390pt phone */
+    var titleSize = Math.min(46, cw / 7.6);
+    UI.text(ctx, 'VELTHIROS', uiX, ch * 0.11, {
+      size: titleSize / s, align: 'center', weight: '800', colour: '#ffe9c9', shadowAlpha: 0.7
     });
-    UI.text(ctx, 'they are watching', cw / 2, ch * 0.22 + 34 * s, {
-      size: 14, align: 'center', colour: 'rgba(255,220,190,0.7)'
+    UI.text(ctx, 'they are watching', uiX, ch * 0.11 + titleSize * 0.72, {
+      size: 13, align: 'center', colour: 'rgba(255,220,190,0.7)'
     });
 
-    /* stacked buttons */
-    var bwid = Math.min(230 * s, cw * 0.7);
-    var bx = cw / 2 - bwid / 2;
-    var by = ch * 0.44;
+    /* stacked buttons, held in the upper middle so they clear his shoulder */
+    var bwid = Math.min(230 * s, cw * 0.62);
+    var bx = uiX - bwid / 2;
+    var by = ch * 0.235;
     var bh = 46 * s;
 
     if (UI.button(ctx, 'newgame', bx, by, bwid, bh, 'New Game')) this.game.newGame();
@@ -131,10 +153,10 @@
     var sv = this.game.save;
     UI.text(ctx, 'deaths ' + sv.deaths + '/' + D.DEATH_LIMIT + '   ' + D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency) +
       (sv.scytheUnlocked ? '   scythe: unlocked' : ''),
-      cw / 2, ch - 22 * s, { size: 11, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+      cw - 14 * s, ch - 18 * s, { size: 11, align: 'right', colour: 'rgba(255,255,255,0.45)' });
 
     if (this.unlockFlash > 0) {
-      UI.text(ctx, 'THE SCYTHE IS YOURS', cw / 2, ch * 0.35,
+      UI.text(ctx, 'THE SCYTHE IS YOURS', uiX, ch * 0.35,
         { size: 22, align: 'center', weight: '800', colour: '#c9f0ea' });
     }
 
@@ -143,7 +165,7 @@
       /* the faintest nudge - the mechanic is meant to be discovered */
       var left = Math.max(0, this.game.idleUnlockSeconds - this.idle);
       if (left < 30) {
-        UI.text(ctx, '. . .', cw / 2, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
+        UI.text(ctx, '. . .', uiX, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
       }
     }
   };

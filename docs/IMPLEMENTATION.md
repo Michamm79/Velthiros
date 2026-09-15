@@ -154,15 +154,33 @@ what keeps pixel art from shimmering when the camera moves. The arena's world zo
 at 0.26 buffer pixels per world unit to hold that relationship.
 
 Characters have three authored views — down, up and side, with side mirrored for the other
-direction — and a three-frame walk. The hero and the crowd share one builder: `Spr.player`
+direction — and a three-frame walk. The hero has silver hair, so his fringe is authored a
+row higher and shallower than everyone else's — a pale mass needs less of the face than a
+dark one, and black swallowed it entirely. The hero and the crowd share one builder: `Spr.player`
 draws an open long-sleeve top over a bare torso (so the back view is black across the
 shoulders and skin below it), while `Spr.civilian` keeps the ordinary clothed build the
 square needs. The shop's tints recolour the hero's sleeves, not a tunic. Weapons are separate sprites pivoted at the grip and
-rotated through the swing. The test suite bakes all 93 sprites and fails on any unknown
+rotated through the swing. The test suite bakes all 94 sprites and fails on any unknown
 palette key, which is the main defence against a typo in hand-placed pixel data.
 
 What is not yet converted: the bedroom and hub interior furniture. The title and cutscene
 now use sprites. A tiled interior is the remaining art job.
+
+**The title screen's key art is derived from a photograph, but no photograph ships.**
+`tools/portrait.mjs` is run by hand, once, against a reference image kept outside the repo.
+It crops, warm-balances (the source was lit cold enough that every skin tone quantised into
+the dirt browns), removes the room, quantises to the locked palette, and remaps the hair onto
+the silver ramp so the portrait matches the sprite rather than the photo. What it writes is
+`src/js/portrait.js`: a grid of palette characters, authored exactly like every other sprite
+and editable the same way. The test suite validates it against the palette alongside
+everything else.
+
+Two things the colour rules could not do alone. Enclosed pockets of room — seen through the
+open shirt, under the jaw — are unreachable by a border flood, so every backdrop candidate is
+cleared and the largest connected component kept. And a slab of doorframe sits against his jaw
+at the same luminance as skin, separable by nothing; that is cleared by coordinate in a
+documented `PATCHES` list, so a regeneration reproduces the same portrait rather than needing
+the output edited by hand.
 
 **The game is a phone game, so it is built like one.** The world buffer is sized by area
 rather than by height: sizing by height alone handed a portrait phone a 98-pixel-wide slice
