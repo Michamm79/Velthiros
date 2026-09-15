@@ -11,3 +11,7 @@ tests/shots/
 # committed icons and manifest, and the Pages workflow rebuilds it before
 # deploying, so there is nothing here worth tracking.
 dist/site/
+
+# The itch.io upload is a zip of dist/site, which is itself generated. Build it
+# with `npm run itch` rather than tracking 750 KB of derived bytes.
+dist/*.zip
