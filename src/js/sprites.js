@@ -48,7 +48,9 @@
     '<': '#1f7a52',   /* emerald, mid - deeper than the grass greens */
     '>': '#45c98f',   /* emerald, lit */
     '?': '#e8629b',   /* hot pink */
-    ';': '#4a63c8'    /* electric blue */
+    ';': '#4a63c8',   /* electric blue */
+    '/': '#4fd8ff',   /* neon sky blue */
+    '_': '#b6f4ff'    /* neon sky blue, the hot core of the glow */
   });
 
   /* Give a flat fill a lit edge and a shadow, the way the hero's hair, denim
@@ -1395,28 +1397,42 @@
     }
 
     if (id === 'battleaxe') {
-      /* One enormous cleaving head rather than a double bit: near-black iron
-         that only catches light along the edge it cuts with, sweeping up and
-         forward off a bound haft. Mass is the read - widest where it meets the
-         haft, tapering to the tip, so it looks front-heavy. */
-      return Px.make(30, 22, function (g) {
-        g.rect('W', 0, 14, 17, 3);                       /* bound haft */
-        g.rect('w', 0, 15, 17, 1);
-        g.set(3, 14, 'U'); g.set(8, 14, 'U'); g.set(13, 14, 'U');
-        for (var y = 1; y <= 17; y++) {
-          var up = 17 - y;
-          var lx = 13 + Math.round(up * 0.76);
-          var rx = 23 + Math.round(up * 0.24);
-          if (lx > rx) continue;
-          g.rect('E', lx, y, rx - lx + 1, 1);            /* the mass */
-          g.set(lx, y, 'U');                             /* spine, darker */
-          g.set(rx, y, 'b');                             /* the cutting edge */
-          if (y % 3 === 1) g.set(rx - 1, y, 'Q');        /* light running it */
+      /* Two giant butcher knives bolted back to back: spines together on the
+         haft, both cutting edges facing outward, squared cleaver tips.
+
+         The cleaver read comes from the taper running the WRONG way round. A
+         sword or an axe bit is widest at the heel and narrows to a point; a
+         butcher's knife is broad at the front, so each blade here grows from
+         the socket out to the tip and then stops flat. That, and the blunt
+         squared front face, is the whole silhouette. */
+      return Px.make(28, 26, function (g) {
+        g.rect('W', 0, 11, 17, 3);                       /* bound haft */
+        g.rect('w', 0, 12, 17, 1);
+        g.set(3, 11, 'U'); g.set(8, 11, 'U'); g.set(13, 11, 'U');
+
+        var x, y, reach;
+        for (x = 16; x <= 26; x++) {
+          /* A gentle taper, not a wedge. Running it 2 -> 9 made each blade a
+             triangle and the pair read as a bowtie; a cleaver is a broad slab
+             with a straight spine that only widens a little toward the front. */
+          reach = 6 + Math.round((x - 16) / 10 * 3);
+          g.rect('E', x, 10 - reach, 1, reach + 1);      /* upper knife */
+          g.set(x, 10 - reach, 'b');                     /* its cutting edge */
+          g.set(x, 10, 'U');                             /* its spine */
+          g.rect('E', x, 14, 1, reach + 1);              /* lower knife */
+          g.set(x, 14 + reach, 'b');
+          g.set(x, 14, 'U');
         }
-        g.rect('A', 14, 12, 4, 5);                       /* collar */
-        g.rect('a', 15, 13, 1, 3);
+        /* the squared front faces, and the light running down them */
+        for (y = 1; y <= 9; y++) { g.set(27, y, 'b'); g.set(26, y, 'a'); }
+        for (y = 15; y <= 23; y++) { g.set(27, y, 'b'); g.set(26, y, 'a'); }
+        g.set(27, 1, 'Q'); g.set(27, 23, 'Q');
+
+        g.rect('A', 14, 7, 3, 11);                       /* the collar */
+        g.rect('a', 15, 9, 1, 7);
+        g.set(15, 8, 'b'); g.set(15, 17, 'b');           /* rivets */
         g.outline('K');
-      }, { ax: 1, ay: 15 });
+      }, { ax: 1, ay: 12 });
     }
 
     if (id === 'bow') {
@@ -1454,15 +1470,16 @@
     }
 
     /* The scythe: the secret one, and the only weapon you may never see. Black
-       haft and a blade that burns cold rather than reflecting anything - the
-       edge is white-blue and the body near black. The cold light gathers at the
-       collar as a single wisp; scattered across the blade it just read as dirt. */
+       haft and a blade that burns rather than reflecting anything - the edge is
+       neon sky blue over a near-black body, hottest along a few segments so it
+       reads as a glow with a core rather than a painted stripe. The light
+       gathers at the collar as a single wisp; scattered across the blade it
+       just read as dirt. */
     return Px.make(28, 24, function (g) {
       g.rect('U', 0, 16, 19, 3);                         /* black haft */
       g.rect('E', 0, 17, 19, 1);
-      /* the cold light gathers toward the blade rather than striping the whole
-         haft - a solid bar of teal read as painted-on trim */
-      g.rect('C', 11, 16, 6, 1); g.set(9, 16, 'C');
+      /* the light gathers toward the blade rather than striping the whole haft */
+      g.rect('/', 11, 16, 6, 1); g.set(9, 16, 'c');
 
       /* the blade: a continuous arc off the collar, drawn as segments so the
          curve cannot break into a staircase of loose pixels */
@@ -1472,17 +1489,18 @@
         var bx = 18 - Math.round(t * t * 11);
         var by = 15 - Math.round(t * 13);
         g.line('E', px, py, bx, by);                     /* body */
-        g.line('I', px + 1, py, bx + 1, by);             /* the burning edge */
+        g.line('/', px + 1, py, bx + 1, by);             /* the burning edge */
+        if (i % 3 === 1) g.line('_', px + 1, py, bx + 1, by);   /* its hot core */
         g.line('U', px - 1, py, bx - 1, by);             /* the blunt back */
         px = bx; py = by;
       }
       g.rect('E', 8, 1, 8, 2);                           /* hooked tip */
-      g.rect('I', 8, 1, 8, 1);
-      g.set(15, 1, 'Q');
+      g.rect('/', 8, 1, 8, 1);
+      g.set(15, 1, '_'); g.set(12, 1, '_');
 
       g.rect('A', 16, 13, 3, 4);                         /* the collar */
       g.set(17, 14, 'a');
-      g.set(17, 12, 'c'); g.set(17, 11, 'C');            /* one wisp, not many */
+      g.set(17, 12, '/'); g.set(17, 11, 'c');            /* one wisp, not many */
       g.outline('K');
     }, { ax: 1, ay: 17 });
   }
