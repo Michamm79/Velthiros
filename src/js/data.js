@@ -210,10 +210,14 @@
   /* ---------------------------------------------------------------- shops
      GDD 9. One shared currency across both shops. */
   D.REALITY_SHOP = [
-    { id: 'shirt_red',   cat: 'Clothes', name: 'Crimson Sleeves', price: 60,  desc: 'Red sleeves. Purely for the watchers.', tint: '#d84a4a' },
-    { id: 'shirt_blue',  cat: 'Clothes', name: 'Deepwater Sleeves', price: 60, desc: 'Cold blue. Suits the snowfields.',   tint: '#4a7fd8' },
-    { id: 'shirt_gold',  cat: 'Clothes', name: 'Gilded Sleeves', price: 180, desc: 'Loud. Expensive. Slightly ridiculous.', tint: '#e8c14a' },
-    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',   price: 320, desc: 'Cut from a Reaper cloak.',              tint: '#3b3550' },
+    /* The outfit is near-black, so the sleeves are the one saturated thing on
+       the character - they have to carry all of the colour. These were mid
+       reds and blues that read as washed-out at sprite size; they are now the
+       deep, lit accents the look is built around. */
+    { id: 'shirt_red',   cat: 'Clothes', name: 'Crimson Sleeves', price: 60,  desc: 'Blood red. Purely for the watchers.',  tint: '#b02a37' },
+    { id: 'shirt_blue',  cat: 'Clothes', name: 'Glacial Sleeves', price: 60,  desc: 'Cold enough to suit the snowfields.',  tint: '#2f8fb0' },
+    { id: 'shirt_gold',  cat: 'Clothes', name: 'Gilded Sleeves',  price: 180, desc: 'Loud. Expensive. Slightly ridiculous.', tint: '#d4a13a' },
+    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',    price: 320, desc: 'Cut from a Reaper cloak.',             tint: '#2e2a42' },
     { id: 'decor_rug',   cat: 'Decor',   name: 'Woven Rug',      price: 80,  desc: 'The floor is less cold now.',           decor: 'rug' },
     { id: 'decor_plant', cat: 'Decor',   name: 'Corner Fern',    price: 70,  desc: 'It is alive. Probably.',                decor: 'plant' },
     { id: 'decor_lamp',  cat: 'Decor',   name: 'Warm Lamp',      price: 110, desc: 'Makes the room feel like a home.',      decor: 'lamp' },
