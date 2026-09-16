@@ -363,7 +363,12 @@
       if (wave >= 4) {
         return {
           index: D.TOTAL_TRIALS + 4, type: 'boss', boss: true, finalBoss: true,
-          env: D.ENVIRONMENTS[2], seed: seed, label: 'Aurelith'
+          /* The last fight was set on the snowfield, which was fine while the
+             Aurelith was a dark insect and is not fine now that it is six
+             white wings: a white boss on a white field is a boss you cannot
+             read. ENVIRONMENTS[4] is the HQ - near-black ground under a
+             near-black sky, which is also what the thing is drawn against. */
+          env: D.ENVIRONMENTS[4], seed: seed, label: 'Aurelith'
         };
       }
       return {

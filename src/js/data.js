@@ -107,6 +107,46 @@
       radius: 24, attackRange: 72, attackWindup: 0.5, attackRecover: 0.6,
       score: 40, reward: 22, colour: '#b06a40', dark: '#733f22', charge: true, heavy: true
     },
+    /* --- Husk: a drained townsperson, and the reason a crowd is dangerous.
+       Half a goblin's health, a third more speed. Alone it is nothing; the
+       point is that it never arrives alone, so a single-target swing is the
+       wrong answer and a wide arc is the right one. --- */
+    husk: {
+      id: 'husk', name: 'Husk', hp: 18, speed: 168, damage: 6, sight: 480,
+      radius: 12, attackRange: 44, attackWindup: 0.22, attackRecover: 0.3,
+      score: 7, reward: 4, colour: '#7e8a6e', dark: '#4a5340', swarm: true
+    },
+
+    /* --- Slinger: the first enemy that does not have to touch you.
+       Nothing in the game had ever shot back, so distance was a free win and
+       the bow was strictly better than it should be. This one holds at range,
+       backs off when you close, and its wind-up is long enough to read and
+       dodge - but only if you are looking at it. --- */
+    slinger: {
+      id: 'slinger', name: 'Slinger', hp: 40, speed: 108, damage: 11, sight: 640,
+      radius: 14, attackRange: 430, attackWindup: 0.55, attackRecover: 0.8,
+      score: 24, reward: 15, colour: '#778a3d', dark: '#3f4a22',
+      ranged: true, kite: 270, boltSpeed: 430
+    },
+
+    /* --- Ironclad: a wall. Slowest thing in the arena and the hardest to
+       move - heavy halves knockback - with a wind-up you can walk out of and
+       a hit you cannot afford twice. It punishes greed, not reflexes. --- */
+    ironclad: {
+      id: 'ironclad', name: 'Ironclad', hp: 260, speed: 74, damage: 30, sight: 420,
+      radius: 28, attackRange: 84, attackWindup: 0.62, attackRecover: 0.7,
+      score: 72, reward: 42, colour: '#6d7b8c', dark: '#2b323d', heavy: true
+    },
+
+    /* --- Shade: the answer to kiting. It closes half the gap instantly every
+       few seconds, so backing away buys you nothing and the bow stops being a
+       safe option. Thin enough to drop fast once you commit to it. --- */
+    shade: {
+      id: 'shade', name: 'Shade', hp: 70, speed: 132, damage: 16, sight: 900,
+      radius: 16, attackRange: 62, attackWindup: 0.3, attackRecover: 0.38,
+      score: 32, reward: 19, colour: '#4aa8c8', dark: '#1d4a60', blink: 2.6
+    },
+
     reaper: {
       id: 'reaper', name: 'Reaper', hp: 420, speed: 156, damage: 26, sight: 4000,
       radius: 26, attackRange: 110, attackWindup: 0.4, attackRecover: 0.46,
@@ -141,6 +181,24 @@
       heavy: true, charge: true
     }
   };
+
+  /* ---------------------------------------------------------------- roster
+     Which enemies a trial may field, and how often. `from` is the tier at
+     which one starts appearing (tier runs 1.0 at trial 1 to ~2.9 at trial 50),
+     `weight` its share of the draw once it has.
+
+     `fade` thins an entry out as the tier climbs past its own `from`. Without
+     it the starter enemy keeps its full share forever and a trial 50 field is
+     still mostly goblins with a garnish - the roster grows but the fight never
+     changes. Bosses are not here: they are placed by the trial, not drawn. */
+  D.ROSTER = [
+    { id: 'goblin',   from: 1.00, weight: 10, fade: 0.55 },
+    { id: 'husk',     from: 1.15, weight: 7 },
+    { id: 'slinger',  from: 1.45, weight: 5 },
+    { id: 'minotaur', from: 1.70, weight: 6 },
+    { id: 'shade',    from: 2.05, weight: 4 },
+    { id: 'ironclad', from: 2.35, weight: 4 }
+  ];
 
   /* ---------------------------------------------------------- environments
      GDD 5. Each skin recolours the arena and swaps the barrier / cover prop. */

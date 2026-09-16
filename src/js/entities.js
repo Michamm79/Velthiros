@@ -465,7 +465,12 @@
           w.floater(this.x, this.y - 46, '!', '#ff6a3c');
           break;
         }
-        this.step(toP, chaseSpeed, dt);
+        if (this.tryBlink(dt, d, p)) break;
+        /* A kiter walks the gap it wants rather than closing: inside `kite` it
+           gives ground, outside it comes on. It still faces you the whole
+           time, so the wind-up telegraph stays readable while it retreats. */
+        this.step(this.def.kite && d < this.def.kite ? toP + Math.PI : toP,
+          chaseSpeed * (this.def.kite && d < this.def.kite ? 0.85 : 1), dt);
         if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
         else if (!this.relentless && !this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
         break;
@@ -491,7 +496,13 @@
         break;
       }
       case 'recover': {
-        this.moving = false;
+        /* A kiter reopens the gap during its recovery - that long recovery is
+           the window you have to close it, not a free rest for the shooter. */
+        if (this.def.kite && d < this.def.kite) {
+          this.facing = toP;
+          this.moving = true;
+          this.step(toP + Math.PI, this.speed * 0.85, dt);
+        } else this.moving = false;
         if (this.stateTime >= this.def.attackRecover) {
           this.state = (this.relentless || d < this.def.sight) ? 'chase' : 'idle';
           this.stateTime = 0;
@@ -516,6 +527,16 @@
 
   Enemy.prototype.swing = function (p) {
     var w = this.world;
+    if (this.def.ranged) {
+      /* It shoots rather than swings. The bolt is aimed where you were when
+         the wind-up ended, not where you are when it lands, so sidestepping
+         beats standing and trading. */
+      w.spawnBolt(this.x, this.y - 14, Math.atan2(p.y - this.y, p.x - this.x),
+        this.def.boltSpeed || 420, this.damage,
+        { range: this.def.attackRange + 160, colour: '#d8e07a' });
+      V.Audio.play('bow');
+      return;
+    }
     var arc = this.def.boss ? 1.6 : 1.1;
     w.swipe(this.x, this.y, this.facing, this.def.attackRange, arc / 2, 'enemy');
     if (U.inArcVisual(this.x, this.y, this.facing, arc / 2, this.def.attackRange + p.radius,
@@ -523,6 +544,27 @@
       p.hurt(this.damage, this.facing);
     }
     V.Audio.play(this.def.heavy || this.def.boss ? 'heavy' : 'swing');
+  };
+
+  /* Blink: closes half the distance in one step, every `blink` seconds, once
+     the player is far enough away for it to matter. Retreating is the reflex
+     answer to everything else in the roster, and this is the enemy that takes
+     that answer away - so it is deliberately thin once you turn and face it. */
+  Enemy.prototype.tryBlink = function (dt, d, p) {
+    if (!this.def.blink) return false;
+    this.blinkTimer = (this.blinkTimer || 0) + dt;
+    if (this.blinkTimer < this.def.blink || d < 220) return false;
+    this.blinkTimer = 0;
+    var w = this.world;
+    var a = Math.atan2(this.y - p.y, this.x - p.x);
+    var reach = Math.max(d * 0.5, this.def.attackRange + 40);
+    w.burst(this.x, this.y - 18, 10, this.def.colour);
+    this.x = p.x + Math.cos(a) * reach;
+    this.y = p.y + Math.sin(a) * reach;
+    w.confine(this);
+    w.burst(this.x, this.y - 18, 10, this.def.colour);
+    V.Audio.play('warp');
+    return true;
   };
 
   Enemy.prototype.bossBrain = function (dt, d, toP, p) {
@@ -603,7 +645,8 @@
 
   var ENEMY_SPRITE = {
     goblin: 'goblin', minotaur: 'minotaur', reaper: 'reaper', aurelith: 'aurelith',
-    warden: 'warden', dummy: 'dummy'
+    warden: 'warden', dummy: 'dummy',
+    husk: 'husk', slinger: 'slinger', ironclad: 'ironclad', shade: 'shade'
   };
 
   Enemy.prototype.draw = function (ctx, t) {

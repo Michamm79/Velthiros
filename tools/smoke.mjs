@@ -512,8 +512,12 @@ async function main() {
           check(Spr.player(dir, f, '#17141c', oid), `player:${dir}:${f}:${oid}`);
         }
         check(Spr.civilian(dir, f, '#a8563d'), `civilian:${dir}:${f}`);
-        check(Spr.goblin(dir, f), `goblin:${dir}:${f}`);
-        check(Spr.minotaur(dir, f), `minotaur:${dir}:${f}`);
+        /* Driven from the roster rather than a hand-kept list. The list was
+           how four new enemies reached the game without a single one of their
+           sprites ever being palette-checked: adding to D.ROSTER now enrolls
+           an enemy here automatically. Bosses are not in the roster, so they
+           are named. */
+        for (const e of window.V.D.ROSTER) check(Spr[e.id](dir, f), `${e.id}:${dir}:${f}`);
         check(Spr.reaper(dir, f), `reaper:${dir}:${f}`);
         check(Spr.warden(dir, f), `warden:${dir}:${f}`);
       }
@@ -605,59 +609,179 @@ async function main() {
          whole wing up by a flat amount - the topmost, longest pair by nothing
          at all. Either way the wings slid rather than beat.
 
-         The test is a pivot test, not a pixel test. Walk the sprite column by
-         column, measure how far the top of the silhouette moves between the
-         two frames, and require that the outer third travels strictly further
-         than the third nearest the body. That is what a hinge does, and it is
-         the property that was backwards. */
+         The test is a pivot test and deliberately assumes nothing about where
+         the wings point. An earlier version measured travel against distance
+         from the body along x, which quietly assumed wings radiate sideways;
+         it then failed Aurelith's redesign, whose upper pair arcs UP so its
+         tips sit near the centre line. What actually defines a hinge is that
+         the parts which move are further out than the parts which hold - so
+         that is what is measured:
+
+           held    = pixels filled in both frames        (the sprite's anchor)
+           changed = pixels filled in exactly one frame  (what the beat moved)
+
+         Take the centroid of `held` and compare mean distances. A shoulder
+         pivot puts the change out at the tips, well beyond the held mass; an
+         inverted pivot puts it at the root, inside that mass, and the ratio
+         falls to about 1.
+
+         That ratio alone is not enough, and a control proved it: slide a whole
+         wing bodily and the test PASSED at 1.62x, because a big enough
+         translation shrinks `held` down to a small overlapping core that
+         everything else is then far from. So the share of the sprite that
+         moved is bounded too. A beat rearranges the tips - 6% of Aurelith,
+         17% of Garatu - where the rigid slide moved 70%. A creature that
+         relocates most of itself between two frames is not beating a wing. */
   const wings = await page.evaluate(() => {
     const { Spr } = window.V;
-    const topRow = (spr, x) => {
-      for (let y = 0; y < spr.grid.h; y++) if (spr.grid.get(x, y) !== '.') return y;
-      return null;
-    };
-    /* columns where the silhouette jumps more than one row - a clean staircase
-       has none, a sawtooth has many. Counted per frame so the two can be
-       compared: the head and horns break the staircase in BOTH frames, and
-       that is the art, not the animation. */
-    const jumps = (s) => {
-      const cx = Math.floor(s.w / 2);
-      let n = 0, prev = null;
-      for (let x = 0; x < cx; x++) {
-        const t = topRow(s, x);
-        if (t == null) { prev = null; continue; }
-        if (prev != null && Math.abs(t - prev) > 1) n++;
-        prev = t;
+    const pivot = (a, b) => {
+      const held = [], changed = [];
+      let filled = 0;
+      for (let y = 0; y < a.grid.h; y++) {
+        for (let x = 0; x < a.grid.w; x++) {
+          const inA = a.grid.get(x, y) !== '.', inB = b.grid.get(x, y) !== '.';
+          if (inA) filled++;
+          if (inA && inB) held.push([x, y]);
+          else if (inA || inB) changed.push([x, y]);
+        }
       }
-      return n;
-    };
-    const measure = (a, b) => {
-      /* only the left half: both sprites are authored on one side, then mirrored */
-      const cx = Math.floor(a.w / 2);
-      let inner = 0, outer = 0, innerN = 0, outerN = 0;
-      for (let x = 0; x < cx; x++) {
-        const t0 = topRow(a, x), t1 = topRow(b, x);
-        if (t0 == null || t1 == null) continue;
-        const out = (cx - x) / cx;             /* 1 at the wing tip, 0 at the body */
-        if (out > 0.66) { outer += t0 - t1; outerN++; }
-        else if (out < 0.33) { inner += t0 - t1; innerN++; }
-      }
-      return { outer: outer / Math.max(outerN, 1), inner: inner / Math.max(innerN, 1),
-               roughened: jumps(b) - jumps(a) };
+      if (!held.length || !changed.length) return { ratio: 0, changed: changed.length, share: 1 };
+      const cx = held.reduce((s, p) => s + p[0], 0) / held.length;
+      const cy = held.reduce((s, p) => s + p[1], 0) / held.length;
+      const mean = (pts) => pts.reduce((s, p) =>
+        s + Math.hypot(p[0] - cx, p[1] - cy), 0) / pts.length;
+      const h = mean(held);
+      return { ratio: h > 0 ? mean(changed) / h : 0, changed: changed.length,
+               share: changed.length / filled };
     };
     return {
-      garatu: measure(Spr.garatu(0), Spr.garatu(1)),
-      aurelith: measure(Spr.aurelith(0), Spr.aurelith(1))
+      garatu: pivot(Spr.garatu(0), Spr.garatu(1)),
+      aurelith: pivot(Spr.aurelith(0), Spr.aurelith(1))
     };
   });
   ['garatu', 'aurelith'].forEach((who) => {
     const m = wings[who];
-    check(who + "'s wings beat from the shoulder, tips travelling furthest",
-      m.outer > 1 && m.outer > m.inner * 2,
-      'tip moves ' + m.outer.toFixed(2) + ' rows, root moves ' + m.inner.toFixed(2));
-    check(who + "'s wing edge is no rougher mid-beat than at rest",
-      m.roughened <= 0, m.roughened + ' extra columns jump more than one row');
+    check(who + "'s wings beat from the shoulder, not the tip",
+      m.changed > 30 && m.ratio > 1.15 && m.share < 0.35,
+      m.changed + ' px moved (' + (m.share * 100).toFixed(0) + '% of the sprite), ' +
+      m.ratio.toFixed(2) + 'x as far out as the part that held');
   });
+
+  /* --- the roster ---
+         The whole fighting game used to be two enemies. pickEnemy flipped a
+         coin between goblin and minotaur, so across fifty trials the only
+         thing that changed was how often the second one turned up. Four more
+         now unlock by tier, each answering a different habit: the husk punishes
+         single-target swings by never arriving alone, the slinger punishes
+         standing still at range, the ironclad punishes greed, and the shade
+         punishes backing away.
+
+         Checked three ways: that the roster is actually reachable, that a late
+         field is not still mostly goblins, and that every entry is a real
+         enemy with a real sprite - a typo in a roster id would otherwise spawn
+         `undefined` and crash the draw on whichever trial first rolled it. */
+  const roster = await page.evaluate(() => {
+    const g = window.VELTHIROS, V = window.V, D = V.D;
+    const spec = g.makeSpec(1);
+    const t = new V.Trial(g, spec);
+    const draw = (tier, n) => {
+      const r = V.U.rng(99), seen = {};
+      for (let i = 0; i < n; i++) {
+        const id = t.pickEnemy(tier, r);
+        seen[id] = (seen[id] || 0) + 1;
+      }
+      return seen;
+    };
+    /* everything the roster names must resolve to a def and to a sprite */
+    const broken = D.ROSTER.filter((e) =>
+      !D.ENEMIES[e.id] || typeof V.Spr[e.id] !== 'function').map((e) => e.id);
+    const early = draw(1.0, 400);
+    const late = draw(2.9, 400);
+    const everSeen = {};
+    for (let k = 10; k <= 29; k++) Object.keys(draw(k / 10, 200)).forEach((id) => { everSeen[id] = 1; });
+    return {
+      broken,
+      rosterSize: D.ROSTER.length,
+      reachable: Object.keys(everSeen).sort(),
+      earlyKinds: Object.keys(early).length,
+      lateKinds: Object.keys(late).length,
+      lateGoblinShare: (late.goblin || 0) / 400,
+      /* nothing may appear before the tier it unlocks at */
+      tooEarly: D.ROSTER.filter((e) => e.from > 1.0 && early[e.id]).map((e) => e.id)
+    };
+  });
+  check('every roster entry is a real enemy with a real sprite',
+    roster.broken.length === 0 && roster.rosterSize === 6,
+    roster.rosterSize + ' entries; broken: ' + JSON.stringify(roster.broken));
+  check('all six field enemies are reachable across the run',
+    roster.reachable.length === 6, roster.reachable.join(', '));
+  check('an early field is the starter enemy, a late field is mixed',
+    roster.earlyKinds === 1 && roster.lateKinds === 6 && roster.tooEarly.length === 0,
+    'tier 1.0 -> ' + roster.earlyKinds + ' kind, tier 2.9 -> ' + roster.lateKinds +
+    ' kinds; early leaks: ' + JSON.stringify(roster.tooEarly));
+  check('a late field is no longer mostly goblins',
+    roster.lateGoblinShare < 0.3,
+    'goblins are ' + (roster.lateGoblinShare * 100).toFixed(0) + '% of a tier 2.9 draw');
+
+  /* --- the three new behaviours actually do something ---
+         Each is driven directly rather than waited for: spawn the enemy at a
+         known distance, run the world forward, and read the one thing that
+         proves the behaviour fired. */
+  const behaviours = await page.evaluate(() => {
+    const g = window.VELTHIROS, V = window.V;
+    const run = (t, secs, step) => { for (let i = 0; i < secs / step; i++) t.update(step); };
+    const fresh = () => {
+      const t = new V.Trial(g, g.makeSpec(12));
+      t.state = 'play';
+      t.enemies.length = 0;
+      t.projectiles.length = 0;
+      t.player.x = 0; t.player.y = 0;
+      return t;
+    };
+
+    /* a slinger shoots: nothing in the game had ever shot at the player */
+    const t1 = fresh();
+    const sl = t1.spawnEnemy('slinger', 340, 0, {});
+    sl.relentless = true; sl.state = 'chase';
+    const hpBefore = t1.player.hp;
+    run(t1, 6, 1 / 60);
+    const shot = { bolts: t1.projectiles.filter((q) => q.hostile).length,
+                   hurt: t1.player.hp < hpBefore };
+
+    /* ...and gives ground when you are on top of it, rather than trading */
+    const t2 = fresh();
+    const sl2 = t2.spawnEnemy('slinger', 90, 0, {});
+    sl2.relentless = true; sl2.state = 'chase';
+    run(t2, 2.5, 1 / 60);
+    const kited = Math.hypot(sl2.x - t2.player.x, sl2.y - t2.player.y);
+
+    /* a shade closes the gap whatever you do, so kiting stops working */
+    const t3 = fresh();
+    const sh = t3.spawnEnemy('shade', 900, 0, {});
+    sh.relentless = true; sh.state = 'chase';
+    const shadeStart = 900;
+    run(t3, 3.2, 1 / 60);
+    const shadeEnd = Math.hypot(sh.x - t3.player.x, sh.y - t3.player.y);
+
+    /* a goblin at the same distance, over the same time, as the control:
+       the shade must beat it by more than its slightly higher speed explains */
+    const t4 = fresh();
+    const gb = t4.spawnEnemy('goblin', 900, 0, {});
+    gb.relentless = true; gb.state = 'chase';
+    run(t4, 3.2, 1 / 60);
+    const goblinEnd = Math.hypot(gb.x - t4.player.x, gb.y - t4.player.y);
+
+    return { shot, kited, shadeStart, shadeEnd, goblinEnd };
+  });
+  check('a slinger shoots at the player instead of closing',
+    behaviours.shot.bolts > 0 || behaviours.shot.hurt,
+    JSON.stringify(behaviours.shot));
+  check('a slinger gives ground when the player closes on it',
+    behaviours.kited > 150, 'ended ' + behaviours.kited.toFixed(0) + ' units out, from 90');
+  check('a shade closes ground a runner could not',
+    behaviours.shadeEnd < behaviours.goblinEnd * 0.6,
+    'shade ' + behaviours.shadeStart + ' -> ' + behaviours.shadeEnd.toFixed(0) +
+    ', goblin over the same time -> ' + behaviours.goblinEnd.toFixed(0));
 
   /* --- the end of the run ---
          A player reached trial 50, killed Aurelith, was told they FAILED, and

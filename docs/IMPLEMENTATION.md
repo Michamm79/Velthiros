@@ -16,7 +16,7 @@ How the design document maps onto the code, what I had to decide, and what is st
 | 6.2 Ranking | `arena.js` `finish()`, `data.js` `RANK_TIERS` | See "Ranking maths" below. |
 | 7.1 Weapons | `data.js` `WEAPONS` | Four weapons with the stated strengths and weaknesses expressed as real numbers. |
 | 7.1 Scythe unlock | `scenes.js` `StartScene` | 5 minutes idle on the Start Screen → prompt → button sequence → unlocked for the run. |
-| 7.2 Enemies | `data.js` `ENEMIES`, `entities.js` `Enemy` | Goblins everywhere, Minotaurs appear as the difficulty tier rises, Reapers every 5th trial. |
+| 7.2 Enemies | `data.js` `ENEMIES` / `ROSTER`, `entities.js` `Enemy` | Seven types. `D.ROSTER` unlocks each by tier and thins the starter out behind it: Goblin from the start, Husk 1.15, Slinger 1.45, Minotaur 1.70, Shade 2.05, Ironclad 2.35; Reapers every 5th trial and the Aurelith at the end. |
 | 7.3 Stealth | `entities.js` `Player.update` / `Enemy.detects` | Standing still in a bush cuts enemy sight range to 22%. |
 | 8. Power gems | `data.js` `GEMS`, `scenes.js` `GemScene` | One granted at random after the abduction, no player input. Levels every 8 cleared trials, capped at V. |
 | 9. Economy | `data.js` shops, `game.js` `buy()` | One shared currency. Five business investments pay out on every survived trial. |
@@ -55,6 +55,21 @@ and Wingshard grants a glide, so a dodge action has to exist. It is the small th
 
 **Consumables use one context-sensitive button** rather than an inventory screen — it uses a
 potion if you are hurt, a tonic if you are winded, otherwise a smoke bomb.
+
+**The roster answers habits, not stat lines.** Each enemy past the Goblin exists to close off one
+way of playing safely, which is why they are added as behaviour rather than as bigger numbers:
+
+| Enemy | Flag | What it takes away |
+|---|---|---|
+| Husk | `swarm` | Single-target swings — it never arrives alone, so a wide arc is the answer |
+| Slinger | `ranged`, `kite` | Distance. It is the first thing in the game that shoots back, and it gives ground during its own recovery rather than trading |
+| Minotaur | `charge` | Standing your ground in the open |
+| Shade | `blink` | Backing away — it closes half the gap every 2.6s, so kiting stops working |
+| Ironclad | `heavy` | Greed. Halved knockback, a wind-up you can walk out of, and a hit you cannot afford twice |
+
+`ranged` diverts `Enemy.swing` into `spawnBolt` instead of a melee arc; `kite` makes `chase` and
+`recover` walk backwards inside a set radius; `blink` is `Enemy.tryBlink`, a short teleport that
+refuses to fire inside 220 units so it closes gaps rather than teleporting into your face.
 
 **Enemies "hiding" in Seek trials are found by proximity**, within about 118 units. There is no
 separate search input.

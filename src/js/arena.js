@@ -301,10 +301,27 @@
     this.timeLeft = this.timeLimit;
   };
 
+  /* Draws from D.ROSTER by tier. This used to be a coin flip between goblin
+     and minotaur, which meant every field in the game was one of two things
+     and the only thing that changed across 50 trials was how often the second
+     one showed up. Now each entry unlocks at its own tier and the starter
+     thins out behind it, so a late field is a mixed one. */
   Trial.prototype.pickEnemy = function (tier, r) {
-    /* Minotaurs are the difficulty-spike enemy introduced as you level (GDD 7.2) */
-    var minoChance = U.clamp((tier - 1.25) * 0.5, 0, 0.42);
-    return r.chance(minoChance) ? 'minotaur' : 'goblin';
+    var roster = D.ROSTER, weights = [], total = 0, i, w;
+    for (i = 0; i < roster.length; i++) {
+      var e = roster[i];
+      w = tier < e.from ? 0 : e.weight;
+      if (w && e.fade) w = Math.max(1, w * (1 - (tier - e.from) * e.fade));
+      weights.push(w);
+      total += w;
+    }
+    if (total <= 0) return roster[0].id;
+    var roll = r() * total;
+    for (i = 0; i < roster.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return roster[i].id;
+    }
+    return roster[0].id;
   };
 
   /* ============================================================ world hooks */
@@ -332,8 +349,10 @@
     this.projectiles.push(new E.Projectile(x, y, a, sp, dmg, range, { pierce: pierce }));
   };
 
-  Trial.prototype.spawnBolt = function (x, y, a, sp, dmg) {
-    this.projectiles.push(new E.Projectile(x, y, a, sp, dmg, 900, { hostile: true, colour: '#ff9ec4' }));
+  Trial.prototype.spawnBolt = function (x, y, a, sp, dmg, opts) {
+    opts = opts || {};
+    this.projectiles.push(new E.Projectile(x, y, a, sp, dmg, opts.range || 900,
+      { hostile: true, colour: opts.colour || '#ff9ec4' }));
   };
 
   Trial.prototype.confine = function (ent) {
