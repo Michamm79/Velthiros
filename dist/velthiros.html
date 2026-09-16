@@ -329,6 +329,46 @@ html, body {
       radius: 24, attackRange: 72, attackWindup: 0.5, attackRecover: 0.6,
       score: 40, reward: 22, colour: '#b06a40', dark: '#733f22', charge: true, heavy: true
     },
+    /* --- Husk: a drained townsperson, and the reason a crowd is dangerous.
+       Half a goblin's health, a third more speed. Alone it is nothing; the
+       point is that it never arrives alone, so a single-target swing is the
+       wrong answer and a wide arc is the right one. --- */
+    husk: {
+      id: 'husk', name: 'Husk', hp: 18, speed: 168, damage: 6, sight: 480,
+      radius: 12, attackRange: 44, attackWindup: 0.22, attackRecover: 0.3,
+      score: 7, reward: 4, colour: '#7e8a6e', dark: '#4a5340', swarm: true
+    },
+
+    /* --- Slinger: the first enemy that does not have to touch you.
+       Nothing in the game had ever shot back, so distance was a free win and
+       the bow was strictly better than it should be. This one holds at range,
+       backs off when you close, and its wind-up is long enough to read and
+       dodge - but only if you are looking at it. --- */
+    slinger: {
+      id: 'slinger', name: 'Slinger', hp: 40, speed: 108, damage: 11, sight: 640,
+      radius: 14, attackRange: 430, attackWindup: 0.55, attackRecover: 0.8,
+      score: 24, reward: 15, colour: '#778a3d', dark: '#3f4a22',
+      ranged: true, kite: 270, boltSpeed: 430
+    },
+
+    /* --- Ironclad: a wall. Slowest thing in the arena and the hardest to
+       move - heavy halves knockback - with a wind-up you can walk out of and
+       a hit you cannot afford twice. It punishes greed, not reflexes. --- */
+    ironclad: {
+      id: 'ironclad', name: 'Ironclad', hp: 260, speed: 74, damage: 30, sight: 420,
+      radius: 28, attackRange: 84, attackWindup: 0.62, attackRecover: 0.7,
+      score: 72, reward: 42, colour: '#6d7b8c', dark: '#2b323d', heavy: true
+    },
+
+    /* --- Shade: the answer to kiting. It closes half the gap instantly every
+       few seconds, so backing away buys you nothing and the bow stops being a
+       safe option. Thin enough to drop fast once you commit to it. --- */
+    shade: {
+      id: 'shade', name: 'Shade', hp: 70, speed: 132, damage: 16, sight: 900,
+      radius: 16, attackRange: 62, attackWindup: 0.3, attackRecover: 0.38,
+      score: 32, reward: 19, colour: '#4aa8c8', dark: '#1d4a60', blink: 2.6
+    },
+
     reaper: {
       id: 'reaper', name: 'Reaper', hp: 420, speed: 156, damage: 26, sight: 4000,
       radius: 26, attackRange: 110, attackWindup: 0.4, attackRecover: 0.46,
@@ -363,6 +403,24 @@ html, body {
       heavy: true, charge: true
     }
   };
+
+  /* ---------------------------------------------------------------- roster
+     Which enemies a trial may field, and how often. `from` is the tier at
+     which one starts appearing (tier runs 1.0 at trial 1 to ~2.9 at trial 50),
+     `weight` its share of the draw once it has.
+
+     `fade` thins an entry out as the tier climbs past its own `from`. Without
+     it the starter enemy keeps its full share forever and a trial 50 field is
+     still mostly goblins with a garnish - the roster grows but the fight never
+     changes. Bosses are not here: they are placed by the trial, not drawn. */
+  D.ROSTER = [
+    { id: 'goblin',   from: 1.00, weight: 10, fade: 0.55 },
+    { id: 'husk',     from: 1.15, weight: 7 },
+    { id: 'slinger',  from: 1.45, weight: 5 },
+    { id: 'minotaur', from: 1.70, weight: 6 },
+    { id: 'shade',    from: 2.05, weight: 4 },
+    { id: 'ironclad', from: 2.35, weight: 4 }
+  ];
 
   /* ---------------------------------------------------------- environments
      GDD 5. Each skin recolours the arena and swaps the barrier / cover prop. */
@@ -2063,7 +2121,13 @@ html, body {
     '%': '#48a0bd',   /* baggy trouser, lit seam */
     '#': '#d8a13c',   /* sash gold */
     '@': '#8e6018',   /* sash gold, shadowed */
-    '$': '#b02a37'    /* sash ribbon, crimson */
+    '$': '#b02a37',   /* sash ribbon, crimson */
+    '&': '#7e8a6e',   /* husk flesh, mid - drained grey-green */
+    '*': '#4a5340',   /* husk flesh, dark */
+    '-': '#b4bda2',   /* husk flesh, light */
+    '(': '#e8e0d2',   /* feather shade - warm, where 'i' is cold */
+    '^': '#e07a42',   /* coral growth */
+    ')': '#c2b8a8'    /* feather shadow - warm, where 'i' is cold */
   });
 
   /* Give a flat fill a lit edge and a shadow, the way the hero's hair, denim
@@ -2382,6 +2446,195 @@ html, body {
     });
   };
 
+  /* Husk: what is left of a townsperson the arena used up. Goblin-sized but
+     narrower and taller, arms hanging rather than raised, so a crowd of them
+     reads as a crowd of people rather than a crowd of monsters. */
+  Spr.husk = function (dir, frame) {
+    return cached('hk:' + dir + frame, function () {
+      return Px.make(16, 26, function (g) {
+        var cx = 8;
+        var bob = frame ? 1 : 0;
+        var legTop = 18, legBot = 23;
+        var bodyTop = 10 + bob, bodyBot = 18 + bob;
+        var headCy = 6 + bob;
+
+        var lx = 5, rx = 8, lTop = legTop, rTop = legTop;
+        if (frame === 1) { lx = 4; lTop = legTop + 1; }
+        if (frame === 2) { rx = 9; rTop = legTop + 1; }
+        g.rect('*', lx, lTop, 3, legBot - lTop);
+        g.rect('*', rx, rTop, 3, legBot - rTop);
+        g.rect('K', lx, legBot, 3, 2);
+        g.rect('K', rx, legBot, 3, 2);
+
+        /* narrow torso in the rags it died in */
+        g.rect('&', 5, bodyTop, 6, bodyBot - bodyTop);
+        g.rect('*', 9, bodyTop + 1, 2, bodyBot - bodyTop - 1);
+        /* ribs showing through - the light tone alone was lost against the
+           body, so they are cut as dark gaps with a lit edge under each */
+        g.rect('*', 6, bodyTop + 2, 4, 1); g.set(6, bodyTop + 3, '-');
+        g.rect('*', 6, bodyTop + 4, 3, 1); g.set(6, bodyTop + 5, '-');
+
+        /* arms hanging straight down - nothing is holding them up */
+        g.rect('&', 3, bodyTop + 1, 2, 8);
+        g.rect('&', 11, bodyTop + 1, 2, 8);
+
+        /* hollow head, jaw slack */
+        g.oval('&', cx, headCy, 3, 4);
+        if (dir !== 'up') {
+          g.set(cx - 2, headCy, 'K'); g.set(cx + 2, headCy, 'K');
+          g.set(cx - 2, headCy - 1, 'X');
+          g.rect('K', cx - 1, headCy + 3, 3, 2);   /* open mouth */
+        }
+        form(g, { '&': ['-', '*'], '*': ['&', null], '-': [null, '&'] });
+        g.outline('K');
+      });
+    });
+  };
+
+  /* Slinger: lean, braced over a loaded sling, bone mask. Rust rather than the
+     olive it started in - olive put it in the goblin's colour, and two green
+     humanoids at sprite size are one green humanoid. The silhouette carries it
+     anyway: the levelled arm reads as "that one is pointing something at me"
+     from clear across an arena, which is the only thing you need to know. */
+  Spr.slinger = function (dir, frame) {
+    return cached('sl:' + dir + frame, function () {
+      return Px.make(22, 28, function (g) {
+        var cx = 11;
+        var bob = frame ? 1 : 0;
+        var legTop = 19, legBot = 25;
+        var bodyTop = 11 + bob, bodyBot = 19 + bob;
+        var headCy = 7 + bob;
+
+        /* braced stance: feet apart, never together - it shoots standing */
+        g.rect('N', 6, legTop, 3, legBot - legTop);
+        g.rect('N', 13, legTop + (frame ? 1 : 0), 3, legBot - legTop - (frame ? 1 : 0));
+        g.rect('K', 5, legBot, 4, 2);
+        g.rect('K', 13, legBot, 4, 2);
+
+        /* body, with a quiver strap across it */
+        g.rect('n', 7, bodyTop, 8, bodyBot - bodyTop);
+        g.rect('N', 12, bodyTop + 1, 3, bodyBot - bodyTop - 1);
+        g.line('K', 7, bodyTop + 1, 14, bodyTop + 6);
+        g.rect('^', 8, bodyTop + 1, 2, 2);
+
+        /* the loaded arm, held out level; the other hauls the cord back */
+        g.rect('n', 15, bodyTop + 1, 5, 2);
+        g.set(20, bodyTop + 1, 'O');
+        g.rect('n', 4, bodyTop + 3, 3, 2);
+        for (var y = bodyTop; y <= bodyTop + 4; y++) g.set(18, y, 'T');
+
+        /* bone mask over a hood */
+        g.oval('N', cx, headCy, 4, 4);
+        g.oval('O', cx + 1, headCy + 1, 2, 2);
+        if (dir !== 'up') { g.set(cx, headCy, 'K'); g.set(cx + 2, headCy, 'K'); }
+        g.rect('K', cx - 4, headCy - 3, 8, 2);      /* hood brim */
+
+        form(g, { 'n': ['^', 'N'], 'N': ['n', null], '^': [null, 'n'],
+                  'O': [null, 'q'] });
+        g.outline('K');
+      });
+    });
+  };
+
+  /* Ironclad: mass. Wider than it is interesting - a squat block of plate with
+     the head sunk between the shoulders and no neck to aim at. Drawn broad at
+     the top and narrow at the ankles so it reads as top-heavy and slow. */
+  Spr.ironclad = function (dir, frame) {
+    return cached('ic:' + dir + frame, function () {
+      return Px.make(30, 34, function (g) {
+        var cx = 15;
+        var bob = frame ? 1 : 0;
+        var legTop = 24, legBot = 31;
+        var bodyTop = 9 + bob, bodyBot = 24 + bob;
+
+        /* stubby legs, barely clearing the plate */
+        var lx = 9, rx = 17, lTop = legTop, rTop = legTop;
+        if (frame === 1) { lTop = legTop + 1; }
+        if (frame === 2) { rTop = legTop + 1; }
+        g.rect('E', lx, lTop, 4, legBot - lTop);
+        g.rect('E', rx, rTop, 4, legBot - rTop);
+        g.rect('K', lx - 1, legBot, 5, 2);
+        g.rect('K', rx, legBot, 5, 2);
+
+        /* the slab: broad pauldrons tapering to the waist */
+        for (var y2 = 0; y2 < bodyBot - bodyTop; y2++) {
+          var half = 9 - Math.round(y2 * 0.28);
+          g.rect('A', cx - half, bodyTop + y2, half * 2 + 1, 1);
+        }
+        g.rect('a', cx - 7, bodyTop + 1, 4, 3);      /* lit pauldron */
+        g.rect('E', cx + 3, bodyTop + 2, 5, 11);     /* shadowed side */
+        /* a riveted seam down the centre line */
+        for (var v = bodyTop + 3; v < bodyBot - 1; v += 3) g.set(cx, v, 'b');
+        g.rect('E', cx - 8, bodyBot - 4, 17, 2);     /* waist band */
+
+        /* arms: one hangs, one carries the weight of a maul */
+        g.rect('A', cx - 12, bodyTop + 3, 3, 9);
+        g.rect('A', cx + 10, bodyTop + 3, 3, 9);
+        g.rect('E', cx + 10, bodyTop + 3, 3, 9);
+        g.rect('K', cx + 9, bodyTop + 12, 5, 3);     /* maul head */
+        g.rect('A', cx + 10, bodyTop + 13, 3, 1);
+
+        /* helm sunk into the shoulders; a slit, not a face */
+        g.oval('A', cx, bodyTop - 1, 5, 4);
+        g.rect('E', cx - 4, bodyTop - 1, 9, 2);
+        if (dir !== 'up') {
+          g.rect('X', cx - 3, bodyTop - 1, 2, 1);
+          g.rect('X', cx + 2, bodyTop - 1, 2, 1);
+        }
+        g.rect('b', cx - 1, bodyTop - 5, 2, 3);      /* crest */
+
+        form(g, { 'A': ['a', 'E'], 'a': ['b', 'A'], 'E': ['A', null] });
+        g.outline('K');
+      });
+    });
+  };
+
+  /* Shade: a tall cold smear with two lights in it. No legs - it frays out
+     below the waist, so when it blinks there is nothing to watch travel.
+
+     Drawn narrow on purpose. The first pass was a solid cone and read as a
+     traffic bollard: at sprite size a wraith has to be mostly gaps, so the
+     hem is eaten away column by column and the body is streaked vertically
+     rather than filled. */
+  Spr.shade = function (dir, frame) {
+    return cached('sh:' + dir + frame, function () {
+      return Px.make(20, 32, function (g) {
+        var cx = 10;
+        var drift = frame ? 1 : 0;
+        var top = 3 + drift;
+
+        /* Shoulders down to nothing. The hem is ragged per column: each one
+           stops at its own height, so the bottom edge is torn rather than cut. */
+        for (var x = -4; x <= 4; x++) {
+          var a = Math.abs(x);
+          if (a === 4 && frame) continue;                 /* the outermost wisps flicker */
+          var colTop = top + 3 + a * 2;
+          var colBot = top + 26 - a * a - ((x + (frame ? 1 : 0)) % 3) * 3;
+          if (colBot <= colTop) continue;
+          g.rect('C', cx + x, colTop, 1, colBot - colTop);
+          /* one lit column either side of centre, so it is streaked not filled */
+          if (a === 1 || a === 3) g.rect('c', cx + x, colTop + 2, 1, colBot - colTop - 4);
+        }
+
+        /* trailing arms, barely attached */
+        g.line('C', cx - 4, top + 8, cx - 7, top + 15);
+        g.line('C', cx + 4, top + 8, cx + 7, top + 15);
+        g.set(cx - 7, top + 16, 'c');
+        g.set(cx + 7, top + 16, 'c');
+
+        /* the head is a suggestion; the eyes are not */
+        g.oval('C', cx, top + 4, 3, 4);
+        if (dir !== 'up') {
+          g.set(cx - 2, top + 4, 'I'); g.set(cx + 2, top + 4, 'I');
+          g.set(cx - 2, top + 5, 'c'); g.set(cx + 2, top + 5, 'c');
+        }
+
+        form(g, { 'C': ['c', null], 'c': ['I', 'C'] });
+        g.outline('K');
+      });
+    });
+  };
+
   Spr.reaper = function (dir, frame) {
     return cached('rp:' + dir + frame, function () {
       return Px.make(22, 34, function (g) {
@@ -2478,57 +2731,108 @@ html, body {
     return cached('dm:' + dir + frame, function () { return Spr.prop('dummy', 0); });
   };
 
+  /* ---------------------------------------------------------------- AURELITH
+     The thing at the end. Six white wings in a halo, a body so thin it is
+     almost a line, and a hot core burning behind a web of ribs.
+
+     Three passes to get the wings right, and the lesson each time was about
+     shape rather than colour. Straight bars of colour read as an insect. A
+     fan of one-pixel strokes sharing a root reads as a sunburst. A wide arc
+     swept from a single point reads as a flower petal.
+
+     A wing is a curved SPINE with feathers hanging off its trailing side:
+     `wing` walks a leading edge outward, turning a little on every step, and
+     at each step drops a run of feather perpendicular to it, tapering toward
+     the tip. Bending the spine slightly harder is also what a beat is, so the
+     flap comes free and pivots at the shoulder by construction - the root
+     cannot move, only the accumulated turn past it. */
+  function wing(g, ox, oy, a0, curve, len, depth, body, sep, edge, flap) {
+    var x = ox, y = oy, a = a0;
+    for (var i = 0; i < len; i++) {
+      var t = i / (len - 1);
+      a += curve + flap * t;            /* the bend accumulates; the root does not move */
+      x += Math.cos(a);
+      y += Math.sin(a);
+      /* feathers hang off the trailing side, deepest at the shoulder */
+      var d = Math.max(1, Math.round(depth * (1 - t * t * 0.78)));
+      var pa = a - Math.PI / 2;
+      var cp = Math.cos(pa), sp = Math.sin(pa);
+      for (var s = 0; s <= d; s++) {
+        g.set(Math.round(x + cp * s), Math.round(y + sp * s), s === d ? edge : body);
+      }
+      /* a separation every few steps, so it reads as feathers not as a blade */
+      if (i % 5 === 3) {
+        for (var s2 = Math.round(d * 0.3); s2 < d; s2++) {
+          g.set(Math.round(x + cp * s2), Math.round(y + sp * s2), sep);
+        }
+      }
+      g.set(Math.round(x), Math.round(y), edge);      /* the leading edge */
+    }
+  }
+
   Spr.aurelith = function (frame) {
     return cached('au:' + frame, function () {
-      return Px.make(56, 60, function (g) {
-        var cx = 28, flap = frame ? 5 : 0;
+      return Px.make(63, 68, function (g) {
+        var cx = 31;
+        var flap = frame ? 0.012 : 0;   /* extra bend per step along the spine */
 
-        /* Six wings, three per side, mirrored at the end. Each pivots where
-           it meets the carapace, so the root holds and the tip swings.
+        /* --- the halo, back to front. Canvas angles: y grows downward, so PI
+               points out to the left and 4.71 points straight up. --- */
+        /* lower pair: long, drooping, the tips almost at the floor */
+        wing(g, cx - 4, 33, 2.55, -0.022, 25, 7, ')', 'i', '(', flap * 0.8);
+        /* middle pair: the widest sweep, out past everything else. Started
+           life flat and thin, which cut the sprite in half like a plank -
+           it needs both the depth and the bend to read as a wing. */
+        wing(g, cx - 5, 27, 3.58, -0.034, 26, 11, '(', ')', 'Q', flap);
+        /* upper pair: rises outside the head, then curls back over it */
+        wing(g, cx - 6, 26, 4.16, 0.030, 26, 7, '(', ')', 'Q', flap * 1.4);
+        /* the small inner pair, folded down the front of the ribs. Behind the
+           body, not over it: the torso is the one thing that must stay read. */
+        wing(g, cx - 3, 24, 1.82, 0.016, 15, 4, '(', ')', 'Q', flap * 0.5);
 
-           It used to shift each whole wing up by a flat `flap * i` - the pair
-           furthest out moved most, the root moved exactly as far as the tip,
-           and the topmost pair, which is the longest and the one you actually
-           read, multiplied by i = 0 and never moved at all. Three rigid bars
-           sliding is not a wingbeat. */
-        for (var i = 0; i < 3; i++) {
-          var yy = 14 + i * 7;
-          var len = 22 - i * 3;
-          for (var x = 0; x < len; x++) {
-            var span = x / (len - 1);
-            /* rounded together, or the sweep and the lift disagree by a pixel
-               every few columns and the wing reads as a dashed line */
-            var drop = Math.round(x * 0.42 - span * span * flap) + i * 2;
-            g.rect(i === 0 ? 'Q' : (i === 1 ? 'I' : 'i'), cx - 6 - x, yy + drop, 1, 5 - i);
-          }
+        /* --- speckled growths ---
+               Seeded, so the boss bakes identically every run. The dark
+               clusters ride the upper wings; the coral spills off the
+               shoulders and down the inside of the middle pair. */
+        g.speckle('N', cx - 19, 9, 9, 8, 13, 7717);
+        g.speckle('^', cx - 19, 28, 14, 7, 22, 3391);
+        g.speckle('^', cx - 10, 34, 7, 5, 8, 5153);
+
+        /* --- body: a dark line, barely wider than the head. Drawn over the
+               inner wings, because a white creature on white wings is only
+               legible if the one dark shape on it survives. --- */
+        for (var y = 20; y < 50; y++) {
+          var half = y < 33 ? 5 : Math.max(1, 5 - Math.round((y - 33) * 0.28));
+          g.rect('U', cx - half, y, half * 2 + 1, 1);
+          g.set(cx - half, y, 'P');                   /* lit along one edge */
         }
 
-        /* carapace torso with a web pattern */
-        g.rect('P', cx - 7, 16, 14, 22);
-        g.rect('E', cx + 2, 17, 5, 20);
-        for (var w = -2; w <= 2; w++) g.line('p', cx + w * 3, 16, cx + w * 2, 37);
+        /* the web of ribs over the chest, and the core burning behind it */
+        for (var w = 0; w < 4; w++) g.line('p', cx - 4 + w * 2, 21, cx - 2 + w, 32);
+        g.rect('$', cx - 2, 28, 5, 6);
+        g.rect('X', cx - 1, 30, 3, 3);
+        g.set(cx, 31, 'Q');
+        g.set(cx - 3, 43, 'X'); g.set(cx + 3, 43, 'X');  /* sockets on the hips */
 
-        /* orange growths along the shoulders */
-        for (var q = 0; q < 6; q++) g.rect('n', cx - 6 + q * 3, 17 + (q % 2), 2, 2);
+        /* --- head: narrow, pale, one eye. Drawn last so nothing buries it. */
+        g.oval('I', cx, 16, 3, 6);
+        g.rect('(', cx - 1, 10, 3, 5);
+        g.set(cx, 15, 'X');
+        g.rect('U', cx - 1, 19, 3, 3);
 
-        /* twin red sockets low on the abdomen */
-        g.rect('X', cx - 4, 31, 2, 3);
-        g.rect('X', cx + 3, 31, 2, 3);
+        /* --- legs: long, thin, splaying to points --- */
+        g.line('U', cx - 2, 48, cx - 6, 62);
+        g.line('U', cx - 6, 62, cx - 5, 67);
+        g.line('P', cx - 3, 50, cx - 6, 61);
 
-        /* elongated pale head, single gem eye */
-        g.oval('I', cx, 9, 4, 7);
-        g.rect('X', cx - 1, 7, 3, 3);
-        g.set(cx - 1, 7, 'Q');
-
-        /* insect legs */
-        g.line('P', cx - 5, 36, cx - 12, 44);
-        g.line('P', cx - 12, 44, cx - 10, 50);
-        g.line('P', cx + 5, 36, cx + 12, 44);
-        g.line('P', cx + 12, 44, cx + 10, 50);
+        /* --- the crossed mark that flanks it: laid ON the lower wing, not
+               floating beside it, or at sprite size it reads as a stray glyph */
+        g.line(')', cx - 19, 42, cx - 15, 46);
+        g.line(')', cx - 19, 46, cx - 15, 42);
 
         g.mirrorX();
-        form(g, { 'P': ['p', 'E'], 'p': ['y', null], 'I': ['Q', 'i'],
-                  'i': ['I', 'x'], 'Q': [null, 'I'] });
+        form(g, { '(': ['Q', ')'], ')': ['(', 'i'], 'P': ['p', 'U'],
+                  'p': [null, 'P'], 'I': ['Q', '('] });
         g.outline('K');
       });
     });
@@ -3523,7 +3827,12 @@ html, body {
           w.floater(this.x, this.y - 46, '!', '#ff6a3c');
           break;
         }
-        this.step(toP, chaseSpeed, dt);
+        if (this.tryBlink(dt, d, p)) break;
+        /* A kiter walks the gap it wants rather than closing: inside `kite` it
+           gives ground, outside it comes on. It still faces you the whole
+           time, so the wind-up telegraph stays readable while it retreats. */
+        this.step(this.def.kite && d < this.def.kite ? toP + Math.PI : toP,
+          chaseSpeed * (this.def.kite && d < this.def.kite ? 0.85 : 1), dt);
         if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
         else if (!this.relentless && !this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
         break;
@@ -3549,7 +3858,13 @@ html, body {
         break;
       }
       case 'recover': {
-        this.moving = false;
+        /* A kiter reopens the gap during its recovery - that long recovery is
+           the window you have to close it, not a free rest for the shooter. */
+        if (this.def.kite && d < this.def.kite) {
+          this.facing = toP;
+          this.moving = true;
+          this.step(toP + Math.PI, this.speed * 0.85, dt);
+        } else this.moving = false;
         if (this.stateTime >= this.def.attackRecover) {
           this.state = (this.relentless || d < this.def.sight) ? 'chase' : 'idle';
           this.stateTime = 0;
@@ -3574,6 +3889,16 @@ html, body {
 
   Enemy.prototype.swing = function (p) {
     var w = this.world;
+    if (this.def.ranged) {
+      /* It shoots rather than swings. The bolt is aimed where you were when
+         the wind-up ended, not where you are when it lands, so sidestepping
+         beats standing and trading. */
+      w.spawnBolt(this.x, this.y - 14, Math.atan2(p.y - this.y, p.x - this.x),
+        this.def.boltSpeed || 420, this.damage,
+        { range: this.def.attackRange + 160, colour: '#d8e07a' });
+      V.Audio.play('bow');
+      return;
+    }
     var arc = this.def.boss ? 1.6 : 1.1;
     w.swipe(this.x, this.y, this.facing, this.def.attackRange, arc / 2, 'enemy');
     if (U.inArcVisual(this.x, this.y, this.facing, arc / 2, this.def.attackRange + p.radius,
@@ -3581,6 +3906,27 @@ html, body {
       p.hurt(this.damage, this.facing);
     }
     V.Audio.play(this.def.heavy || this.def.boss ? 'heavy' : 'swing');
+  };
+
+  /* Blink: closes half the distance in one step, every `blink` seconds, once
+     the player is far enough away for it to matter. Retreating is the reflex
+     answer to everything else in the roster, and this is the enemy that takes
+     that answer away - so it is deliberately thin once you turn and face it. */
+  Enemy.prototype.tryBlink = function (dt, d, p) {
+    if (!this.def.blink) return false;
+    this.blinkTimer = (this.blinkTimer || 0) + dt;
+    if (this.blinkTimer < this.def.blink || d < 220) return false;
+    this.blinkTimer = 0;
+    var w = this.world;
+    var a = Math.atan2(this.y - p.y, this.x - p.x);
+    var reach = Math.max(d * 0.5, this.def.attackRange + 40);
+    w.burst(this.x, this.y - 18, 10, this.def.colour);
+    this.x = p.x + Math.cos(a) * reach;
+    this.y = p.y + Math.sin(a) * reach;
+    w.confine(this);
+    w.burst(this.x, this.y - 18, 10, this.def.colour);
+    V.Audio.play('warp');
+    return true;
   };
 
   Enemy.prototype.bossBrain = function (dt, d, toP, p) {
@@ -3661,7 +4007,8 @@ html, body {
 
   var ENEMY_SPRITE = {
     goblin: 'goblin', minotaur: 'minotaur', reaper: 'reaper', aurelith: 'aurelith',
-    warden: 'warden', dummy: 'dummy'
+    warden: 'warden', dummy: 'dummy',
+    husk: 'husk', slinger: 'slinger', ironclad: 'ironclad', shade: 'shade'
   };
 
   Enemy.prototype.draw = function (ctx, t) {
@@ -4081,10 +4428,27 @@ html, body {
     this.timeLeft = this.timeLimit;
   };
 
+  /* Draws from D.ROSTER by tier. This used to be a coin flip between goblin
+     and minotaur, which meant every field in the game was one of two things
+     and the only thing that changed across 50 trials was how often the second
+     one showed up. Now each entry unlocks at its own tier and the starter
+     thins out behind it, so a late field is a mixed one. */
   Trial.prototype.pickEnemy = function (tier, r) {
-    /* Minotaurs are the difficulty-spike enemy introduced as you level (GDD 7.2) */
-    var minoChance = U.clamp((tier - 1.25) * 0.5, 0, 0.42);
-    return r.chance(minoChance) ? 'minotaur' : 'goblin';
+    var roster = D.ROSTER, weights = [], total = 0, i, w;
+    for (i = 0; i < roster.length; i++) {
+      var e = roster[i];
+      w = tier < e.from ? 0 : e.weight;
+      if (w && e.fade) w = Math.max(1, w * (1 - (tier - e.from) * e.fade));
+      weights.push(w);
+      total += w;
+    }
+    if (total <= 0) return roster[0].id;
+    var roll = r() * total;
+    for (i = 0; i < roster.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return roster[i].id;
+    }
+    return roster[0].id;
   };
 
   /* ============================================================ world hooks */
@@ -4112,8 +4476,10 @@ html, body {
     this.projectiles.push(new E.Projectile(x, y, a, sp, dmg, range, { pierce: pierce }));
   };
 
-  Trial.prototype.spawnBolt = function (x, y, a, sp, dmg) {
-    this.projectiles.push(new E.Projectile(x, y, a, sp, dmg, 900, { hostile: true, colour: '#ff9ec4' }));
+  Trial.prototype.spawnBolt = function (x, y, a, sp, dmg, opts) {
+    opts = opts || {};
+    this.projectiles.push(new E.Projectile(x, y, a, sp, dmg, opts.range || 900,
+      { hostile: true, colour: opts.colour || '#ff9ec4' }));
   };
 
   Trial.prototype.confine = function (ent) {
@@ -7531,7 +7897,12 @@ html, body {
       if (wave >= 4) {
         return {
           index: D.TOTAL_TRIALS + 4, type: 'boss', boss: true, finalBoss: true,
-          env: D.ENVIRONMENTS[2], seed: seed, label: 'Aurelith'
+          /* The last fight was set on the snowfield, which was fine while the
+             Aurelith was a dark insect and is not fine now that it is six
+             white wings: a white boss on a white field is a boss you cannot
+             read. ENVIRONMENTS[4] is the HQ - near-black ground under a
+             near-black sky, which is also what the thing is drawn against. */
+          env: D.ENVIRONMENTS[4], seed: seed, label: 'Aurelith'
         };
       }
       return {

@@ -67,7 +67,7 @@ Other options, if GitHub Pages does not suit:
 ```bash
 npm run serve    # http://localhost:8080 - live source, no build step
 npm run build    # bundles src/ into dist/velthiros.html and dist/artifact.html
-npm test         # headless Chromium: 89 + 29 checks, screenshots into tests/shots/
+npm test         # headless Chromium: 94 + 29 checks, screenshots into tests/shots/
 ```
 
 `npm test` boots the real game, taps the real drawn buttons, drives a scripted bot through a
