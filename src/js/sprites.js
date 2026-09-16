@@ -883,23 +883,33 @@
        Without this, an unrecognised id falls through to the scythe below. */
     if (id === 'none') return Px.make(1, 1, function () { }, { ax: 0, ay: 0 });
     if (id === 'sword') {
+      /* The starter, and the plain one on purpose: bare steel, gold furniture,
+         black leather. It is the baseline the other three are read against, so
+         it is the only weapon that stays bright metal end to end. */
       return Px.make(20, 9, function (g) {
         g.rect('b', 5, 3, 12, 3);          /* blade */
         g.rect('a', 5, 5, 12, 1);          /* lower edge in shadow */
         g.set(17, 4, 'b'); g.set(18, 4, 'q');
-        g.rect('Y', 3, 1, 2, 7);           /* crossguard */
-        g.rect('W', 0, 3, 3, 3);           /* grip */
-        g.set(0, 4, 'Y');
+        g.rect('Y', 3, 1, 2, 7);           /* gold crossguard */
+        g.set(3, 4, 'y');
+        g.rect('U', 0, 3, 3, 3);           /* black leather grip */
+        g.set(0, 4, 'Y');                  /* pommel */
         g.outline('K');
       }, { ax: 1, ay: 4.5 });
     }
     if (id === 'battleaxe') {
+      /* Heavy and dark where the sword is bright: a black iron head that only
+         catches light along the edge it cuts with, a brass collar, and a haft
+         bound in leather. It used to share the sword's blade colour exactly. */
       return Px.make(24, 16, function (g) {
-        g.rect('W', 0, 7, 16, 3);          /* haft */
+        g.rect('W', 0, 7, 16, 3);          /* leather-bound haft */
         g.rect('w', 0, 8, 16, 1);
-        g.oval('b', 17, 8, 5, 6);          /* head */
-        g.oval('a', 16, 8, 3, 5);
-        g.rect('A', 13, 4, 3, 9);
+        g.set(3, 7, 'U'); g.set(7, 7, 'U'); g.set(11, 7, 'U');   /* bindings */
+        g.oval('A', 17, 8, 5, 6);          /* iron head */
+        g.oval('E', 15, 8, 3, 5);          /* shadowed inner face */
+        g.oval('b', 20, 8, 1, 4);          /* only the cutting edge is bright */
+        g.rect('Y', 13, 4, 3, 9);          /* brass collar */
+        g.set(14, 8, 'y');
         g.outline('K');
       }, { ax: 1, ay: 8 });
     }
@@ -922,18 +932,23 @@
         g.outline('K');
       }, { ax: 7, ay: 10 });
     }
-    /* scythe */
+    /* The scythe. It is the secret weapon and the one thing in the game you
+       may never see, so it should not have been sharing a blade colour with
+       the free starter sword. Black haft, and a blade that is lit from inside
+       rather than reflecting anything: dark crimson body, hot along the edge
+       it cuts with. */
     return Px.make(24, 20, function (g) {
-      g.rect('P', 0, 12, 17, 3);           /* shaft */
-      g.rect('p', 0, 13, 17, 1);
-      /* curved blade sweeping up and back from the head */
+      g.rect('U', 0, 12, 17, 3);           /* black haft */
+      g.rect('P', 0, 13, 17, 1);           /* cold sheen along it */
       for (var i = 0; i < 11; i++) {
         var bx = 16 - Math.round(i * i * 0.06);
-        g.set(bx, 12 - i, 'b');
-        g.set(bx + 1, 12 - i, 'q');
+        g.set(bx, 12 - i, 'N');            /* blade body, dark */
+        g.set(bx + 1, 12 - i, 'X');        /* the edge, burning */
       }
-      g.rect('b', 9, 1, 7, 2);
-      g.rect('A', 14, 10, 3, 4);
+      g.rect('n', 9, 1, 7, 2);             /* hooked tip */
+      g.set(15, 1, 'X');
+      g.rect('A', 14, 10, 3, 4);           /* the collar it is socketed into */
+      g.set(15, 11, 'a');
       g.outline('K');
     }, { ax: 1, ay: 13 });
   }
