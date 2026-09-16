@@ -180,9 +180,9 @@ palette key, which is the main defence against a typo in hand-placed pixel data.
 
 **Clothing has two kinds: a tint and an outfit.** A tint only recolours the sleeves already
 on the sprite, so anything with its own *shape* cannot be one. `D.OUTFITS` holds garment sets
-that are handed straight to `humanoidGrid`, which learned five optional pieces: a sash with a
-tie that trails down one hip, a baggy leg cut, trimmed boot tops, wrapped wrists, and a
-celestial ribbon. An
+that are handed straight to `humanoidGrid`, which learned nine optional pieces: a chest plate,
+pauldrons, a high collar, coat tails, a sash with a tie that trails down one hip, a baggy leg
+cut, trimmed boot tops, wrapped wrists, and a celestial ribbon. An
 outfit overlays the default build rather than replacing it - the hair, the skin and the open
 top are who he is, the garments are what he is wearing - so adding another outfit is a data
 edit. `save.equippedOutfit` sits beside `equippedTint`, is set by any shop item carrying an
@@ -191,6 +191,19 @@ edit. `save.equippedOutfit` sits beside `equippedTint`, is set by any shop item 
 At 18x28 the sash is the whole point: it is the loudest thing on the character and the only
 piece readable from across an arena, which is why it is worn over everything and given a tie
 that breaks the silhouette on one side.
+
+**Four named suits, told apart by shape first.** A palette swap alone is what "they all look
+the same" meant, so each set takes a different combination of pieces rather than a different
+colour of the same one: Royal has pauldrons and a chest plate, Ophiuchus a long coat and a high
+collar, Reaper a sash and baggy legs, Grayson all of it at once. The pauldron is the cheapest
+strong silhouette change available here - it widens the shoulders by two columns and you read
+it before you read any colour - and it has to be capped in a tone that contrasts with the plate
+under it, or a pauldron in a shade of its own plate simply is not there.
+
+Shop items name their outfit; nothing maps an item id to an outfit by hand. That mapping used
+to live in the smoke test as `shirt_black` -> `'reaper'`, and renaming the line-up failed the
+test on a rename rather than on a bug. It now checks that buying an item equips what that item
+declares, and that every armour in the shop names an outfit that exists.
 
 **A garment may hang outside the body.** The ribbon is the first that does, and it needs
 columns the 18-wide humanoid grid has not got, so `Grid.pad` returns a wider copy with the

@@ -586,11 +586,19 @@ async function main() {
       for (let rx = -24; rx <= 24; rx++)
         if (at(plain, rx, ry) !== at(dressed, rx, ry)) differs++;
 
-    const item = D.REALITY_SHOP.find((it) => it.id === 'shirt_black');
-    g.save.currency = 9999;
+    /* Driven from the shop rather than from a hard-coded id -> outfit pair.
+       The pair was `shirt_black` -> 'reaper'; renaming the line-up moved that
+       slot to Grayson and the check failed on a rename rather than on a bug.
+       What actually matters is that buying an item equips what IT declares,
+       and that every armour in the shop names an outfit that exists. */
+    const armour = D.REALITY_SHOP.filter((it) => it.outfit);
+    const dangling = armour.filter((it) => !D.OUTFITS[it.outfit]).map((it) => it.name);
+    const item = armour[armour.length - 1];
+    g.save.currency = 99999;
     g.buy(item);
-    const equipped = { tint: g.save.equippedTint, outfit: g.save.equippedOutfit,
-                       fromGame: g.playerOutfit() };
+    const equipped = { name: item.name, want: item.outfit, dangling,
+                       tint: g.save.equippedTint, outfit: g.save.equippedOutfit,
+                       fromGame: g.playerOutfit(), suits: armour.length };
     /* a wipe has to strip it the same way it strips the tint */
     g.save = V.Save.fullReset(g.save);
     return { differs, equipped, afterReset: g.save.equippedOutfit,
@@ -599,9 +607,13 @@ async function main() {
   });
   check('an outfit changes the sprite, not just its colour',
     outfit.differs > 12, outfit.differs + ' pixels differ from the default build');
-  check('buying Reaper Weave equips the garments and the tint',
-    outfit.equipped.outfit === 'reaper' && outfit.equipped.fromGame === 'reaper' &&
-    !!outfit.equipped.tint, JSON.stringify(outfit.equipped));
+  check('every armour in the shop names an outfit that exists',
+    outfit.equipped.dangling.length === 0 && outfit.equipped.suits === 4,
+    outfit.equipped.suits + ' suits; dangling: ' + JSON.stringify(outfit.equipped.dangling));
+  check('buying an armour equips the garments it declares, and the tint',
+    outfit.equipped.outfit === outfit.equipped.want &&
+    outfit.equipped.fromGame === outfit.equipped.want && !!outfit.equipped.tint,
+    JSON.stringify(outfit.equipped));
   check('a full reset strips the outfit as it strips the tint',
     outfit.afterReset === null && outfit.tintAfterReset === null,
     JSON.stringify({ outfit: outfit.afterReset, tint: outfit.tintAfterReset }));
