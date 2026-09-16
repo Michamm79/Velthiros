@@ -599,6 +599,66 @@ async function main() {
     outfit.afterReset === null && outfit.tintAfterReset === null,
     JSON.stringify({ outfit: outfit.afterReset, tint: outfit.tintAfterReset }));
 
+  /* --- the wings beat from the shoulder ---
+         Both winged characters had the flap inverted: Garatu's wing root swung
+         three pixels while the tip sat perfectly still, and Aurelith slid each
+         whole wing up by a flat amount - the topmost, longest pair by nothing
+         at all. Either way the wings slid rather than beat.
+
+         The test is a pivot test, not a pixel test. Walk the sprite column by
+         column, measure how far the top of the silhouette moves between the
+         two frames, and require that the outer third travels strictly further
+         than the third nearest the body. That is what a hinge does, and it is
+         the property that was backwards. */
+  const wings = await page.evaluate(() => {
+    const { Spr } = window.V;
+    const topRow = (spr, x) => {
+      for (let y = 0; y < spr.grid.h; y++) if (spr.grid.get(x, y) !== '.') return y;
+      return null;
+    };
+    /* columns where the silhouette jumps more than one row - a clean staircase
+       has none, a sawtooth has many. Counted per frame so the two can be
+       compared: the head and horns break the staircase in BOTH frames, and
+       that is the art, not the animation. */
+    const jumps = (s) => {
+      const cx = Math.floor(s.w / 2);
+      let n = 0, prev = null;
+      for (let x = 0; x < cx; x++) {
+        const t = topRow(s, x);
+        if (t == null) { prev = null; continue; }
+        if (prev != null && Math.abs(t - prev) > 1) n++;
+        prev = t;
+      }
+      return n;
+    };
+    const measure = (a, b) => {
+      /* only the left half: both sprites are authored on one side, then mirrored */
+      const cx = Math.floor(a.w / 2);
+      let inner = 0, outer = 0, innerN = 0, outerN = 0;
+      for (let x = 0; x < cx; x++) {
+        const t0 = topRow(a, x), t1 = topRow(b, x);
+        if (t0 == null || t1 == null) continue;
+        const out = (cx - x) / cx;             /* 1 at the wing tip, 0 at the body */
+        if (out > 0.66) { outer += t0 - t1; outerN++; }
+        else if (out < 0.33) { inner += t0 - t1; innerN++; }
+      }
+      return { outer: outer / Math.max(outerN, 1), inner: inner / Math.max(innerN, 1),
+               roughened: jumps(b) - jumps(a) };
+    };
+    return {
+      garatu: measure(Spr.garatu(0), Spr.garatu(1)),
+      aurelith: measure(Spr.aurelith(0), Spr.aurelith(1))
+    };
+  });
+  ['garatu', 'aurelith'].forEach((who) => {
+    const m = wings[who];
+    check(who + "'s wings beat from the shoulder, tips travelling furthest",
+      m.outer > 1 && m.outer > m.inner * 2,
+      'tip moves ' + m.outer.toFixed(2) + ' rows, root moves ' + m.inner.toFixed(2));
+    check(who + "'s wing edge is no rougher mid-beat than at rest",
+      m.roughened <= 0, m.roughened + ' extra columns jump more than one row');
+  });
+
   /* --- the end of the run ---
          A player reached trial 50, killed Aurelith, was told they FAILED, and
          was dropped straight back into the same fight. Completing a trial was
