@@ -125,11 +125,18 @@
       score: 0, reward: 0, colour: '#d8c188', dark: '#b09a5c', inert: true
     },
     warden: {
-      /* Slower and far more telegraphed than a Reaper, but it hits like one.
-         Beatable on the tutorial's terms - dodge the wind-up, punish the
-         recovery - which is exactly the lesson the preceding beats taught. */
-      id: 'warden', name: 'Warden', hp: 560, speed: 128, damage: 24, sight: 4000,
-      radius: 28, attackRange: 118, attackWindup: 0.62, attackRecover: 0.62,
+      /* You get ONE attempt at this - die and it keeps the scythe for the rest
+         of the run - so it is tuned to be survived by few.
+
+         The lever is lethality, not health. At 15 damage a sword already needs
+         40 connects to drop it; more health only makes the fight longer, not
+         harder. What was soft was the danger: 24 damage meant five mistakes
+         were survivable and a 0.62s wind-up is a tell you can react to while
+         looking elsewhere. Now three mistakes end the run, the tell is 0.45s -
+         real, but it demands you watch it - and the recovery you punish on has
+         halved, so every opening has to be taken cleanly. */
+      id: 'warden', name: 'Warden', hp: 600, speed: 136, damage: 34, sight: 4000,
+      radius: 28, attackRange: 118, attackWindup: 0.45, attackRecover: 0.42,
       score: 0, reward: 0, colour: '#5c2b4a', dark: '#3a1830', boss: true,
       heavy: true, charge: true
     }
