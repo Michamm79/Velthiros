@@ -275,10 +275,13 @@
        the character - they have to carry all of the colour. These were mid
        reds and blues that read as washed-out at sprite size; they are now the
        deep, lit accents the look is built around. */
-    { id: 'shirt_red',   cat: 'Clothes', name: 'Crimson Sleeves', price: 60,  desc: 'Blood red. Purely for the watchers.',  tint: '#b02a37' },
-    { id: 'shirt_blue',  cat: 'Clothes', name: 'Glacial Sleeves', price: 60,  desc: 'Cold enough to suit the snowfields.',  tint: '#2f8fb0' },
-    { id: 'shirt_gold',  cat: 'Clothes', name: 'Gilded Sleeves',  price: 180, desc: 'Loud. Expensive. Slightly ridiculous.', tint: '#d4a13a' },
-    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',    price: 320, desc: 'Cut from a Reaper cloak. Sash, wraps and all.', tint: '#2e2a42', outfit: 'reaper' },
+    /* Four suits of armour, not four dye jobs. Every one of these is a real
+       outfit now - the tint still recolours the sleeves, but the garments are
+       what you actually see. Priced by how much armour each one is. */
+    { id: 'shirt_red',   cat: 'Armour', name: 'Royal',      price: 120, desc: 'Crimson plate under gold.', tint: '#b02a37', outfit: 'royal' },
+    { id: 'shirt_gold',  cat: 'Armour', name: 'Ophiuchus',  price: 220, desc: 'Black, emerald and bone.', tint: '#1f7a52', outfit: 'ophiuchus' },
+    { id: 'shirt_blue',  cat: 'Armour', name: 'Reaper',     price: 300, desc: 'Sash, wraps and a ribbon.', tint: '#2e2a42', outfit: 'reaper' },
+    { id: 'shirt_black', cat: 'Armour', name: 'Grayson',    price: 480, desc: 'Every colour, on black.', tint: '#241d33', outfit: 'grayson' },
     { id: 'decor_rug',   cat: 'Decor',   name: 'Woven Rug',      price: 80,  desc: 'The floor is less cold now.',           decor: 'rug' },
     { id: 'decor_plant', cat: 'Decor',   name: 'Corner Fern',    price: 70,  desc: 'It is alive. Probably.',                decor: 'plant' },
     { id: 'decor_lamp',  cat: 'Decor',   name: 'Warm Lamp',      price: 110, desc: 'Makes the room feel like a home.',      decor: 'lamp' },
@@ -340,7 +343,41 @@
      that are already there, so anything with a different SHAPE - a sash, a
      baggy leg, a wrapped wrist - has to be its own thing. Each entry is
      handed straight to humanoidGrid, so adding another is a data edit. */
+  /* Four named suits of armour. Each one is a set of garments handed to
+     `humanoidGrid`, so a suit is a data entry rather than more sprite code.
+
+     They are built to be told apart by SHAPE first and colour second: at 18x28
+     a palette swap alone is what "they all look the same" meant last time. So
+     Royal gets pauldrons and a chest plate, Ophiuchus a long coat and a high
+     collar, Reaper a sash and baggy legs, and Grayson all of it at once. */
   D.OUTFITS = {
+    /* ROYAL - crimson under gold. The regal one: plate over the chest, gold
+       trim along its edges, gold-capped pauldrons and a gold belt. */
+    royal: {
+      plate: '$', plateLite: 'n', plateTrim: 'Y',
+      pauldron: 'U', pauldronLite: 'Y',
+      belt: 'Y',
+      trouser: 'P', trouserLite: 'p',
+      boot: 'U', cuff: 'Y',
+      sash: 'N', sashDark: '@', sashTie: 'Y'
+    },
+
+    /* OPHIUCHUS - black, green and white. The serpent-bearer: a long coat with
+       a high collar, emerald down the front and bone-white at the throat and
+       the hem, everything else stark black. */
+    ophiuchus: {
+      plate: 'U', plateLite: '<', plateTrim: 'O',
+      collar: 'U', collarLite: 'O',
+      coat: 'U', coatTrim: '>', coatLong: true,
+      belt: '<',
+      trouser: 'U', trouserLite: 'x',
+      boot: 'U', cuff: 'O',
+      wrap: '>'
+    },
+
+    /* REAPER - the set that used to be called Reaper Weave, moved down a slot.
+       Gold sash with a crimson tie, baggy teal trousers with a lit seam, gold
+       boot cuffs, wrapped wrists, and the celestial ribbon. */
     reaper: {
       trouser: 'o', trouserLite: '%',   /* baggy teal, seam of light */
       baggy: true,
@@ -351,6 +388,23 @@
          already owns the warm gold, and two warm ribbons at sprite size read
          as one confused shape. */
       ribbon: '+', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
+    },
+
+    /* GRAYSON - the one you have to find. Stark black carrying purple, blue and
+       pink: a black plate lit violet, pink-edged pauldrons, an electric-blue
+       collar, black coat tails and a pink-and-violet ribbon. It is the only
+       suit wearing every piece at once, which is the point - it should be
+       unmistakable across an arena. */
+    grayson: {
+      plate: 'U', plateLite: 'y', plateTrim: '?',
+      pauldron: 'U', pauldronLite: '?',
+      collar: 'U', collarLite: ';',
+      coat: 'U', coatTrim: ';', coatLong: true,
+      belt: ':',
+      trouser: 'U', trouserLite: 'p',
+      boot: 'U', cuff: '?',
+      wrap: ';',
+      ribbon: '?', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
     }
   };
 

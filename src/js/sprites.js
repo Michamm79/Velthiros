@@ -43,7 +43,14 @@
     ')': '#c2b8a8',   /* feather shadow - warm, where 'i' is cold */
     '+': '#f4e8ff',   /* celestial silk, the face catching the light */
     '=': '#b79ae0',   /* celestial silk, where the ribbon turns */
-    ':': '#6d54a6'    /* celestial silk, the far side of a fold */
+    ':': '#6d54a6',   /* celestial silk, the far side of a fold */
+    '!': '#ffd451',   /* hot gold - a celestial edge lit from inside */
+    '<': '#1f7a52',   /* emerald, mid - deeper than the grass greens */
+    '>': '#45c98f',   /* emerald, lit */
+    '?': '#e8629b',   /* hot pink */
+    ';': '#4a63c8',   /* electric blue */
+    '/': '#4fd8ff',   /* neon sky blue */
+    '_': '#b6f4ff'    /* neon sky blue, the hot core of the glow */
   });
 
   /* Give a flat fill a lit edge and a shadow, the way the hero's hair, denim
@@ -214,6 +221,36 @@
       if (o.chest) g.rect(o.chest, 7, bodyTop + 2, 2, 3);
     }
 
+    /* ---- a plate over the chest, and coat tails hanging past the hips.
+           Both go on before the arms so the arms read as being in front of
+           the armour rather than buried under it. ---- */
+    if (o.plate) {
+      g.rect(o.plate, 5, bodyTop, 8, bodyBot - bodyTop);
+      if (o.plateLite) g.rect(o.plateLite, 6, bodyTop + 1, 2, 3);   /* lit facet */
+      if (o.plateTrim) {
+        g.rect(o.plateTrim, 5, bodyTop, 8, 1);
+        g.rect(o.plateTrim, 5, bodyBot - 1, 8, 1);
+      }
+    }
+    if (o.coat) {
+      /* Hung outside the legs rather than over them, so the walk still reads.
+         A coat drawn across the middle just deletes the legs at this size. */
+      var coatBot = legBot + (o.coatLong ? 2 : 0);
+      for (var cy = bodyBot; cy < coatBot; cy++) {
+        var flare = Math.round((cy - bodyBot) * 0.34);
+        /* three columns, not two: at two the tails were thinner than the legs
+           they hang beside and read as piping rather than as a coat */
+        g.rect(o.coat, 3 - flare, cy, 3, 1);
+        g.rect(o.coat, 12 + flare, cy, 3, 1);
+      }
+      if (o.coatTrim) {
+        g.rect(o.coatTrim, 3, bodyBot, 3, 1);
+        g.rect(o.coatTrim, 12, bodyBot, 3, 1);
+        g.set(3 - Math.round((coatBot - 1 - bodyBot) * 0.34), coatBot - 1, o.coatTrim);
+        g.set(14 + Math.round((coatBot - 1 - bodyBot) * 0.34), coatBot - 1, o.coatTrim);
+      }
+    }
+
     /* ---- arms. A long sleeve runs almost to the wrist, so only the hand
            is skin; a short one leaves the forearm bare. ---- */
     var sleeve = o.bare ? 5 : 4;
@@ -226,6 +263,34 @@
       g.rect(o.cloth, 12, bodyTop + 1, 2, sleeve);
       g.rect('f', 4, bodyTop + 1 + sleeve, 2, hand);
       g.rect('f', 12, bodyTop + 1 + sleeve, 2, hand);
+    }
+
+    /* ---- pauldrons and a high collar, worn ON the shoulders, so they go on
+           after the arms. The pauldron is the cheapest strong silhouette
+           change available at this size: it widens the shoulders by two
+           columns and you read it before you read any colour. ---- */
+    if (o.pauldron) {
+      if (o.dir === 'side') {
+        g.rect(o.pauldron, 10, bodyTop, 4, 3);
+        if (o.pauldronLite) g.rect(o.pauldronLite, 10, bodyTop, 4, 1);
+      } else {
+        g.rect(o.pauldron, 2, bodyTop, 5, 3);
+        g.rect(o.pauldron, 11, bodyTop, 5, 3);
+        if (o.pauldronLite) {
+          /* the cap has to be the whole top edge AND the outer corner, or a
+             pauldron in a shade of the plate under it simply is not there */
+          g.rect(o.pauldronLite, 2, bodyTop, 5, 1);
+          g.rect(o.pauldronLite, 11, bodyTop, 5, 1);
+          g.set(2, bodyTop + 1, o.pauldronLite);
+          g.set(15, bodyTop + 1, o.pauldronLite);
+        }
+      }
+    }
+    if (o.collar) {
+      g.rect(o.collar, 6, bodyTop - 1, 6, 2);
+      g.set(5, bodyTop - 1, o.collar);
+      g.set(12, bodyTop - 1, o.collar);
+      if (o.collarLite) g.rect(o.collarLite, 6, bodyTop - 1, 6, 1);
     }
 
     /* ---- sash, worn over everything at the waist, with a tie that trails
@@ -1295,76 +1360,151 @@
     /* empty hands: a blank sprite, so nothing is drawn and nothing branches.
        Without this, an unrecognised id falls through to the scythe below. */
     if (id === 'none') return Px.make(1, 1, function () { }, { ax: 0, ay: 0 });
+
     if (id === 'sword') {
-      /* The starter, and the plain one on purpose: bare steel, gold furniture,
-         black leather. It is the baseline the other three are read against, so
-         it is the only weapon that stays bright metal end to end. */
-      return Px.make(20, 9, function (g) {
-        g.rect('b', 5, 3, 12, 3);          /* blade */
-        g.rect('a', 5, 5, 12, 1);          /* lower edge in shadow */
-        g.set(17, 4, 'b'); g.set(18, 4, 'q');
-        g.rect('Y', 3, 1, 2, 7);           /* gold crossguard */
-        g.set(3, 4, 'y');
-        g.rect('U', 0, 3, 3, 3);           /* black leather grip */
-        g.set(0, 4, 'Y');                  /* pommel */
-        g.outline('K');
-      }, { ax: 1, ay: 4.5 });
-    }
-    if (id === 'battleaxe') {
-      /* Heavy and dark where the sword is bright: a black iron head that only
-         catches light along the edge it cuts with, a brass collar, and a haft
-         bound in leather. It used to share the sword's blade colour exactly. */
-      return Px.make(24, 16, function (g) {
-        g.rect('W', 0, 7, 16, 3);          /* leather-bound haft */
-        g.rect('w', 0, 8, 16, 1);
-        g.set(3, 7, 'U'); g.set(7, 7, 'U'); g.set(11, 7, 'U');   /* bindings */
-        g.oval('A', 17, 8, 5, 6);          /* iron head */
-        g.oval('E', 15, 8, 3, 5);          /* shadowed inner face */
-        g.oval('b', 20, 8, 1, 4);          /* only the cutting edge is bright */
-        g.rect('Y', 13, 4, 3, 9);          /* brass collar */
-        g.set(14, 8, 'y');
-        g.outline('K');
-      }, { ax: 1, ay: 8 });
-    }
-    if (id === 'bow') {
-      /* A strung bow from the side: the stave bows toward the target and the
-         string sits on the archer's side of it. +x is forward for every weapon
-         here, so the stave belongs at high x and the string behind it - drawn
-         the other way round it reads as a bow held backwards. Art.drawWeapon's
-         vector bow already had it this way; only this one was mirrored. */
-      return Px.make(14, 20, function (g) {
-        for (var y = 2; y <= 17; y++) {
-          var tt = (y - 2) / 15;
-          var x = 3 + Math.round(Math.sin(tt * Math.PI) * 5);
-          g.set(x, y, 'W');        /* lit edge, on the face pointed downrange */
-          g.set(x - 1, y, 'w');
-          g.set(x - 2, y, 'v');
+      /* Celestial. The blade is a band of night sky with stars caught in it and
+         a burning line down its spine - the light comes from INSIDE the steel
+         rather than off it, which is the whole idea of the reference.
+
+         It needs five rows to work. At three the dark body was one pixel either
+         side of the spine, the outline ate both, and the whole blade read as a
+         bare gold wire with no sky in it at all. */
+      return Px.make(30, 15, function (g) {
+        var x, t, half;
+        for (x = 9; x <= 28; x++) {
+          t = (x - 9) / 19;
+          half = t < 0.62 ? 2 : (t < 0.88 ? 1 : 0);      /* tapers to the point */
+          g.rect('P', x, 7 - half, 1, half * 2 + 1);
+          if (half === 2) { g.set(x, 5, 'U'); g.set(x, 9, 'U'); }  /* dark rim */
         }
-        for (var y2 = 3; y2 <= 16; y2++) g.set(2, y2, 'q');   /* the string */
-        g.set(3, 2, 'W'); g.set(3, 17, 'W');                  /* the tips */
+        /* A FEW stars. Twenty-one of them over a 15x3 band covered half the
+           blade and the night sky went out - the body has to stay dark for
+           the spine to look like it is burning inside something. */
+        g.speckle('Q', 10, 6, 15, 3, 4, 4242);
+        g.speckle('=', 11, 6, 14, 3, 3, 1717);
+        for (x = 9; x <= 29; x++) g.set(x, 7, '!');      /* the burning spine */
+        g.set(29, 7, 'Q');                               /* the point */
+
+        g.rect('Y', 6, 3, 2, 9);                         /* crossguard */
+        g.set(6, 7, '@'); g.set(7, 7, 'Q');              /* the core in it */
+        g.set(5, 5, '@'); g.set(5, 9, '@');
+        g.set(8, 5, 'Y'); g.set(8, 9, 'Y');
+        g.rect('U', 0, 6, 6, 3);                         /* black grip */
+        g.set(2, 7, '@'); g.set(4, 7, '@');
+        g.rect('Y', 0, 6, 1, 3);                         /* pommel */
         g.outline('K');
-      }, { ax: 7, ay: 10 });
+      }, { ax: 1, ay: 7 });
     }
-    /* The scythe. It is the secret weapon and the one thing in the game you
-       may never see, so it should not have been sharing a blade colour with
-       the free starter sword. Black haft, and a blade that is lit from inside
-       rather than reflecting anything: dark crimson body, hot along the edge
-       it cuts with. */
-    return Px.make(24, 20, function (g) {
-      g.rect('U', 0, 12, 17, 3);           /* black haft */
-      g.rect('P', 0, 13, 17, 1);           /* cold sheen along it */
-      for (var i = 0; i < 11; i++) {
-        var bx = 16 - Math.round(i * i * 0.06);
-        g.set(bx, 12 - i, 'N');            /* blade body, dark */
-        g.set(bx + 1, 12 - i, 'X');        /* the edge, burning */
+
+    if (id === 'battleaxe') {
+      /* Two giant butcher knives bolted back to back: spines together on the
+         haft, both cutting edges facing outward, squared cleaver tips.
+
+         The cleaver read comes from the taper running the WRONG way round. A
+         sword or an axe bit is widest at the heel and narrows to a point; a
+         butcher's knife is broad at the front, so each blade here grows from
+         the socket out to the tip and then stops flat. That, and the blunt
+         squared front face, is the whole silhouette. */
+      return Px.make(28, 26, function (g) {
+        g.rect('W', 0, 11, 17, 3);                       /* bound haft */
+        g.rect('w', 0, 12, 17, 1);
+        g.set(3, 11, 'U'); g.set(8, 11, 'U'); g.set(13, 11, 'U');
+
+        var x, y, reach;
+        for (x = 16; x <= 26; x++) {
+          /* A gentle taper, not a wedge. Running it 2 -> 9 made each blade a
+             triangle and the pair read as a bowtie; a cleaver is a broad slab
+             with a straight spine that only widens a little toward the front. */
+          reach = 6 + Math.round((x - 16) / 10 * 3);
+          g.rect('E', x, 10 - reach, 1, reach + 1);      /* upper knife */
+          g.set(x, 10 - reach, 'b');                     /* its cutting edge */
+          g.set(x, 10, 'U');                             /* its spine */
+          g.rect('E', x, 14, 1, reach + 1);              /* lower knife */
+          g.set(x, 14 + reach, 'b');
+          g.set(x, 14, 'U');
+        }
+        /* the squared front faces, and the light running down them */
+        for (y = 1; y <= 9; y++) { g.set(27, y, 'b'); g.set(26, y, 'a'); }
+        for (y = 15; y <= 23; y++) { g.set(27, y, 'b'); g.set(26, y, 'a'); }
+        g.set(27, 1, 'Q'); g.set(27, 23, 'Q');
+
+        g.rect('A', 14, 7, 3, 11);                       /* the collar */
+        g.rect('a', 15, 9, 1, 7);
+        g.set(15, 8, 'b'); g.set(15, 17, 'b');           /* rivets */
+        g.outline('K');
+      }, { ax: 1, ay: 12 });
+    }
+
+    if (id === 'bow') {
+      /* Grown rather than carved: a crystal stave with flared limbs and light
+         pooling where they join. A strung bow from the side, and +x is forward
+         for every weapon here, so the stave sits at high x with the string on
+         the archer's side of it - drawn the other way it reads as backwards. */
+      return Px.make(18, 26, function (g) {
+        var y, t, x;
+        var stave = function (yy) {
+          return 5 + Math.round(Math.sin((yy - 2) / 21 * Math.PI) * 7);
+        };
+        for (y = 2; y <= 23; y++) {
+          x = stave(y);
+          g.set(x + 1, y, '+');                          /* lit face downrange */
+          g.set(x, y, '=');
+          g.set(x - 1, y, ':');
+        }
+        /* flared limbs: a spur off the stave at each quarter and at the waist */
+        [[6, -2], [12, 2], [19, -2]].forEach(function (f) {
+          x = stave(f[0]);
+          g.set(x + 2, f[0], '+');
+          g.set(x + 2, f[0] + f[1], '=');
+          g.set(x + 1, f[0] + f[1], '+');
+          g.set(x - 1, f[0] - f[1], ':');
+        });
+        g.set(stave(6), 6, 'c');                         /* the light in it */
+        g.set(stave(12) + 1, 12, 'I');
+        g.set(stave(12), 12, 'c');
+        g.set(stave(19), 19, 'c');
+        for (y = 3; y <= 22; y++) g.set(4, y, 'q');      /* the string */
+        g.set(stave(2), 2, '+'); g.set(stave(23), 23, '+');   /* the nocks */
+        g.outline('K');
+      }, { ax: 9, ay: 13 });
+    }
+
+    /* The scythe: the secret one, and the only weapon you may never see. Black
+       haft and a blade that burns rather than reflecting anything - the edge is
+       neon sky blue over a near-black body, hottest along a few segments so it
+       reads as a glow with a core rather than a painted stripe. The light
+       gathers at the collar as a single wisp; scattered across the blade it
+       just read as dirt. */
+    return Px.make(28, 24, function (g) {
+      g.rect('U', 0, 16, 19, 3);                         /* black haft */
+      g.rect('E', 0, 17, 19, 1);
+      /* the light gathers toward the blade rather than striping the whole haft */
+      g.rect('/', 11, 16, 6, 1); g.set(9, 16, 'c');
+
+      /* the blade: a continuous arc off the collar, drawn as segments so the
+         curve cannot break into a staircase of loose pixels */
+      var px = 18, py = 15;
+      for (var i = 1; i <= 14; i++) {
+        var t = i / 14;
+        var bx = 18 - Math.round(t * t * 11);
+        var by = 15 - Math.round(t * 13);
+        g.line('E', px, py, bx, by);                     /* body */
+        g.line('/', px + 1, py, bx + 1, by);             /* the burning edge */
+        if (i % 3 === 1) g.line('_', px + 1, py, bx + 1, by);   /* its hot core */
+        g.line('U', px - 1, py, bx - 1, by);             /* the blunt back */
+        px = bx; py = by;
       }
-      g.rect('n', 9, 1, 7, 2);             /* hooked tip */
-      g.set(15, 1, 'X');
-      g.rect('A', 14, 10, 3, 4);           /* the collar it is socketed into */
-      g.set(15, 11, 'a');
+      g.rect('E', 8, 1, 8, 2);                           /* hooked tip */
+      g.rect('/', 8, 1, 8, 1);
+      g.set(15, 1, '_'); g.set(12, 1, '_');
+
+      g.rect('A', 16, 13, 3, 4);                         /* the collar */
+      g.set(17, 14, 'a');
+      g.set(17, 12, '/'); g.set(17, 11, 'c');            /* one wisp, not many */
       g.outline('K');
-    }, { ax: 1, ay: 13 });
+    }, { ax: 1, ay: 17 });
   }
+
   Spr.weapon = function (id) { return cached('wp:' + id, function () { return weaponSprite(id); }); };
 
   Spr.clearCache = function () { cache = {}; };
