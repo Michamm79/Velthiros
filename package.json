@@ -7,7 +7,8 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "test": "node tools/smoke.mjs && node tools/mobile.mjs",
-    "itch": "node tools/build.mjs && cd dist/site && rm -f ../velthiros-itch.zip && zip -qr ../velthiros-itch.zip . -x '.*'",
+    "sweep": "node tools/sweep.mjs",
+  "itch": "node tools/build.mjs && cd dist/site && rm -f ../velthiros-itch.zip && zip -qr ../velthiros-itch.zip . -x '.*'",
   "serve": "npx --yes http-server . -p 8080 -c-1",
     "icons": "node tools/icons.mjs"
   },

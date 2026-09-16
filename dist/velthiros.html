@@ -3911,9 +3911,14 @@ html, body {
           this.blocks.push({ x: Math.cos(ang) * 330, y: Math.sin(ang) * 330, r: 34, done: false });
           this.plates.push({ x: Math.cos(ang + 0.9) * 720, y: Math.sin(ang + 0.9) * 720, r: 56, filled: false });
         }
+        /* Tier-appropriate, not goblins forever. The count stays low on
+           purpose - this is a thinking trial - but a trial 43 puzzle used to
+           field a 55hp goblin while a trial 43 defeat fielded a 227hp
+           minotaur, so it was a free pass at exactly the point the run is
+           meant to be squeezing. */
         for (i = 0; i < 2 + Math.floor(tier); i++) {
           p = this.randomPoint(300, this.radius - 150, 420);
-          this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+          this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.par = 430 + this.timeLimit * 1.5;
         break;
@@ -3929,9 +3934,11 @@ html, body {
           p = this.randomPoint(300, this.radius - 150, 300);
           this.hints.push({ x: p.x, y: p.y, found: false });
         }
+        /* as with the puzzle: the riddle is the trial, but the guards should
+           still belong to the tier they are guarding */
         for (i = 0; i < 2 + Math.floor(tier * 1.5); i++) {
           p = this.randomPoint(300, this.radius - 150, 420);
-          this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+          this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.par = 420 + this.timeLimit * 1.4;
         break;
