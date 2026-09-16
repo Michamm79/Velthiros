@@ -26,8 +26,25 @@
     'L': '#9098ab',   /* silver hair, mid */
     'l': '#dbe1ef',   /* silver hair, the light catching the top */
     'j': '#5c6376',   /* silver hair, underside and the back of the head */
-    'U': '#0f0d14'    /* boot black, the darkest value in the set */
+    'U': '#0f0d14',   /* boot black, the darkest value in the set */
+    'y': '#8579b5',   /* purple light - the cloak had no lit tone at all */
+    '0': '#e88fa0',   /* demon skin light */
+    'Z': '#6f9fd8'    /* placeholder - civilian cloth lit, replaced per tint */
   });
+
+  /* Give a flat fill a lit edge and a shadow, the way the hero's hair, denim
+     and skin already carry one. `ramp` maps a base key to [lit, dark]; either
+     may be null where the palette has nowhere further to go. Applied once per
+     sprite, just before the outline, so it shades art rather than outline. */
+  function form(g, ramp) {
+    var lite = {}, dark = {};
+    for (var k in ramp) {
+      if (ramp[k][0]) lite[k] = ramp[k][0];
+      if (ramp[k][1]) dark[k] = ramp[k][1];
+    }
+    g.liteTop(lite).shadeBottom(dark);
+    return g;
+  }
 
   function cached(key, build) {
     if (!cache[key]) cache[key] = build();
@@ -157,6 +174,7 @@
       g.rect(o.hairDark || o.hair, cx - 4, headCy - 2, 3, 5);   /* back of the head */
     }
 
+    if (o.form) form(g, o.form);
     g.outline('K');
     return g;
   }
@@ -180,12 +198,20 @@
   Spr.civilian = function (dir, frame, tint) {
     tint = tint || '#3d6fa8';
     return cached('cv:' + dir + ':' + frame + ':' + tint, function () {
+      /* Trousers used to be 'B', the same key as the shirt's own shadow, and
+         hair, belt and boots were all 'W' - so a civilian was two flat masses
+         with no edge between them. Same fault the hero had before his rebuild:
+         each material now carries its own value, and form() gives each one a
+         lit lip and a shadow. */
       var g = humanoidGrid({
         dir: dir, frame: frame,
-        cloth: 'm', clothDark: 'B', belt: 'W', trouser: 'B', boot: 'W',
-        hair: 'W', chest: 'b'
+        cloth: 'm', clothDark: 'B', belt: 'W', trouser: 'R', trouserLite: 'r',
+        boot: 'W', hair: 'W', chest: 'b',
+        form: { 'm': ['Z', 'B'], 'R': ['r', null], 'W': ['w', null], 'f': [null, 'F'] }
       });
-      return Px.bake(g, { pal: { 'm': tint, 'B': shade(tint, -42) } });
+      return Px.bake(g, {
+        pal: { 'm': tint, 'B': shade(tint, -42), 'Z': shade(tint, 34) }
+      });
     });
   };
 
@@ -236,6 +262,7 @@
           g.set(cx + 2, headCy, 'X');
           g.rect('K', cx - 2, headCy + 3, 5, 1);   /* grin */
         }
+        form(g, { 'g': ['h', 'G'], 'h': ['H', 'g'], 'w': ['v', 'W'], 'W': ['w', null] });
         g.outline('K');
       });
     });
@@ -283,6 +310,7 @@
           g.set(cx - 3, headCy - 1, 'X');
           g.set(cx + 3, headCy - 1, 'X');
         }
+        form(g, { 'w': ['v', 'W'], 'v': ['d', 'w'], 'W': ['w', null], 'A': ['a', null] });
         g.outline('K');
       });
     });
@@ -319,6 +347,7 @@
         g.rect('O', cx - 8, top + 12, 2, 3);
         g.rect('O', cx + 7, top + 12, 2, 3);
 
+        form(g, { 'P': ['p', 'E'], 'p': ['y', null], 'O': [null, 'q'] });
         g.outline('K');
       });
     });
@@ -371,6 +400,8 @@
         }
         if (dir === 'side') g.rect('4', cx - 6, top + 4, 4, 6);
 
+        form(g, { '5': ['6', '4'], '6': ['7', '5'], '4': ['5', null],
+                  'A': ['a', 'E'], 'a': ['b', null], '7': ['0', '6'] });
         g.outline('K');
       });
     });
@@ -420,6 +451,8 @@
         g.line('P', cx + 12, 44, cx + 10, 50);
 
         g.mirrorX();
+        form(g, { 'P': ['p', 'E'], 'p': ['y', null], 'I': ['Q', 'i'],
+                  'i': ['I', 'x'], 'Q': [null, 'I'] });
         g.outline('K');
       });
     });
@@ -473,6 +506,8 @@
         g.line('O', cx + 5, 8, cx + 8, 4);
 
         g.mirrorX();
+        form(g, { '9': ['4', null], '5': ['6', '4'], '7': ['0', '6'],
+                  '4': ['5', '9'], '6': ['7', '5'], 'O': [null, 'q'] });
         g.outline('K');
       });
     });
@@ -593,6 +628,8 @@
       g.rect('G', 14, 16, 5, 4);
       g.rect('G', 17, 13, 2, 5);
       g.speckle('J', 8, 5, 6, 25, 10, 3);
+      /* the arms were flat 'G' with no lit face; the trunk already had one */
+      form(g, { 'G': ['g', 'J'] });
       g.outline('K');
     });
   }

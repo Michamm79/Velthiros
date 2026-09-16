@@ -142,6 +142,23 @@
     for (var i = 0; i < add.length; i += 2) this.set(add[i], add[i + 1], c || 'K');
     return this;
   };
+  /* Catch light on the upper-left lip of a shape. The other half of
+     shadeBottom: together they give a flat fill a lit edge and a shadow, which
+     is the whole difference between a coloured block and something with form.
+     Run this one FIRST - a band only one pixel thick then reads as a highlight
+     rather than as a shadow, because shadeBottom will no longer recognise the
+     key it has been recoloured to. */
+  Grid.prototype.liteTop = function (map) {
+    for (var y = 0; y < this.h; y++) {
+      for (var x = this.w - 1; x >= 0; x--) {
+        var here = this.get(x, y);
+        if (here === '.' || !map[here]) continue;
+        if (this.get(x, y - 1) === '.' || this.get(x - 1, y) === '.') this.set(x, y, map[here]);
+      }
+    }
+    return this;
+  };
+
   /* darken the lower-right lip of a shape - cheap, readable form */
   Grid.prototype.shadeBottom = function (map) {
     for (var y = this.h - 1; y >= 0; y--) {

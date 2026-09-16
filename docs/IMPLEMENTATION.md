@@ -163,6 +163,24 @@ square needs. The shop's tints recolour the hero's sleeves, not a tunic. Weapons
 rotated through the swing. The test suite bakes all 94 sprites and fails on any unknown
 palette key, which is the main defence against a typo in hand-placed pixel data.
 
+**Every character is shaded by the same rule.** The hero was rebuilt with three tones per
+material; the rest of the cast was still large flat fills, which is why he looked like he came
+from a different game. `Grid.shadeBottom` already existed for the lower-right lip but was never
+called, so `Grid.liteTop` was added as its other half, and a `form(g, ramp)` helper applies both
+from one `{base: [lit, dark]}` map just before the outline. `liteTop` runs first on purpose: a
+band one pixel thick then reads as a highlight, because `shadeBottom` no longer recognises the
+key it has been recoloured to.
+
+Two details the rule depends on. Garatu and Aurelith are shaded *after* `mirrorX`, or the light
+would mirror with the geometry and come from both sides at once. And the civilian needed its
+materials separated before shading would show anything: trousers used the same key as the
+shirt's own shadow, and hair, belt and boots were all one key, so a civilian was two flat masses
+with no edge between them — the same fault the hero had before his rebuild.
+
+Props were checked against the same standard and mostly already met it: they carry speckle,
+mortar lines and highlights, and run four to eight colours. The cactus was the exception, with
+flat arms and a lit face only on the trunk.
+
 What is not yet converted: the bedroom and hub interior furniture. The title and cutscene
 now use sprites. A tiled interior is the remaining art job.
 
