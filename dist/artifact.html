@@ -2839,19 +2839,23 @@ html, body {
       }, { ax: 1, ay: 8 });
     }
     if (id === 'bow') {
+      /* A strung bow from the side: the stave bows toward the target and the
+         string sits on the archer's side of it. +x is forward for every weapon
+         here, so the stave belongs at high x and the string behind it - drawn
+         the other way round it reads as a bow held backwards. Art.drawWeapon's
+         vector bow already had it this way; only this one was mirrored. */
       return Px.make(14, 20, function (g) {
-        /* a wooden arc with a thin string, not a white bar */
         for (var y = 2; y <= 17; y++) {
           var tt = (y - 2) / 15;
-          var x = 10 - Math.round(Math.sin(tt * Math.PI) * 5);
-          g.set(x, y, 'W');
-          g.set(x + 1, y, 'w');
-          g.set(x + 2, y, 'v');
+          var x = 3 + Math.round(Math.sin(tt * Math.PI) * 5);
+          g.set(x, y, 'W');        /* lit edge, on the face pointed downrange */
+          g.set(x - 1, y, 'w');
+          g.set(x - 2, y, 'v');
         }
-        for (var y2 = 3; y2 <= 16; y2++) g.set(11, y2, 'q');
-        g.set(10, 2, 'W'); g.set(10, 17, 'W');
+        for (var y2 = 3; y2 <= 16; y2++) g.set(2, y2, 'q');   /* the string */
+        g.set(3, 2, 'W'); g.set(3, 17, 'W');                  /* the tips */
         g.outline('K');
-      }, { ax: 6, ay: 10 });
+      }, { ax: 7, ay: 10 });
     }
     /* scythe */
     return Px.make(24, 20, function (g) {
