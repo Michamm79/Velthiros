@@ -2481,14 +2481,24 @@ html, body {
   Spr.aurelith = function (frame) {
     return cached('au:' + frame, function () {
       return Px.make(56, 60, function (g) {
-        var cx = 28, flap = frame ? 1 : 0;
+        var cx = 28, flap = frame ? 5 : 0;
 
-        /* six wings, three per side, mirrored at the end */
+        /* Six wings, three per side, mirrored at the end. Each pivots where
+           it meets the carapace, so the root holds and the tip swings.
+
+           It used to shift each whole wing up by a flat `flap * i` - the pair
+           furthest out moved most, the root moved exactly as far as the tip,
+           and the topmost pair, which is the longest and the one you actually
+           read, multiplied by i = 0 and never moved at all. Three rigid bars
+           sliding is not a wingbeat. */
         for (var i = 0; i < 3; i++) {
-          var yy = 14 + i * 7 - flap * i;
+          var yy = 14 + i * 7;
           var len = 22 - i * 3;
           for (var x = 0; x < len; x++) {
-            var drop = Math.round(x * 0.42) + i * 2;
+            var span = x / (len - 1);
+            /* rounded together, or the sweep and the lift disagree by a pixel
+               every few columns and the wing reads as a dashed line */
+            var drop = Math.round(x * 0.42 - span * span * flap) + i * 2;
             g.rect(i === 0 ? 'Q' : (i === 1 ? 'I' : 'i'), cx - 6 - x, yy + drop, 1, 5 - i);
           }
         }
@@ -2530,21 +2540,40 @@ html, body {
     return cached('ga:' + frame, function () {
       return Px.make(58, 44, function (g) {
         var cx = 29;
-        var flap = frame ? 3 : 0;
+        var flap = frame ? 7 : 0;
 
-        /* one wing, then mirrored: a ribbed membrane on three fingers */
+        /* One wing, then mirrored: a ribbed membrane on three fingers.
+
+           A wing beats from the shoulder, so the root holds station and the
+           tip travels furthest - `lift` is that arc, squared so the outer
+           half whips. The displacement used to be (1 - span), which is the
+           beat inverted: the root swung three pixels and the tip sat still,
+           which reads as the wing sliding out of its socket.
+
+           Membrane, leading edge and finger bones all take the lift at their
+           own distance out. Give it to the skin alone and the bones come away
+           from it halfway through the beat. */
+        var lift = function (span) { return span * span * flap; };
+
         for (var i = 0; i < 24; i++) {
           var span = i / 23;
-          var top = 5 + Math.round(span * 9) - Math.round((1 - span) * flap);
+          /* The sweep and the lift are rounded together, not separately. Round
+             each and they disagree by a pixel every few columns, and the top
+             edge saws up and down instead of stepping cleanly. */
+          var top = 5 + Math.round(span * 9 - lift(span));
           var h = Math.round(14 - span * 5 + Math.sin(span * Math.PI * 3) * 3);
           if (h < 3) h = 3;
           g.rect('9', cx - 9 - i, top, 1, h);
+          /* Leading edge. Exactly the pixels the straight line from shoulder
+             to tip used to lay down, but stepped per column so it takes the
+             lift with the membrane instead of cutting across it. */
+          g.set(cx - 9 - i, 6 + Math.round(i * 7 / 23 - lift(span)), '4');
         }
         for (var f = 0; f < 3; f++) {                 /* finger bones */
           var fx = cx - 12 - f * 8;
-          g.line('4', fx, 8 + f * 3, fx - 4, 20 + f * 4);
+          g.line('4', fx, 8 + f * 3 - Math.round(lift((3 + f * 8) / 23)),
+                 fx - 4, 20 + f * 4 - Math.round(lift((7 + f * 8) / 23)));
         }
-        g.line('4', cx - 9, 6, cx - 32, 13);          /* leading edge */
 
         /* body */
         g.rect('5', cx - 5, 18, 10, 13);
