@@ -225,10 +225,10 @@ Everything above is measured from the repository, not estimated.
 
 | Claim | Source |
 |---|---|
-| ~8,000 lines across 15 modules | `wc -l src/js/*.js` → 8,020 |
+| ~8,100 lines across 15 modules | `wc -l src/js/*.js` → 8,145 |
 | 138 sprites | smoke test: `every sprite bakes against the locked palette — 138 sprites` |
 | 40-colour palette | `src/js/pixel.js` palette map |
-| 320 KB single file | `dist/velthiros.html` |
+| 327 KB single file | `dist/velthiros.html` |
 | No art or audio assets | only binaries in the repo are the PWA icons, themselves rendered from the game's own drawing code |
 | 123 automated checks | `npm test` → 94 gameplay + 29 device |
 | Live build | https://michamm79.github.io/Velthiros/ |

@@ -571,17 +571,20 @@ async function main() {
          be its own thing. Reaper Weave is the first. */
   const outfit = await page.evaluate(() => {
     const g = window.VELTHIROS, V = window.V, D = V.D;
-    const pixels = (spr) => {
-      const out = [];
-      for (let y = 0; y < spr.grid.h; y++)
-        for (let x = 0; x < spr.grid.w; x++) out.push(spr.grid.get(x, y));
-      return out.join('');
-    };
+    /* Compared in ANCHOR-relative coordinates, not by flattening both grids
+       and walking them index by index. A garment that hangs outside the body
+       pads its grid wider - the ribbon takes the player from 18 wide to 34 -
+       so a flat walk lines up column 0 of one against column 0 of the other
+       and compares unrelated pixels. Both sprites anchor bottom-centre, and
+       grid.get returns '.' out of bounds, so this handles either size. */
+    const at = (spr, rx, ry) => spr.grid.get(Math.round(spr.ax + rx), Math.round(spr.ay + ry));
     g.newGame();
-    const plain = pixels(V.Spr.player('down', 0, '#17141c', null));
-    const dressed = pixels(V.Spr.player('down', 0, '#17141c', 'reaper'));
+    const plain = V.Spr.player('down', 0, '#17141c', null);
+    const dressed = V.Spr.player('down', 0, '#17141c', 'reaper');
     let differs = 0;
-    for (let i = 0; i < plain.length; i++) if (plain[i] !== dressed[i]) differs++;
+    for (let ry = -40; ry <= 2; ry++)
+      for (let rx = -24; rx <= 24; rx++)
+        if (at(plain, rx, ry) !== at(dressed, rx, ry)) differs++;
 
     const item = D.REALITY_SHOP.find((it) => it.id === 'shirt_black');
     g.save.currency = 9999;

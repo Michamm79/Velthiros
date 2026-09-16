@@ -40,7 +40,10 @@
     '-': '#b4bda2',   /* husk flesh, light */
     '(': '#e8e0d2',   /* feather shade - warm, where 'i' is cold */
     '^': '#e07a42',   /* coral growth */
-    ')': '#c2b8a8'    /* feather shadow - warm, where 'i' is cold */
+    ')': '#c2b8a8',   /* feather shadow - warm, where 'i' is cold */
+    '+': '#f4e8ff',   /* celestial silk, the face catching the light */
+    '=': '#b79ae0',   /* celestial silk, where the ribbon turns */
+    ':': '#6d54a6'    /* celestial silk, the far side of a fold */
   });
 
   /* Give a flat fill a lit edge and a shadow, the way the hero's hair, denim
@@ -95,6 +98,81 @@
   /* Shared humanoid. dir: 'down' | 'up' | 'side'. frame: 0 idle, 1/2 walk.
      `bare` picks the hero's build; without it you get an ordinary clothed
      person, which is what the square crowd needs. */
+  /* ------------------------------------------------------------ RIBBON
+     A celestial ribbon in the Sun Wukong / feitian line: a long silk stole
+     that passes over both shoulders and trails out and down on either side,
+     rather than a scarf knotted at the throat.
+
+     The whole reason it works at 18x28 is that it leaves the body's bounds -
+     a ribbon that stays inside the silhouette is a collar. The grid is padded
+     outward first, and the tails are walked as a wave that opens up as it
+     travels: tight at the shoulder, wide and loose at the tip, drifting
+     downward the whole way. It is thick near the shoulder and one pixel at the
+     end, which is what makes it read as fabric rather than as a wire.
+
+     The wave is phase-shifted per walk frame, so it undulates as you move. */
+  /* One length of silk, hung from the shoulder and falling outward.
+
+     Four passes to get here and each one failed the same way: at 18x28 a
+     SYMMETRIC pair of tails reads as wings, a cape or a pair of parentheses,
+     whatever curve you give it. Straight out was wings. Out-then-down was a
+     cape. Adding a curl so the tips rose turned them into antennae, then into
+     a pair of hooks.
+
+     So the silhouette is asymmetric instead: one long streamer flowing off
+     one shoulder, a short fall off the other, joined over the back. That is
+     also how the reference reads - cloth caught mid-motion, not a matched
+     set of anything.
+
+     The path is a straight fall with a ripple laid over it, the ripple
+     growing with distance from the shoulder because that is how cloth
+     behaves: held at one end, loose at the other. */
+  function ribbonTail(g, x0, y0, side, reach, fall, ripple, phase, o) {
+    var steps = Math.max(reach, 5) * 3;
+    var px = x0, py = y0;
+    for (var i = 1; i <= steps; i++) {
+      var t = i / steps;
+      var x = x0 + side * Math.round(t * reach);
+      var y = y0 + Math.round(t * fall + Math.sin(t * Math.PI * 1.7 + phase) * ripple * (0.3 + t));
+      /* Joined to the previous point rather than dotted along the curve:
+         oversampling alone fills a vertical gap but not a diagonal one, and
+         the tip broke off into loose pixels floating beside the shoulder. */
+      g.line(o.ribbon, px, py, x, y);
+      /* body near the shoulder, tapering to a single pixel at the tip */
+      if (t < 0.72) g.line(o.ribbonTurn || o.ribbon, px, py + 1, x, y + 1);
+      if (t < 0.34) g.line(o.ribbonDark || o.ribbonTurn || o.ribbon, px, py + 2, x, y + 2);
+      px = x; py = y;
+    }
+  }
+
+  function celestialRibbon(g, o, pad, bodyTop) {
+    var cx = 9 + pad;
+    /* frame 0 rests; 1 and 2 are the two halves of a stride. The silk lags
+       behind the body, so the ripple is phase-shifted rather than redrawn. */
+    var ph = o.frame === 1 ? 0.9 : (o.frame === 2 ? -0.8 : 0);
+
+    if (o.dir === 'side') {
+      /* from the side it streams BEHIND you: a stub over the near shoulder,
+         and the whole length trailing back off the far one */
+      g.rect(o.ribbon, cx - 2, bodyTop - 1, 6, 2);
+      g.set(cx + 3, bodyTop + 1, o.ribbonTurn || o.ribbon);
+      ribbonTail(g, cx - 2, bodyTop, -1, pad + 2, 13, 2.4, ph, o);
+      return;
+    }
+    /* over both shoulders: pads either side of the neck rather than a band
+       across the chest, since the sash already owns the horizontal here.
+       They sit at bodyTop-1, clear of the arms which start at bodyTop+1. */
+    g.rect(o.ribbon, cx - 6, bodyTop - 1, 3, 2);
+    g.rect(o.ribbon, cx + 4, bodyTop - 1, 3, 2);
+    if (o.dir === 'up') {
+      /* from behind you also see the span across the shoulderblades */
+      g.rect(o.ribbonTurn || o.ribbon, cx - 4, bodyTop - 1, 9, 1);
+    }
+    /* the long streamer, and the short fall on the other hip */
+    ribbonTail(g, cx - 6, bodyTop, -1, pad, 15, 2.6, ph, o);
+    ribbonTail(g, cx + 6, bodyTop, 1, 2, 7, 1.4, -ph, o);
+  }
+
   function humanoidGrid(o) {
     var W = 18, H = 28;
     var g = new Px.Grid(W, H);
@@ -212,6 +290,15 @@
       g.rect(o.hairDark || o.hair, cx - 4, headCy - 2, 3, 5);   /* back of the head */
     }
 
+    /* The ribbon hangs outside the body, so the grid grows to fit it. Drawn
+       last and over the top: a stole sits ON the shoulders, and at this size
+       anything drawn behind the torso is simply invisible. */
+    if (o.ribbon) {
+      var pad = o.ribbonReach || 7;
+      g = g.pad(pad, pad, 0, 0);
+      celestialRibbon(g, o, pad, bodyTop);
+    }
+
     if (o.form) form(g, o.form);
     g.outline('K');
     return g;
@@ -268,42 +355,51 @@
   }
   Spr.shade = shade;
 
+  /* Goblin. Half the size it was, which is the size it should always have been:
+     at 18x26 it stood eye to eye with the player, and a thing you are meant to
+     read as "one of many, individually trivial" cannot be as big as you are.
+
+     The folklore shape is a small body under an oversized head, so at this
+     scale nearly everything is spent on the head and the ears - they are the
+     silhouette. The body is four columns of scrap tunic and two stubby legs;
+     there is no room for detail and it does not need any, because you will
+     never see one on its own. */
   Spr.goblin = function (dir, frame) {
     return cached('gb:' + dir + frame, function () {
-      return Px.make(18, 26, function (g) {
-        var cx = 9;
+      return Px.make(10, 14, function (g) {
+        var cx = 5;
         var bob = frame ? 1 : 0;
-        var legTop = 19, legBot = 23;
-        var bodyTop = 12 + bob, bodyBot = 19 + bob;
-        var headCy = 8 + bob;
+        var legTop = 10, legBot = 12;
+        var bodyTop = 7 + bob, bodyBot = 10 + bob;
+        var headCy = 4 + bob;
 
-        var lx = 6, rx = 9, lTop = legTop, rTop = legTop;
-        if (frame === 1) { lx = 5; lTop = legTop + 1; }
-        if (frame === 2) { rx = 10; rTop = legTop + 1; }
-        g.rect('W', lx, lTop, 3, legBot - lTop);
-        g.rect('W', rx, rTop, 3, legBot - rTop);
-        g.rect('K', lx, legBot, 3, 2);
-        g.rect('K', rx, legBot, 3, 2);
+        var lx = 3, rx = 5, lTop = legTop, rTop = legTop;
+        if (frame === 1) { lTop = legTop + 1; }
+        if (frame === 2) { rTop = legTop + 1; }
+        g.rect('W', lx, lTop, 2, legBot - lTop);
+        g.rect('W', rx, rTop, 2, legBot - rTop);
+        g.rect('K', lx, legBot, 2, 1);
+        g.rect('K', rx, legBot, 2, 1);
 
-        /* hunched torso in a scrap tunic */
-        g.rect('w', 6, bodyTop, 6, bodyBot - bodyTop);
-        g.rect('W', 10, bodyTop + 1, 2, bodyBot - bodyTop - 1);
+        /* hunched scrap tunic */
+        g.rect('w', 3, bodyTop, 4, bodyBot - bodyTop);
+        g.rect('W', 5, bodyTop + 1, 2, bodyBot - bodyTop - 1);
 
-        /* green arms */
-        g.rect('g', 4, bodyTop + 1, 2, 6);
-        g.rect('g', 12, bodyTop + 1, 2, 6);
+        /* green arms, one column each */
+        g.rect('g', 2, bodyTop, 1, 3);
+        g.rect('g', 7, bodyTop, 1, 3);
 
-        /* head with big ears */
-        g.oval('h', cx, headCy, 4, 4);
-        g.rect('g', cx + 2, headCy - 1, 2, 4);
-        g.line('g', cx - 5, headCy - 3, cx - 4, headCy + 1);
-        g.line('g', cx + 5, headCy - 3, cx + 4, headCy + 1);
-        g.set(cx - 5, headCy - 3, 'h');
-        g.set(cx + 5, headCy - 3, 'h');
+        /* the head is the character: oversized, with ears wider than the body */
+        g.oval('h', cx, headCy, 3, 3);
+        g.rect('g', cx + 1, headCy - 1, 2, 3);
+        g.line('g', cx - 4, headCy - 2, cx - 3, headCy + 1);
+        g.line('g', cx + 4, headCy - 2, cx + 3, headCy + 1);
+        g.set(cx - 4, headCy - 2, 'h');
+        g.set(cx + 4, headCy - 2, 'h');
         if (dir !== 'up') {
-          g.set(cx - 2, headCy, 'X');
-          g.set(cx + 2, headCy, 'X');
-          g.rect('K', cx - 2, headCy + 3, 5, 1);   /* grin */
+          g.set(cx - 1, headCy, 'X');
+          g.set(cx + 1, headCy, 'X');
+          g.rect('K', cx - 1, headCy + 2, 3, 1);   /* grin */
         }
         form(g, { 'g': ['h', 'G'], 'h': ['H', 'g'], 'w': ['v', 'W'], 'W': ['w', null] });
         g.outline('K');
@@ -359,44 +455,49 @@
     });
   };
 
-  /* Husk: what is left of a townsperson the arena used up. Goblin-sized but
-     narrower and taller, arms hanging rather than raised, so a crowd of them
-     reads as a crowd of people rather than a crowd of monsters. */
+  /* Husk: what is left of a townsperson the arena used up. Same footprint as
+     before but drawn tall and lanky - narrower body, longer limbs, taller than
+     the player rather than shorter. It reads as a person stretched thin, which
+     is what it is, and it sits at the opposite end of the silhouette range from
+     the goblins it shares a field with. */
   Spr.husk = function (dir, frame) {
     return cached('hk:' + dir + frame, function () {
-      return Px.make(16, 26, function (g) {
-        var cx = 8;
+      return Px.make(14, 30, function (g) {
+        var cx = 7;
         var bob = frame ? 1 : 0;
-        var legTop = 18, legBot = 23;
-        var bodyTop = 10 + bob, bodyBot = 18 + bob;
-        var headCy = 6 + bob;
+        var legTop = 18, legBot = 27;
+        var bodyTop = 9 + bob, bodyBot = 18 + bob;
+        var headCy = 5 + bob;
 
+        /* long thin legs, a single column of shin each */
         var lx = 5, rx = 8, lTop = legTop, rTop = legTop;
         if (frame === 1) { lx = 4; lTop = legTop + 1; }
         if (frame === 2) { rx = 9; rTop = legTop + 1; }
-        g.rect('*', lx, lTop, 3, legBot - lTop);
-        g.rect('*', rx, rTop, 3, legBot - rTop);
-        g.rect('K', lx, legBot, 3, 2);
+        g.rect('*', lx, lTop, 2, legBot - lTop);
+        g.rect('*', rx, rTop, 2, legBot - rTop);
+        g.rect('K', lx - 1, legBot, 3, 2);
         g.rect('K', rx, legBot, 3, 2);
 
-        /* narrow torso in the rags it died in */
-        g.rect('&', 5, bodyTop, 6, bodyBot - bodyTop);
-        g.rect('*', 9, bodyTop + 1, 2, bodyBot - bodyTop - 1);
-        /* ribs showing through - the light tone alone was lost against the
-           body, so they are cut as dark gaps with a lit edge under each */
-        g.rect('*', 6, bodyTop + 2, 4, 1); g.set(6, bodyTop + 3, '-');
-        g.rect('*', 6, bodyTop + 4, 3, 1); g.set(6, bodyTop + 5, '-');
+        /* narrow torso in the rags it died in - four columns, no more */
+        g.rect('&', 5, bodyTop, 4, bodyBot - bodyTop);
+        g.rect('*', 7, bodyTop + 1, 2, bodyBot - bodyTop - 1);
+        /* ribs, cut as dark gaps with a lit edge under each */
+        g.rect('*', 5, bodyTop + 2, 3, 1); g.set(5, bodyTop + 3, '-');
+        g.rect('*', 5, bodyTop + 5, 3, 1); g.set(5, bodyTop + 6, '-');
 
-        /* arms hanging straight down - nothing is holding them up */
-        g.rect('&', 3, bodyTop + 1, 2, 8);
-        g.rect('&', 11, bodyTop + 1, 2, 8);
+        /* arms hanging past the hips - nothing is holding them up */
+        g.rect('&', 3, bodyTop, 2, 11);
+        g.rect('&', 9, bodyTop, 2, 11);
+        g.set(3, bodyTop + 11, '*');
+        g.set(10, bodyTop + 11, '*');
 
-        /* hollow head, jaw slack */
+        /* a long neck, then a small hollow head */
+        g.rect('&', cx - 1, headCy + 3, 2, 3);
         g.oval('&', cx, headCy, 3, 4);
         if (dir !== 'up') {
           g.set(cx - 2, headCy, 'K'); g.set(cx + 2, headCy, 'K');
           g.set(cx - 2, headCy - 1, 'X');
-          g.rect('K', cx - 1, headCy + 3, 3, 2);   /* open mouth */
+          g.rect('K', cx - 1, headCy + 3, 2, 2);   /* slack jaw */
         }
         form(g, { '&': ['-', '*'], '*': ['&', null], '-': [null, '&'] });
         g.outline('K');

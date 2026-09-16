@@ -180,8 +180,9 @@ palette key, which is the main defence against a typo in hand-placed pixel data.
 
 **Clothing has two kinds: a tint and an outfit.** A tint only recolours the sleeves already
 on the sprite, so anything with its own *shape* cannot be one. `D.OUTFITS` holds garment sets
-that are handed straight to `humanoidGrid`, which learned four optional pieces: a sash with a
-tie that trails down one hip, a baggy leg cut, trimmed boot tops, and wrapped wrists. An
+that are handed straight to `humanoidGrid`, which learned five optional pieces: a sash with a
+tie that trails down one hip, a baggy leg cut, trimmed boot tops, wrapped wrists, and a
+celestial ribbon. An
 outfit overlays the default build rather than replacing it - the hair, the skin and the open
 top are who he is, the garments are what he is wearing - so adding another outfit is a data
 edit. `save.equippedOutfit` sits beside `equippedTint`, is set by any shop item carrying an
@@ -190,6 +191,24 @@ edit. `save.equippedOutfit` sits beside `equippedTint`, is set by any shop item 
 At 18x28 the sash is the whole point: it is the loudest thing on the character and the only
 piece readable from across an arena, which is why it is worn over everything and given a tie
 that breaks the silhouette on one side.
+
+**A garment may hang outside the body.** The ribbon is the first that does, and it needs
+columns the 18-wide humanoid grid has not got, so `Grid.pad` returns a wider copy with the
+content offset into it and the ribbon is drawn on that. Sprites bake from the bottom centre,
+so a padded sprite still stands in the same place; only outfits that ask for reach pay for it,
+rather than widening all 138 sprites. Anything comparing two player sprites has to work in
+anchor-relative coordinates for the same reason - the ribbon takes the player from 18 wide to
+34, and walking two flattened grids index by index compares unrelated pixels.
+
+**The ribbon took five passes, and every failure was the same failure.** At this size a
+*symmetric* pair of tails reads as something other than cloth no matter what curve it follows:
+straight out was wings, out-then-down was a cape, and adding a curl so the tips rose turned
+them into antennae and then into hooks. It only became silk once it stopped matching - one long
+streamer off one shoulder, a short fall off the other, joined across the back. The path is a
+straight fall with a ripple laid over it, the ripple growing with distance from the shoulder
+because that is how cloth held at one end behaves, and each step is drawn as a line from the
+previous point: oversampling fills a vertical gap but not a diagonal one, and the tip broke off
+into loose pixels floating beside the shoulder until it was joined.
 
 **Every character is shaded by the same rule.** The hero was rebuilt with three tones per
 material; the rest of the cast was still large flat fills, which is why he looked like he came
