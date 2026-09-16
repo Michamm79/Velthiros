@@ -662,7 +662,10 @@
     if (this.hiding) alpha = 0.24 + 0.08 * Math.sin(t * 3 + this.animPhase);
     else if (this.hurtFlash > 0) alpha = 0.55;
 
-    Px.shadow(ctx, this.sx, this.sy, this.def.boss ? 12 : (this.def.heavy ? 9 : 7));
+    /* The shadow is sized off the body rather than off a three-way flag, so a
+       creature half the size casts half the shadow. A flat 7 under a 10px
+       goblin was a puddle wider than the goblin. */
+    Px.shadow(ctx, this.sx, this.sy, U.clamp(this.radius * 0.42, 4, 14));
     Px.draw(ctx, spr, this.sx, y, { flip: view.flip, alpha: alpha });
 
     /* windup telegraph */

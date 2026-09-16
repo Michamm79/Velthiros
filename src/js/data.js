@@ -98,8 +98,11 @@
   /* --------------------------------------------------------------- enemies */
   D.ENEMIES = {
     goblin: {
+      /* radius follows the art: the sprite halved, so the body it collides and
+         is hit with halves too, or you swing at air and it reaches you from
+         outside itself. Reach is left alone - that is difficulty, not size. */
       id: 'goblin', name: 'Goblin', hp: 32, speed: 122, damage: 8, sight: 430,
-      radius: 15, attackRange: 52, attackWindup: 0.34, attackRecover: 0.4,
+      radius: 8, attackRange: 52, attackWindup: 0.34, attackRecover: 0.4,
       score: 10, reward: 6, colour: '#7fbf4f', dark: '#4b8030'
     },
     minotaur: {
@@ -113,7 +116,7 @@
        wrong answer and a wide arc is the right one. --- */
     husk: {
       id: 'husk', name: 'Husk', hp: 18, speed: 168, damage: 6, sight: 480,
-      radius: 12, attackRange: 44, attackWindup: 0.22, attackRecover: 0.3,
+      radius: 10, attackRange: 44, attackWindup: 0.22, attackRecover: 0.3,
       score: 7, reward: 4, colour: '#7e8a6e', dark: '#4a5340', swarm: true
     },
 

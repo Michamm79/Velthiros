@@ -268,42 +268,51 @@
   }
   Spr.shade = shade;
 
+  /* Goblin. Half the size it was, which is the size it should always have been:
+     at 18x26 it stood eye to eye with the player, and a thing you are meant to
+     read as "one of many, individually trivial" cannot be as big as you are.
+
+     The folklore shape is a small body under an oversized head, so at this
+     scale nearly everything is spent on the head and the ears - they are the
+     silhouette. The body is four columns of scrap tunic and two stubby legs;
+     there is no room for detail and it does not need any, because you will
+     never see one on its own. */
   Spr.goblin = function (dir, frame) {
     return cached('gb:' + dir + frame, function () {
-      return Px.make(18, 26, function (g) {
-        var cx = 9;
+      return Px.make(10, 14, function (g) {
+        var cx = 5;
         var bob = frame ? 1 : 0;
-        var legTop = 19, legBot = 23;
-        var bodyTop = 12 + bob, bodyBot = 19 + bob;
-        var headCy = 8 + bob;
+        var legTop = 10, legBot = 12;
+        var bodyTop = 7 + bob, bodyBot = 10 + bob;
+        var headCy = 4 + bob;
 
-        var lx = 6, rx = 9, lTop = legTop, rTop = legTop;
-        if (frame === 1) { lx = 5; lTop = legTop + 1; }
-        if (frame === 2) { rx = 10; rTop = legTop + 1; }
-        g.rect('W', lx, lTop, 3, legBot - lTop);
-        g.rect('W', rx, rTop, 3, legBot - rTop);
-        g.rect('K', lx, legBot, 3, 2);
-        g.rect('K', rx, legBot, 3, 2);
+        var lx = 3, rx = 5, lTop = legTop, rTop = legTop;
+        if (frame === 1) { lTop = legTop + 1; }
+        if (frame === 2) { rTop = legTop + 1; }
+        g.rect('W', lx, lTop, 2, legBot - lTop);
+        g.rect('W', rx, rTop, 2, legBot - rTop);
+        g.rect('K', lx, legBot, 2, 1);
+        g.rect('K', rx, legBot, 2, 1);
 
-        /* hunched torso in a scrap tunic */
-        g.rect('w', 6, bodyTop, 6, bodyBot - bodyTop);
-        g.rect('W', 10, bodyTop + 1, 2, bodyBot - bodyTop - 1);
+        /* hunched scrap tunic */
+        g.rect('w', 3, bodyTop, 4, bodyBot - bodyTop);
+        g.rect('W', 5, bodyTop + 1, 2, bodyBot - bodyTop - 1);
 
-        /* green arms */
-        g.rect('g', 4, bodyTop + 1, 2, 6);
-        g.rect('g', 12, bodyTop + 1, 2, 6);
+        /* green arms, one column each */
+        g.rect('g', 2, bodyTop, 1, 3);
+        g.rect('g', 7, bodyTop, 1, 3);
 
-        /* head with big ears */
-        g.oval('h', cx, headCy, 4, 4);
-        g.rect('g', cx + 2, headCy - 1, 2, 4);
-        g.line('g', cx - 5, headCy - 3, cx - 4, headCy + 1);
-        g.line('g', cx + 5, headCy - 3, cx + 4, headCy + 1);
-        g.set(cx - 5, headCy - 3, 'h');
-        g.set(cx + 5, headCy - 3, 'h');
+        /* the head is the character: oversized, with ears wider than the body */
+        g.oval('h', cx, headCy, 3, 3);
+        g.rect('g', cx + 1, headCy - 1, 2, 3);
+        g.line('g', cx - 4, headCy - 2, cx - 3, headCy + 1);
+        g.line('g', cx + 4, headCy - 2, cx + 3, headCy + 1);
+        g.set(cx - 4, headCy - 2, 'h');
+        g.set(cx + 4, headCy - 2, 'h');
         if (dir !== 'up') {
-          g.set(cx - 2, headCy, 'X');
-          g.set(cx + 2, headCy, 'X');
-          g.rect('K', cx - 2, headCy + 3, 5, 1);   /* grin */
+          g.set(cx - 1, headCy, 'X');
+          g.set(cx + 1, headCy, 'X');
+          g.rect('K', cx - 1, headCy + 2, 3, 1);   /* grin */
         }
         form(g, { 'g': ['h', 'G'], 'h': ['H', 'g'], 'w': ['v', 'W'], 'W': ['w', null] });
         g.outline('K');
@@ -359,44 +368,49 @@
     });
   };
 
-  /* Husk: what is left of a townsperson the arena used up. Goblin-sized but
-     narrower and taller, arms hanging rather than raised, so a crowd of them
-     reads as a crowd of people rather than a crowd of monsters. */
+  /* Husk: what is left of a townsperson the arena used up. Same footprint as
+     before but drawn tall and lanky - narrower body, longer limbs, taller than
+     the player rather than shorter. It reads as a person stretched thin, which
+     is what it is, and it sits at the opposite end of the silhouette range from
+     the goblins it shares a field with. */
   Spr.husk = function (dir, frame) {
     return cached('hk:' + dir + frame, function () {
-      return Px.make(16, 26, function (g) {
-        var cx = 8;
+      return Px.make(14, 30, function (g) {
+        var cx = 7;
         var bob = frame ? 1 : 0;
-        var legTop = 18, legBot = 23;
-        var bodyTop = 10 + bob, bodyBot = 18 + bob;
-        var headCy = 6 + bob;
+        var legTop = 18, legBot = 27;
+        var bodyTop = 9 + bob, bodyBot = 18 + bob;
+        var headCy = 5 + bob;
 
+        /* long thin legs, a single column of shin each */
         var lx = 5, rx = 8, lTop = legTop, rTop = legTop;
         if (frame === 1) { lx = 4; lTop = legTop + 1; }
         if (frame === 2) { rx = 9; rTop = legTop + 1; }
-        g.rect('*', lx, lTop, 3, legBot - lTop);
-        g.rect('*', rx, rTop, 3, legBot - rTop);
-        g.rect('K', lx, legBot, 3, 2);
+        g.rect('*', lx, lTop, 2, legBot - lTop);
+        g.rect('*', rx, rTop, 2, legBot - rTop);
+        g.rect('K', lx - 1, legBot, 3, 2);
         g.rect('K', rx, legBot, 3, 2);
 
-        /* narrow torso in the rags it died in */
-        g.rect('&', 5, bodyTop, 6, bodyBot - bodyTop);
-        g.rect('*', 9, bodyTop + 1, 2, bodyBot - bodyTop - 1);
-        /* ribs showing through - the light tone alone was lost against the
-           body, so they are cut as dark gaps with a lit edge under each */
-        g.rect('*', 6, bodyTop + 2, 4, 1); g.set(6, bodyTop + 3, '-');
-        g.rect('*', 6, bodyTop + 4, 3, 1); g.set(6, bodyTop + 5, '-');
+        /* narrow torso in the rags it died in - four columns, no more */
+        g.rect('&', 5, bodyTop, 4, bodyBot - bodyTop);
+        g.rect('*', 7, bodyTop + 1, 2, bodyBot - bodyTop - 1);
+        /* ribs, cut as dark gaps with a lit edge under each */
+        g.rect('*', 5, bodyTop + 2, 3, 1); g.set(5, bodyTop + 3, '-');
+        g.rect('*', 5, bodyTop + 5, 3, 1); g.set(5, bodyTop + 6, '-');
 
-        /* arms hanging straight down - nothing is holding them up */
-        g.rect('&', 3, bodyTop + 1, 2, 8);
-        g.rect('&', 11, bodyTop + 1, 2, 8);
+        /* arms hanging past the hips - nothing is holding them up */
+        g.rect('&', 3, bodyTop, 2, 11);
+        g.rect('&', 9, bodyTop, 2, 11);
+        g.set(3, bodyTop + 11, '*');
+        g.set(10, bodyTop + 11, '*');
 
-        /* hollow head, jaw slack */
+        /* a long neck, then a small hollow head */
+        g.rect('&', cx - 1, headCy + 3, 2, 3);
         g.oval('&', cx, headCy, 3, 4);
         if (dir !== 'up') {
           g.set(cx - 2, headCy, 'K'); g.set(cx + 2, headCy, 'K');
           g.set(cx - 2, headCy - 1, 'X');
-          g.rect('K', cx - 1, headCy + 3, 3, 2);   /* open mouth */
+          g.rect('K', cx - 1, headCy + 3, 2, 2);   /* slack jaw */
         }
         form(g, { '&': ['-', '*'], '*': ['&', null], '-': [null, '&'] });
         g.outline('K');
