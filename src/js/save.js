@@ -25,6 +25,7 @@
       comboIndex: D.FIXED_COMBO_INDEX != null ? D.FIXED_COMBO_INDEX : Math.floor(Math.random() * D.COMBOS.length),
       owned: {},               /* shop item id -> true (or count for stackables) */
       equippedTint: null,
+      equippedOutfit: null,
       decor: {},
       debuff: null,            /* { id } applied to the next attempt only */
       lastRank: null,

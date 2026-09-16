@@ -29,7 +29,12 @@
     'U': '#0f0d14',   /* boot black, the darkest value in the set */
     'y': '#8579b5',   /* purple light - the cloak had no lit tone at all */
     '0': '#e88fa0',   /* demon skin light */
-    'Z': '#6f9fd8'    /* placeholder - civilian cloth lit, replaced per tint */
+    'Z': '#6f9fd8',   /* placeholder - civilian cloth lit, replaced per tint */
+    'o': '#2f6f86',   /* baggy trouser, teal */
+    '%': '#48a0bd',   /* baggy trouser, lit seam */
+    '#': '#d8a13c',   /* sash gold */
+    '@': '#8e6018',   /* sash gold, shadowed */
+    '$': '#b02a37'    /* sash ribbon, crimson */
   });
 
   /* Give a flat fill a lit edge and a shadow, the way the hero's hair, denim
@@ -98,14 +103,22 @@
     var lx = 6, rx = 9, lTop = legTop, rTop = legTop;
     if (o.frame === 1) { lx = 5; lTop = legTop + 1; }
     if (o.frame === 2) { rx = 10; rTop = legTop + 1; }
-    g.rect(o.trouser, lx, lTop, 3, legBot - lTop);
-    g.rect(o.trouser, rx, rTop, 3, legBot - rTop);
+    /* A baggy cut is a wider leg that tapers back in at the ankle - at this
+       size that one extra column either side is the whole silhouette. */
+    var legW = o.baggy ? 4 : 3;
+    var legX = o.baggy ? 1 : 0;
+    g.rect(o.trouser, lx - legX, lTop, legW, legBot - lTop);
+    g.rect(o.trouser, rx, rTop, legW, legBot - rTop);
     if (o.trouserLite) {                       /* a seam of light down each leg */
-      g.rect(o.trouserLite, lx, lTop, 1, legBot - lTop);
+      g.rect(o.trouserLite, lx - legX, lTop, 1, legBot - lTop);
       g.rect(o.trouserLite, rx, rTop, 1, legBot - rTop);
     }
     g.rect(o.boot, lx, legBot, 3, 2);
     g.rect(o.boot, rx, legBot, 3, 2);
+    if (o.cuff) {                              /* trimmed boot tops */
+      g.rect(o.cuff, lx, legBot, 3, 1);
+      g.rect(o.cuff, rx, legBot, 3, 1);
+    }
 
     /* ---- torso ---- */
     if (o.bare) {
@@ -129,6 +142,25 @@
       g.rect(o.cloth, 12, bodyTop + 1, 2, sleeve);
       g.rect('f', 4, bodyTop + 1 + sleeve, 2, hand);
       g.rect('f', 12, bodyTop + 1 + sleeve, 2, hand);
+    }
+
+    /* ---- sash, worn over everything at the waist, with a tie that trails
+           down one hip. It is the loudest thing on the character, which is
+           the point: it is what you see first and from furthest away. ---- */
+    if (o.sash) {
+      g.rect(o.sash, 5, bodyBot, 8, 2);
+      if (o.sashDark) g.rect(o.sashDark, 5, bodyBot + 1, 8, 1);
+      if (o.sashTie) {
+        g.rect(o.sashTie, 4, bodyBot, 1, 5);
+        g.set(3, bodyBot + 3, o.sashTie);
+        g.set(3, bodyBot + 4, o.sashTie);
+      }
+    }
+    /* ---- wrapped wrists ---- */
+    if (o.wrap) {
+      var wy = bodyTop + 1 + sleeve;
+      if (o.dir === 'side') g.rect(o.wrap, 11, wy, 2, 1);
+      else { g.rect(o.wrap, 4, wy, 2, 1); g.rect(o.wrap, 12, wy, 2, 1); }
     }
 
     /* ---- head ---- */
@@ -181,15 +213,20 @@
 
   /* The hero. `tint` recolours the shirt only - the shop sells sleeves, not
      tunics - so the silver hair, denim and skin stay put across every purchase. */
-  Spr.player = function (dir, frame, tint) {
+  Spr.player = function (dir, frame, tint, outfitId) {
     tint = tint || '#17141c';
-    return cached('pl:' + dir + ':' + frame + ':' + tint, function () {
-      var g = humanoidGrid({
+    return cached('pl:' + dir + ':' + frame + ':' + tint + ':' + (outfitId || ''), function () {
+      var o = {
         dir: dir, frame: frame, bare: true, curly: true,
         cloth: 'm', clothDark: 'B', belt: 'U', trouser: 'M', trouserLite: 'V',
         boot: 'U', hair: 'L', hairLite: 'l', hairDark: 'j'
-      });
-      return Px.bake(g, { pal: { 'm': tint, 'B': shade(tint, -18) } });
+      };
+      /* An outfit overlays the default build rather than replacing it: the
+         hair, the skin and the open top are who he is, the garments are what
+         he is wearing. */
+      var kit = outfitId && V.D.OUTFITS[outfitId];
+      if (kit) for (var k in kit) o[k] = kit[k];
+      return Px.bake(humanoidGrid(o), { pal: { 'm': tint, 'B': shade(tint, -18) } });
     });
   };
 

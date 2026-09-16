@@ -163,6 +163,19 @@ square needs. The shop's tints recolour the hero's sleeves, not a tunic. Weapons
 rotated through the swing. The test suite bakes all 94 sprites and fails on any unknown
 palette key, which is the main defence against a typo in hand-placed pixel data.
 
+**Clothing has two kinds: a tint and an outfit.** A tint only recolours the sleeves already
+on the sprite, so anything with its own *shape* cannot be one. `D.OUTFITS` holds garment sets
+that are handed straight to `humanoidGrid`, which learned four optional pieces: a sash with a
+tie that trails down one hip, a baggy leg cut, trimmed boot tops, and wrapped wrists. An
+outfit overlays the default build rather than replacing it - the hair, the skin and the open
+top are who he is, the garments are what he is wearing - so adding another outfit is a data
+edit. `save.equippedOutfit` sits beside `equippedTint`, is set by any shop item carrying an
+`outfit` key, and is cleared by a full reset the same way.
+
+At 18x28 the sash is the whole point: it is the loudest thing on the character and the only
+piece readable from across an arena, which is why it is worn over everything and given a tie
+that breaks the silhouette on one side.
+
 **Every character is shaded by the same rule.** The hero was rebuilt with three tones per
 material; the rest of the cast was still large flat fills, which is why he looked like he came
 from a different game. `Grid.shadeBottom` already existed for the lower-right lip but was never

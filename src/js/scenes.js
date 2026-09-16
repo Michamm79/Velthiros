@@ -97,7 +97,7 @@
        more than twice as tall in portrait as in landscape, because the height
        is the dimension that changes when the phone turns. The short edge
        barely moves, so he is the same figure whichever way it is held. */
-    var hero = V.Spr.player('down', 0, this.game.playerTint());
+    var hero = V.Spr.player('down', 0, this.game.playerTint(), this.game.playerOutfit());
     var hScale = Math.max(3, Math.round((Math.min(cw, ch) * 0.36) / hero.h));
     var heroW = hero.w * hScale, heroH = hero.h * hScale;
     var heroY = ch - 26 * s;
@@ -519,7 +519,7 @@
 
     var view = V.E.viewOf(this.pfacing);
     var frame = V.E.walkFrame(this.animPhase, this.moving);
-    V.Px.draw(ctx, V.Spr.player(view.dir, frame, this.game.playerTint()),
+    V.Px.draw(ctx, V.Spr.player(view.dir, frame, this.game.playerTint(), this.game.playerOutfit()),
       this._playerAt.x, this._playerAt.y, { flip: view.flip });
   };
 
@@ -876,7 +876,8 @@
     Art.shadow(ctx, this.px, this.py * SQ, 9);
     bodies.push({
       y: this.py + 0.1, at: place(this.px, this.py), facing: this.pfacing,
-      phase: this.animPhase, moving: this.moving, tint: this.game.playerTint(), isPlayer: true
+      phase: this.animPhase, moving: this.moving, tint: this.game.playerTint(),
+      outfit: this.game.playerOutfit(), isPlayer: true
     });
 
     ctx.restore();
@@ -896,7 +897,8 @@
         bd.at.y += f * 34;
       }
       var sprFn = bd.isPlayer ? V.Spr.player : V.Spr.civilian;
-      V.Px.draw(ctx, sprFn(view.dir, frame, bd.tint), bd.at.x, bd.at.y, opts);
+      /* only the player has an outfit; a civilian ignores the extra argument */
+      V.Px.draw(ctx, sprFn(view.dir, frame, bd.tint, bd.outfit), bd.at.x, bd.at.y, opts);
     }
 
     /* Garatu comes through the rift above the square */
@@ -1030,14 +1032,14 @@
         ctx.fillStyle = 'rgba(190,150,255,' + rs.range(0.06, 0.2).toFixed(3) + ')';
         ctx.fillRect(lx, ly - 60 * s, 2 * s, len);
       }
-      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), pxx, pyy,
+      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint(), this.game.playerOutfit()), pxx, pyy,
         { scale: pScale, rot: t * 1.1 });
     } else {
       var lift = U.clamp((t - 4.5) / 3, 0, 1);
       var lxx = U.lerp(cw * 0.28, gx - 40 * s, lift);
       var lyy = U.lerp(ch * 0.62, gy + 10 * s, lift) - lift * 20 * s;
       Art.shadow(ctx, lxx, ch * 0.62, 16 * (1 - lift * 0.7), 0.2 * (1 - lift));
-      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), lxx, lyy,
+      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint(), this.game.playerOutfit()), lxx, lyy,
         { scale: pScale, rot: lift * 0.5 });
     }
 

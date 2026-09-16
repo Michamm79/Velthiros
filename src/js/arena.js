@@ -71,6 +71,7 @@
     this.player = new E.Player(this.stats, game.save.weapon, this);
     this.player.drawScale = 1.8;
     this.player.tint = game.playerTint();
+    this.player.outfit = game.playerOutfit();
 
     this.consumables = game.consumableCounts();
 

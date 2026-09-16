@@ -508,6 +508,9 @@ async function main() {
     for (const dir of ['down', 'up', 'side']) {
       for (const f of [0, 1, 2]) {
         check(Spr.player(dir, f, '#17141c'), `player:${dir}:${f}`);
+        for (const oid in window.V.D.OUTFITS) {
+          check(Spr.player(dir, f, '#17141c', oid), `player:${dir}:${f}:${oid}`);
+        }
         check(Spr.civilian(dir, f, '#a8563d'), `civilian:${dir}:${f}`);
         check(Spr.goblin(dir, f), `goblin:${dir}:${f}`);
         check(Spr.minotaur(dir, f), `minotaur:${dir}:${f}`);
@@ -557,6 +560,44 @@ async function main() {
     onTitle.hits[0].y <= onTitle.ch &&
     onTitle.hits[0].y - onTitle.h * onTitle.hits[0].scale > 0,
     JSON.stringify(onTitle.hits[0]) + ' in ' + onTitle.ch + 'px');
+
+  /* --- outfits are garments, not a colour swap ---
+         A tint only recolours the sleeves already on the sprite, so anything
+         with its own SHAPE - a sash, a baggy leg, a wrapped wrist - needs to
+         be its own thing. Reaper Weave is the first. */
+  const outfit = await page.evaluate(() => {
+    const g = window.VELTHIROS, V = window.V, D = V.D;
+    const pixels = (spr) => {
+      const out = [];
+      for (let y = 0; y < spr.grid.h; y++)
+        for (let x = 0; x < spr.grid.w; x++) out.push(spr.grid.get(x, y));
+      return out.join('');
+    };
+    g.newGame();
+    const plain = pixels(V.Spr.player('down', 0, '#17141c', null));
+    const dressed = pixels(V.Spr.player('down', 0, '#17141c', 'reaper'));
+    let differs = 0;
+    for (let i = 0; i < plain.length; i++) if (plain[i] !== dressed[i]) differs++;
+
+    const item = D.REALITY_SHOP.find((it) => it.id === 'shirt_black');
+    g.save.currency = 9999;
+    g.buy(item);
+    const equipped = { tint: g.save.equippedTint, outfit: g.save.equippedOutfit,
+                       fromGame: g.playerOutfit() };
+    /* a wipe has to strip it the same way it strips the tint */
+    g.save = V.Save.fullReset(g.save);
+    return { differs, equipped, afterReset: g.save.equippedOutfit,
+             tintAfterReset: g.save.equippedTint,
+             known: Object.keys(D.OUTFITS) };
+  });
+  check('an outfit changes the sprite, not just its colour',
+    outfit.differs > 12, outfit.differs + ' pixels differ from the default build');
+  check('buying Reaper Weave equips the garments and the tint',
+    outfit.equipped.outfit === 'reaper' && outfit.equipped.fromGame === 'reaper' &&
+    !!outfit.equipped.tint, JSON.stringify(outfit.equipped));
+  check('a full reset strips the outfit as it strips the tint',
+    outfit.afterReset === null && outfit.tintAfterReset === null,
+    JSON.stringify({ outfit: outfit.afterReset, tint: outfit.tintAfterReset }));
 
   /* --- the end of the run ---
          A player reached trial 50, killed Aurelith, was told they FAILED, and

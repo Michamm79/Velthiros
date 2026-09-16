@@ -217,7 +217,7 @@
     { id: 'shirt_red',   cat: 'Clothes', name: 'Crimson Sleeves', price: 60,  desc: 'Blood red. Purely for the watchers.',  tint: '#b02a37' },
     { id: 'shirt_blue',  cat: 'Clothes', name: 'Glacial Sleeves', price: 60,  desc: 'Cold enough to suit the snowfields.',  tint: '#2f8fb0' },
     { id: 'shirt_gold',  cat: 'Clothes', name: 'Gilded Sleeves',  price: 180, desc: 'Loud. Expensive. Slightly ridiculous.', tint: '#d4a13a' },
-    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',    price: 320, desc: 'Cut from a Reaper cloak.',             tint: '#2e2a42' },
+    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',    price: 320, desc: 'Cut from a Reaper cloak. Sash, wraps and all.', tint: '#2e2a42', outfit: 'reaper' },
     { id: 'decor_rug',   cat: 'Decor',   name: 'Woven Rug',      price: 80,  desc: 'The floor is less cold now.',           decor: 'rug' },
     { id: 'decor_plant', cat: 'Decor',   name: 'Corner Fern',    price: 70,  desc: 'It is alive. Probably.',                decor: 'plant' },
     { id: 'decor_lamp',  cat: 'Decor',   name: 'Warm Lamp',      price: 110, desc: 'Makes the room feel like a home.',      decor: 'lamp' },
@@ -275,6 +275,19 @@
 
   /* ------------------------------------------------------------- ranking
      GDD 6.2. Percentile is derived from score vs. the trial's par score. */
+  /* Outfits are garment sets, not colours: a tint only recolours the sleeves
+     that are already there, so anything with a different SHAPE - a sash, a
+     baggy leg, a wrapped wrist - has to be its own thing. Each entry is
+     handed straight to humanoidGrid, so adding another is a data edit. */
+  D.OUTFITS = {
+    reaper: {
+      trouser: 'o', trouserLite: '%',   /* baggy teal, seam of light */
+      baggy: true,
+      sash: '#', sashDark: '@', sashTie: '$',
+      cuff: 'Y', wrap: 'q'
+    }
+  };
+
   D.RANK_TIERS = [
     { max: 25, id: 'top',     label: 'Top 25%',     outcome: 'reward' },
     { max: 40, id: 'middle',  label: '26 - 40%',    outcome: 'neutral' },

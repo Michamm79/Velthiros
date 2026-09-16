@@ -439,7 +439,7 @@ html, body {
     { id: 'shirt_red',   cat: 'Clothes', name: 'Crimson Sleeves', price: 60,  desc: 'Blood red. Purely for the watchers.',  tint: '#b02a37' },
     { id: 'shirt_blue',  cat: 'Clothes', name: 'Glacial Sleeves', price: 60,  desc: 'Cold enough to suit the snowfields.',  tint: '#2f8fb0' },
     { id: 'shirt_gold',  cat: 'Clothes', name: 'Gilded Sleeves',  price: 180, desc: 'Loud. Expensive. Slightly ridiculous.', tint: '#d4a13a' },
-    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',    price: 320, desc: 'Cut from a Reaper cloak.',             tint: '#2e2a42' },
+    { id: 'shirt_black', cat: 'Clothes', name: 'Reaper Weave',    price: 320, desc: 'Cut from a Reaper cloak. Sash, wraps and all.', tint: '#2e2a42', outfit: 'reaper' },
     { id: 'decor_rug',   cat: 'Decor',   name: 'Woven Rug',      price: 80,  desc: 'The floor is less cold now.',           decor: 'rug' },
     { id: 'decor_plant', cat: 'Decor',   name: 'Corner Fern',    price: 70,  desc: 'It is alive. Probably.',                decor: 'plant' },
     { id: 'decor_lamp',  cat: 'Decor',   name: 'Warm Lamp',      price: 110, desc: 'Makes the room feel like a home.',      decor: 'lamp' },
@@ -497,6 +497,19 @@ html, body {
 
   /* ------------------------------------------------------------- ranking
      GDD 6.2. Percentile is derived from score vs. the trial's par score. */
+  /* Outfits are garment sets, not colours: a tint only recolours the sleeves
+     that are already there, so anything with a different SHAPE - a sash, a
+     baggy leg, a wrapped wrist - has to be its own thing. Each entry is
+     handed straight to humanoidGrid, so adding another is a data edit. */
+  D.OUTFITS = {
+    reaper: {
+      trouser: 'o', trouserLite: '%',   /* baggy teal, seam of light */
+      baggy: true,
+      sash: '#', sashDark: '@', sashTie: '$',
+      cuff: 'Y', wrap: 'q'
+    }
+  };
+
   D.RANK_TIERS = [
     { max: 25, id: 'top',     label: 'Top 25%',     outcome: 'reward' },
     { max: 40, id: 'middle',  label: '26 - 40%',    outcome: 'neutral' },
@@ -534,6 +547,7 @@ html, body {
       comboIndex: D.FIXED_COMBO_INDEX != null ? D.FIXED_COMBO_INDEX : Math.floor(Math.random() * D.COMBOS.length),
       owned: {},               /* shop item id -> true (or count for stackables) */
       equippedTint: null,
+      equippedOutfit: null,
       decor: {},
       debuff: null,            /* { id } applied to the next attempt only */
       lastRank: null,
@@ -2044,7 +2058,12 @@ html, body {
     'U': '#0f0d14',   /* boot black, the darkest value in the set */
     'y': '#8579b5',   /* purple light - the cloak had no lit tone at all */
     '0': '#e88fa0',   /* demon skin light */
-    'Z': '#6f9fd8'    /* placeholder - civilian cloth lit, replaced per tint */
+    'Z': '#6f9fd8',   /* placeholder - civilian cloth lit, replaced per tint */
+    'o': '#2f6f86',   /* baggy trouser, teal */
+    '%': '#48a0bd',   /* baggy trouser, lit seam */
+    '#': '#d8a13c',   /* sash gold */
+    '@': '#8e6018',   /* sash gold, shadowed */
+    '$': '#b02a37'    /* sash ribbon, crimson */
   });
 
   /* Give a flat fill a lit edge and a shadow, the way the hero's hair, denim
@@ -2113,14 +2132,22 @@ html, body {
     var lx = 6, rx = 9, lTop = legTop, rTop = legTop;
     if (o.frame === 1) { lx = 5; lTop = legTop + 1; }
     if (o.frame === 2) { rx = 10; rTop = legTop + 1; }
-    g.rect(o.trouser, lx, lTop, 3, legBot - lTop);
-    g.rect(o.trouser, rx, rTop, 3, legBot - rTop);
+    /* A baggy cut is a wider leg that tapers back in at the ankle - at this
+       size that one extra column either side is the whole silhouette. */
+    var legW = o.baggy ? 4 : 3;
+    var legX = o.baggy ? 1 : 0;
+    g.rect(o.trouser, lx - legX, lTop, legW, legBot - lTop);
+    g.rect(o.trouser, rx, rTop, legW, legBot - rTop);
     if (o.trouserLite) {                       /* a seam of light down each leg */
-      g.rect(o.trouserLite, lx, lTop, 1, legBot - lTop);
+      g.rect(o.trouserLite, lx - legX, lTop, 1, legBot - lTop);
       g.rect(o.trouserLite, rx, rTop, 1, legBot - rTop);
     }
     g.rect(o.boot, lx, legBot, 3, 2);
     g.rect(o.boot, rx, legBot, 3, 2);
+    if (o.cuff) {                              /* trimmed boot tops */
+      g.rect(o.cuff, lx, legBot, 3, 1);
+      g.rect(o.cuff, rx, legBot, 3, 1);
+    }
 
     /* ---- torso ---- */
     if (o.bare) {
@@ -2144,6 +2171,25 @@ html, body {
       g.rect(o.cloth, 12, bodyTop + 1, 2, sleeve);
       g.rect('f', 4, bodyTop + 1 + sleeve, 2, hand);
       g.rect('f', 12, bodyTop + 1 + sleeve, 2, hand);
+    }
+
+    /* ---- sash, worn over everything at the waist, with a tie that trails
+           down one hip. It is the loudest thing on the character, which is
+           the point: it is what you see first and from furthest away. ---- */
+    if (o.sash) {
+      g.rect(o.sash, 5, bodyBot, 8, 2);
+      if (o.sashDark) g.rect(o.sashDark, 5, bodyBot + 1, 8, 1);
+      if (o.sashTie) {
+        g.rect(o.sashTie, 4, bodyBot, 1, 5);
+        g.set(3, bodyBot + 3, o.sashTie);
+        g.set(3, bodyBot + 4, o.sashTie);
+      }
+    }
+    /* ---- wrapped wrists ---- */
+    if (o.wrap) {
+      var wy = bodyTop + 1 + sleeve;
+      if (o.dir === 'side') g.rect(o.wrap, 11, wy, 2, 1);
+      else { g.rect(o.wrap, 4, wy, 2, 1); g.rect(o.wrap, 12, wy, 2, 1); }
     }
 
     /* ---- head ---- */
@@ -2196,15 +2242,20 @@ html, body {
 
   /* The hero. `tint` recolours the shirt only - the shop sells sleeves, not
      tunics - so the silver hair, denim and skin stay put across every purchase. */
-  Spr.player = function (dir, frame, tint) {
+  Spr.player = function (dir, frame, tint, outfitId) {
     tint = tint || '#17141c';
-    return cached('pl:' + dir + ':' + frame + ':' + tint, function () {
-      var g = humanoidGrid({
+    return cached('pl:' + dir + ':' + frame + ':' + tint + ':' + (outfitId || ''), function () {
+      var o = {
         dir: dir, frame: frame, bare: true, curly: true,
         cloth: 'm', clothDark: 'B', belt: 'U', trouser: 'M', trouserLite: 'V',
         boot: 'U', hair: 'L', hairLite: 'l', hairDark: 'j'
-      });
-      return Px.bake(g, { pal: { 'm': tint, 'B': shade(tint, -18) } });
+      };
+      /* An outfit overlays the default build rather than replacing it: the
+         hair, the skin and the open top are who he is, the garments are what
+         he is wearing. */
+      var kit = outfitId && V.D.OUTFITS[outfitId];
+      if (kit) for (var k in kit) o[k] = kit[k];
+      return Px.bake(humanoidGrid(o), { pal: { 'm': tint, 'B': shade(tint, -18) } });
     });
   };
 
@@ -3259,7 +3310,7 @@ html, body {
     var Px = V.Px, Spr = V.Spr;
     var view = viewOf(this.facing);
     var frame = walkFrame(this.animPhase, this.moving);
-    var spr = Spr.player(view.dir, frame, this.tint);
+    var spr = Spr.player(view.dir, frame, this.tint, this.outfit);
     var y = this.sy - (this.z || 0) * 0.26;
 
     Px.shadow(ctx, this.sx, this.sy, 7, this.z > 2 ? 0.16 : 0.28);
@@ -3771,6 +3822,7 @@ html, body {
     this.player = new E.Player(this.stats, game.save.weapon, this);
     this.player.drawScale = 1.8;
     this.player.tint = game.playerTint();
+    this.player.outfit = game.playerOutfit();
 
     this.consumables = game.consumableCounts();
 
@@ -5862,7 +5914,7 @@ html, body {
        more than twice as tall in portrait as in landscape, because the height
        is the dimension that changes when the phone turns. The short edge
        barely moves, so he is the same figure whichever way it is held. */
-    var hero = V.Spr.player('down', 0, this.game.playerTint());
+    var hero = V.Spr.player('down', 0, this.game.playerTint(), this.game.playerOutfit());
     var hScale = Math.max(3, Math.round((Math.min(cw, ch) * 0.36) / hero.h));
     var heroW = hero.w * hScale, heroH = hero.h * hScale;
     var heroY = ch - 26 * s;
@@ -6284,7 +6336,7 @@ html, body {
 
     var view = V.E.viewOf(this.pfacing);
     var frame = V.E.walkFrame(this.animPhase, this.moving);
-    V.Px.draw(ctx, V.Spr.player(view.dir, frame, this.game.playerTint()),
+    V.Px.draw(ctx, V.Spr.player(view.dir, frame, this.game.playerTint(), this.game.playerOutfit()),
       this._playerAt.x, this._playerAt.y, { flip: view.flip });
   };
 
@@ -6641,7 +6693,8 @@ html, body {
     Art.shadow(ctx, this.px, this.py * SQ, 9);
     bodies.push({
       y: this.py + 0.1, at: place(this.px, this.py), facing: this.pfacing,
-      phase: this.animPhase, moving: this.moving, tint: this.game.playerTint(), isPlayer: true
+      phase: this.animPhase, moving: this.moving, tint: this.game.playerTint(),
+      outfit: this.game.playerOutfit(), isPlayer: true
     });
 
     ctx.restore();
@@ -6661,7 +6714,8 @@ html, body {
         bd.at.y += f * 34;
       }
       var sprFn = bd.isPlayer ? V.Spr.player : V.Spr.civilian;
-      V.Px.draw(ctx, sprFn(view.dir, frame, bd.tint), bd.at.x, bd.at.y, opts);
+      /* only the player has an outfit; a civilian ignores the extra argument */
+      V.Px.draw(ctx, sprFn(view.dir, frame, bd.tint, bd.outfit), bd.at.x, bd.at.y, opts);
     }
 
     /* Garatu comes through the rift above the square */
@@ -6795,14 +6849,14 @@ html, body {
         ctx.fillStyle = 'rgba(190,150,255,' + rs.range(0.06, 0.2).toFixed(3) + ')';
         ctx.fillRect(lx, ly - 60 * s, 2 * s, len);
       }
-      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), pxx, pyy,
+      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint(), this.game.playerOutfit()), pxx, pyy,
         { scale: pScale, rot: t * 1.1 });
     } else {
       var lift = U.clamp((t - 4.5) / 3, 0, 1);
       var lxx = U.lerp(cw * 0.28, gx - 40 * s, lift);
       var lyy = U.lerp(ch * 0.62, gy + 10 * s, lift) - lift * 20 * s;
       Art.shadow(ctx, lxx, ch * 0.62, 16 * (1 - lift * 0.7), 0.2 * (1 - lift));
-      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint()), lxx, lyy,
+      V.Px.draw(ctx, V.Spr.player('down', 0, this.game.playerTint(), this.game.playerOutfit()), lxx, lyy,
         { scale: pScale, rot: lift * 0.5 });
     }
 
@@ -7595,6 +7649,7 @@ html, body {
       sv.weapon = item.weapon;
     }
     if (item.tint) sv.equippedTint = item.tint;
+    if (item.outfit) sv.equippedOutfit = item.outfit;
     if (item.decor) sv.decor[item.decor] = true;
 
     this.persist();
@@ -7620,6 +7675,7 @@ html, body {
 
   /* The shirt, not the whole outfit - see Spr.player. Black by default. */
   Game.prototype.playerTint = function () { return this.save.equippedTint || '#17141c'; };
+  Game.prototype.playerOutfit = function () { return this.save.equippedOutfit || null; };
 
   /* GDD 7.1: the scythe unlock lasts for the rest of this run only. */
   Game.prototype.unlockScythe = function () {

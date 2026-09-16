@@ -281,7 +281,7 @@
     var Px = V.Px, Spr = V.Spr;
     var view = viewOf(this.facing);
     var frame = walkFrame(this.animPhase, this.moving);
-    var spr = Spr.player(view.dir, frame, this.tint);
+    var spr = Spr.player(view.dir, frame, this.tint, this.outfit);
     var y = this.sy - (this.z || 0) * 0.26;
 
     Px.shadow(ctx, this.sx, this.sy, 7, this.z > 2 ? 0.16 : 0.28);
