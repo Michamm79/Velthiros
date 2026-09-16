@@ -510,6 +510,7 @@
       sv.weapon = item.weapon;
     }
     if (item.tint) sv.equippedTint = item.tint;
+    if (item.outfit) sv.equippedOutfit = item.outfit;
     if (item.decor) sv.decor[item.decor] = true;
 
     this.persist();
@@ -535,6 +536,7 @@
 
   /* The shirt, not the whole outfit - see Spr.player. Black by default. */
   Game.prototype.playerTint = function () { return this.save.equippedTint || '#17141c'; };
+  Game.prototype.playerOutfit = function () { return this.save.equippedOutfit || null; };
 
   /* GDD 7.1: the scythe unlock lasts for the rest of this run only. */
   Game.prototype.unlockScythe = function () {
