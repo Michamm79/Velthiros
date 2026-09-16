@@ -277,6 +277,42 @@
     return true;
   };
 
+  /* Electricity. Each arc is a short jagged polyline that lives for about a
+     ninth of a second and then jumps somewhere else entirely - that restless
+     relocation is what reads as electricity; an arc that eases from place to
+     place reads as a ribbon of light instead.
+
+     Seeded off a counter rather than Math.random so every frame inside one
+     arc's life draws the SAME arc. Re-rolling per frame makes it flicker into
+     mush at 60fps. */
+  function sparkRand(n) {
+    n = (n * 1103515245 + 12345) & 0x7fffffff;
+    return ((n >> 8) % 10007) / 10007;
+  }
+
+  function drawSparks(ctx, cx, cy, t, colour) {
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = colour;
+    for (var i = 0; i < 4; i++) {
+      var life = Math.floor(t * 9 + i * 3.7);
+      var a = sparkRand(life * 31 + i * 7) * U.TAU;
+      var rad = 8 + sparkRand(life * 17 + i * 3) * 8;
+      var x = cx + Math.cos(a) * rad;
+      var y = cy - 13 + Math.sin(a) * rad * Art.SQUASH;
+      ctx.globalAlpha = 0.6 + sparkRand(life + i * 11) * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (var seg = 1; seg <= 3; seg++) {
+        x += (sparkRand(life * 7 + i * 5 + seg) - 0.5) * 8;
+        y += (sparkRand(life * 13 + i * 3 + seg) - 0.5) * 7;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   Player.prototype.draw = function (ctx, t) {
     var Px = V.Px, Spr = V.Spr;
     var view = viewOf(this.facing);
@@ -323,6 +359,10 @@
     var flash = this.hurtFlash > 0 && Math.floor(this.hurtFlash * 24) % 2 === 0;
     Px.draw(ctx, spr, this.sx, y, { flip: view.flip, alpha: flash ? 0.45 : null });
     if (!behind) Px.draw(ctx, wpn, wx, wy, wOpts);
+
+    /* armour that carries a charge arcs it around the wearer */
+    var kit = this.outfit && V.D.OUTFITS[this.outfit];
+    if (kit && kit.spark && !this.hidden) drawSparks(ctx, this.sx, y, t, kit.spark);
 
     if (this.hidden) {
       ctx.fillStyle = 'rgba(120,200,140,0.22)';

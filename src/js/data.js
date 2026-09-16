@@ -278,10 +278,10 @@
     /* Four suits of armour, not four dye jobs. Every one of these is a real
        outfit now - the tint still recolours the sleeves, but the garments are
        what you actually see. Priced by how much armour each one is. */
-    { id: 'shirt_red',   cat: 'Armour', name: 'Royal',      price: 120, desc: 'Crimson plate under gold.', tint: '#b02a37', outfit: 'royal' },
+    { id: 'shirt_red',   cat: 'Armour', name: 'Royal',      price: 120, desc: 'Black and gold robes, crowned in fire.', tint: '#1e1a26', outfit: 'royal' },
     { id: 'shirt_gold',  cat: 'Armour', name: 'Ophiuchus',  price: 220, desc: 'Black, emerald and bone.', tint: '#1f7a52', outfit: 'ophiuchus' },
-    { id: 'shirt_blue',  cat: 'Armour', name: 'Reaper',     price: 300, desc: 'Sash, wraps and a ribbon.', tint: '#2e2a42', outfit: 'reaper' },
-    { id: 'shirt_black', cat: 'Armour', name: 'Grayson',    price: 480, desc: 'Every colour, on black.', tint: '#241d33', outfit: 'grayson' },
+    { id: 'shirt_blue',  cat: 'Armour', name: 'Reaper',     price: 300, desc: 'Sash, wraps and baggy silks.', tint: '#2e2a42', outfit: 'reaper' },
+    { id: 'shirt_black', cat: 'Armour', name: 'Grayson',    price: 480, desc: 'Gold-trimmed cloak. And it sparks.', tint: '#1b1826', outfit: 'grayson' },
     { id: 'decor_rug',   cat: 'Decor',   name: 'Woven Rug',      price: 80,  desc: 'The floor is less cold now.',           decor: 'rug' },
     { id: 'decor_plant', cat: 'Decor',   name: 'Corner Fern',    price: 70,  desc: 'It is alive. Probably.',                decor: 'plant' },
     { id: 'decor_lamp',  cat: 'Decor',   name: 'Warm Lamp',      price: 110, desc: 'Makes the room feel like a home.',      decor: 'lamp' },
@@ -350,61 +350,62 @@
      a palette swap alone is what "they all look the same" meant last time. So
      Royal gets pauldrons and a chest plate, Ophiuchus a long coat and a high
      collar, Reaper a sash and baggy legs, and Grayson all of it at once. */
+  /* Four named suits of armour. Each one is a set of garments handed to
+     `humanoidGrid`, so a suit is a data entry rather than more sprite code.
+
+     They are told apart by SHAPE first and colour second - a palette swap
+     alone is what "they all look the same" meant - and every one of them is
+     FITTED. The body is six columns wide at 18x28, so a garment any wider has
+     already lost the waist and reads as a sack. Ophiuchus is the single
+     exception: its top is meant to hang, and it says so with `loose`. */
   D.OUTFITS = {
-    /* ROYAL - crimson under gold. The regal one: plate over the chest, gold
-       trim along its edges, gold-capped pauldrons and a gold belt. */
+    /* ROYAL - elegant black and gold robes under a helm with a crown of gold
+       fire. No shoulder plate: the silhouette is the helm and the flame, and
+       every bit of colour on the robe is trim rather than fill. */
     royal: {
-      plate: '$', plateLite: 'n', plateTrim: 'Y',
-      pauldron: 'U', pauldronLite: 'Y',
-      belt: 'Y',
-      trouser: 'P', trouserLite: 'p',
+      plate: 'U', plateLite: '@', plateTrim: 'Y',
+      collar: 'U', collarLite: '#',
+      helm: 'U', helmTrim: 'Y', helmEye: 'Y',
+      helmFlame: '#', helmFlameLite: '!',
+      trouser: 'U',
       boot: 'U', cuff: 'Y',
-      sash: 'N', sashDark: '@', sashTie: 'Y'
+      sash: '#', sashDark: '@'
     },
 
-    /* OPHIUCHUS - black, green and white. The serpent-bearer: a long coat with
-       a high collar, emerald down the front and bone-white at the throat and
-       the hem, everything else stark black. */
+    /* OPHIUCHUS - the serpent-bearer. Black and emerald with bone at the
+       throat, and the one top in the shop that is allowed to hang loose. */
     ophiuchus: {
-      plate: 'U', plateLite: '<', plateTrim: 'O',
+      plate: 'U', plateLite: '<', plateTrim: 'O', loose: true,
       collar: 'U', collarLite: 'O',
-      coat: 'U', coatTrim: '>', coatLong: true,
       belt: '<',
       trouser: 'U', trouserLite: 'x',
       boot: 'U', cuff: 'O',
       wrap: '>'
     },
 
-    /* REAPER - the set that used to be called Reaper Weave, moved down a slot.
-       Gold sash with a crimson tie, baggy teal trousers with a lit seam, gold
-       boot cuffs, wrapped wrists, and the celestial ribbon. */
+    /* REAPER - gold sash with a crimson tie, baggy teal trousers with a lit
+       seam, gold boot cuffs and wrapped wrists. */
     reaper: {
-      trouser: 'o', trouserLite: '%',   /* baggy teal, seam of light */
+      trouser: 'o', trouserLite: '%',
       baggy: true,
       sash: '#', sashDark: '@', sashTie: '$',
-      cuff: 'Y', wrap: 'q',
-      /* celestial ribbon - a silk stole over both shoulders that trails out
-         past the body on either side. Cool and luminous on purpose: the sash
-         already owns the warm gold, and two warm ribbons at sprite size read
-         as one confused shape. */
-      ribbon: '+', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
+      cuff: 'Y', wrap: 'q'
     },
 
-    /* GRAYSON - the one you have to find. Stark black carrying purple, blue and
-       pink: a black plate lit violet, pink-edged pauldrons, an electric-blue
-       collar, black coat tails and a pink-and-violet ribbon. It is the only
-       suit wearing every piece at once, which is the point - it should be
-       unmistakable across an arena. */
+    /* GRAYSON - a black cloak trimmed in gold, clasped at the throat and
+       falling down the outside of the arms, over fitted white clothing, with
+       a blue stone set in the chest that matches the scythe's edge.
+
+       `spark` is read by the player's draw rather than by the sprite: it arcs
+       electricity around whoever is wearing it. */
     grayson: {
-      plate: 'U', plateLite: 'y', plateTrim: '?',
-      pauldron: 'U', pauldronLite: '?',
-      collar: 'U', collarLite: ';',
-      coat: 'U', coatTrim: ';', coatLong: true,
-      belt: ':',
-      trouser: 'U', trouserLite: 'p',
-      boot: 'U', cuff: '?',
-      wrap: ';',
-      ribbon: '?', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
+      plate: 'Q', plateLite: 'q', plateTrim: 'q',
+      cloak: 'U', cloakTrim: '#',
+      collar: 'U', collarLite: '#',
+      chestGem: ';', chestGemLite: '/',
+      trouser: 'U', trouserLite: 'x',
+      boot: 'U',
+      spark: '#7fe4ff'
     }
   };
 

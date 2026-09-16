@@ -180,48 +180,42 @@ palette key, which is the main defence against a typo in hand-placed pixel data.
 
 **Clothing has two kinds: a tint and an outfit.** A tint only recolours the sleeves already
 on the sprite, so anything with its own *shape* cannot be one. `D.OUTFITS` holds garment sets
-that are handed straight to `humanoidGrid`, which learned nine optional pieces: a chest plate,
-pauldrons, a high collar, coat tails, a sash with a tie that trails down one hip, a baggy leg
-cut, trimmed boot tops, wrapped wrists, and a celestial ribbon. An
-outfit overlays the default build rather than replacing it - the hair, the skin and the open
+that are handed straight to `humanoidGrid`, which learned ten optional pieces: a fitted chest
+panel, a cloak, a high collar, a helm with a crown of fire, a stone set in the chest, a choker,
+wrist bands, a sash with a tie that trails down one hip, a baggy leg cut and trimmed boot tops.
+An outfit overlays the default build rather than replacing it - the hair, the skin and the open
 top are who he is, the garments are what he is wearing - so adding another outfit is a data
 edit. `save.equippedOutfit` sits beside `equippedTint`, is set by any shop item carrying an
 `outfit` key, and is cleared by a full reset the same way.
 
-At 18x28 the sash is the whole point: it is the loudest thing on the character and the only
-piece readable from across an arena, which is why it is worn over everything and given a tie
-that breaks the silhouette on one side.
-
 **Four named suits, told apart by shape first.** A palette swap alone is what "they all look
-the same" meant, so each set takes a different combination of pieces rather than a different
-colour of the same one: Royal has pauldrons and a chest plate, Ophiuchus a long coat and a high
-collar, Reaper a sash and baggy legs, Grayson all of it at once. The pauldron is the cheapest
-strong silhouette change available here - it widens the shoulders by two columns and you read
-it before you read any colour - and it has to be capped in a tone that contrasts with the plate
-under it, or a pauldron in a shade of its own plate simply is not there.
+the same" meant, so each set takes a different combination of pieces: Royal a helm crowned in
+fire, Ophiuchus a loose top, Reaper a sash and baggy legs, Grayson a cloak over fitted white.
+
+**Everything is fitted.** The body is six columns wide at 18x28, so a garment any wider has
+already lost the waist and reads as a sack - the chest panel is the width of the torso and
+nothing flares. `loose` is the single opt-out, for the one top that is meant to hang. That one
+rule killed three earlier pieces: pauldrons added two columns at each shoulder, coat tails hung
+outside the legs, and a split coat flared to the hem; all three bulked the silhouette out until
+the character underneath stopped reading.
+
+Trim has to sit on edges, not fill. Royal took three goes: banding the chest panel top and
+bottom made stripes with the sash, and framing all three of its edges made a gold U around a
+black hole. A collar line and one seam down the front is how a robe closes, and that is all it
+needs.
+
+**Armour that carries a charge arcs it.** An outfit may name a `spark` colour, which the
+player's draw reads rather than the sprite: `drawSparks` lays four short jagged polylines around
+the wearer. Each arc lives about a ninth of a second and then jumps somewhere else entirely -
+that restless relocation is what reads as electricity, where an arc easing from place to place
+reads as a ribbon of light. They are seeded off a counter rather than `Math.random`, so every
+frame within one arc's life draws the *same* arc; re-rolling per frame flickers into mush at
+60fps.
 
 Shop items name their outfit; nothing maps an item id to an outfit by hand. That mapping used
 to live in the smoke test as `shirt_black` -> `'reaper'`, and renaming the line-up failed the
 test on a rename rather than on a bug. It now checks that buying an item equips what that item
 declares, and that every armour in the shop names an outfit that exists.
-
-**A garment may hang outside the body.** The ribbon is the first that does, and it needs
-columns the 18-wide humanoid grid has not got, so `Grid.pad` returns a wider copy with the
-content offset into it and the ribbon is drawn on that. Sprites bake from the bottom centre,
-so a padded sprite still stands in the same place; only outfits that ask for reach pay for it,
-rather than widening all 138 sprites. Anything comparing two player sprites has to work in
-anchor-relative coordinates for the same reason - the ribbon takes the player from 18 wide to
-34, and walking two flattened grids index by index compares unrelated pixels.
-
-**The ribbon took five passes, and every failure was the same failure.** At this size a
-*symmetric* pair of tails reads as something other than cloth no matter what curve it follows:
-straight out was wings, out-then-down was a cape, and adding a curl so the tips rose turned
-them into antennae and then into hooks. It only became silk once it stopped matching - one long
-streamer off one shoulder, a short fall off the other, joined across the back. The path is a
-straight fall with a ripple laid over it, the ripple growing with distance from the shoulder
-because that is how cloth held at one end behaves, and each step is drawn as a line from the
-previous point: oversampling fills a vertical gap but not a diagonal one, and the tip broke off
-into loose pixels floating beside the shoulder until it was joined.
 
 **Every character is shaded by the same rule.** The hero was rebuilt with three tones per
 material; the rest of the cast was still large flat fills, which is why he looked like he came
