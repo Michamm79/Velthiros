@@ -206,22 +206,28 @@ test on a rename rather than on a bug. It now checks that buying an item equips 
 declares, and that every armour in the shop names an outfit that exists.
 
 **A garment may hang outside the body.** The ribbon is the first that does, and it needs
-columns the 18-wide humanoid grid has not got, so `Grid.pad` returns a wider copy with the
-content offset into it and the ribbon is drawn on that. Sprites bake from the bottom centre,
+columns the 18-wide humanoid grid has not got - and, since the omega arches over the head, rows
+above it too - so `Grid.pad` returns a larger copy with the content offset into it and the
+ribbon is drawn on that. Sprites bake from the bottom centre,
 so a padded sprite still stands in the same place; only outfits that ask for reach pay for it,
 rather than widening all 138 sprites. Anything comparing two player sprites has to work in
 anchor-relative coordinates for the same reason - the ribbon takes the player from 18 wide to
 34, and walking two flattened grids index by index compares unrelated pixels.
 
-**The ribbon took five passes, and every failure was the same failure.** At this size a
-*symmetric* pair of tails reads as something other than cloth no matter what curve it follows:
-straight out was wings, out-then-down was a cape, and adding a curl so the tips rose turned
-them into antennae and then into hooks. It only became silk once it stopped matching - one long
-streamer off one shoulder, a short fall off the other, joined across the back. The path is a
-straight fall with a ripple laid over it, the ripple growing with distance from the shoulder
-because that is how cloth held at one end behaves, and each step is drawn as a line from the
-previous point: oversampling fills a vertical gap but not a diagonal one, and the tip broke off
-into loose pixels floating beside the shoulder until it was joined.
+**The ribbon is an omega**, and that shape is what finally fixed it. Hung off the shoulders it
+kept reading as something else no matter what curve it followed - straight out was wings,
+out-then-down was a cape, a curled tip was antennae and then hooks, and a symmetric pair was
+always a pair of *something*. Arching it over the head solves that by putting the ribbon
+somewhere no wing or cape goes: nothing else in the sprite occupies that space, so the shape is
+unambiguous on sight. The loop is two rows thick and the two rows take different tones, so the
+silk reads as two-sided - red outside and blue inside on Grayson.
+
+The arch needs visible air between itself and the hair. At rx 7 / ry 8 it sat three pixels off
+and read as a hood; it is 9 by 11 now. The tails leave the omega's feet, tuck in past the arms
+and then sweep out - a tail that only ever travels outward never touches the body again, which
+is a streamer pinned to the air beside a shoulder rather than silk falling off one. Each step
+draws a line from the previous point: oversampling fills a vertical gap but not a diagonal one,
+and the tip broke off into loose pixels until it was joined.
 
 **Every character is shaded by the same rule.** The hero was rebuilt with three tones per
 material; the rest of the cast was still large flat fills, which is why he looked like he came

@@ -612,21 +612,21 @@ html, body {
       ribbon: '+', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
     },
 
-    /* GRAYSON - the one you have to find. Stark black carrying purple, blue and
-       pink: a black plate lit violet, pink-edged pauldrons, an electric-blue
-       collar, black coat tails and a pink-and-violet ribbon. It is the only
-       suit wearing every piece at once, which is the point - it should be
-       unmistakable across an arena. */
+    /* GRAYSON - the one you have to find, and deliberately the quietest build
+       in the shop rather than the loudest. It is the default silhouette: open
+       top, no plate, no pauldrons, no coat. What it carries instead is the
+       celestial ribbon in red and blue, red bands at both wrists and a blue
+       choker at the throat.
+
+       The ribbon is two-sided here: red on the outer face of the arch and
+       blue on the inner, so the loop shows both colours at once rather than
+       alternating along its length, which at this size just looks like dirt. */
     grayson: {
-      plate: 'U', plateLite: 'y', plateTrim: '?',
-      pauldron: 'U', pauldronLite: '?',
-      collar: 'U', collarLite: ';',
-      coat: 'U', coatTrim: ';', coatLong: true,
-      belt: ':',
-      trouser: 'U', trouserLite: 'p',
-      boot: 'U', cuff: '?',
-      wrap: ';',
-      ribbon: '?', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
+      trouser: 'M', trouserLite: 'V',
+      boot: 'U',
+      bracelet: '$',                    /* red bands at the wrists */
+      necklace: ';', pendant: 'c',      /* blue choker, lit stone */
+      ribbon: 'n', ribbonTurn: ';', ribbonReach: 8
     }
   };
 
@@ -2280,66 +2280,76 @@ html, body {
      end, which is what makes it read as fabric rather than as a wire.
 
      The wave is phase-shifted per walk frame, so it undulates as you move. */
-  /* One length of silk, hung from the shoulder and falling outward.
+  /* ------------------------------------------------------- CELESTIAL RIBBON
+     An omega: the loop arches above and around the head, comes down outside
+     the shoulders, and the two tails flow off around the arms.
 
-     Four passes to get here and each one failed the same way: at 18x28 a
-     SYMMETRIC pair of tails reads as wings, a cape or a pair of parentheses,
-     whatever curve you give it. Straight out was wings. Out-then-down was a
-     cape. Adding a curl so the tips rose turned them into antennae, then into
-     a pair of hooks.
+     Earlier passes hung it off the shoulders and it kept reading as something
+     else - straight out was wings, out-and-down was a cape, a curled tip was
+     antennae. The loop fixes that by putting the ribbon somewhere no wing or
+     cape goes: over the head. Nothing else in the sprite occupies that space,
+     so the shape is unambiguous the moment you see it.
 
-     So the silhouette is asymmetric instead: one long streamer flowing off
-     one shoulder, a short fall off the other, joined over the back. That is
-     also how the reference reads - cloth caught mid-motion, not a matched
-     set of anything.
-
-     The path is a straight fall with a ripple laid over it, the ripple
-     growing with distance from the shoulder because that is how cloth
-     behaves: held at one end, loose at the other. */
+     It needs headroom the 18x28 humanoid grid has not got, so the grid pads
+     upward as well as outward. Sprites bake from the bottom centre, so the
+     character still stands in the same place however tall the grid gets. */
   function ribbonTail(g, x0, y0, side, reach, fall, ripple, phase, o) {
     var steps = Math.max(reach, 5) * 3;
     var px = x0, py = y0;
     for (var i = 1; i <= steps; i++) {
       var t = i / steps;
-      var x = x0 + side * Math.round(t * reach);
+      /* Tucks in past the arm before it sweeps out. A tail that only ever
+         travels outward leaves the omega's foot and never touches the body
+         again, which is not silk falling off a shoulder - it is a streamer
+         pinned to the air beside one. */
+      var x = x0 + side * Math.round(reach * (t * t * 1.9 - t * 0.9));
       var y = y0 + Math.round(t * fall + Math.sin(t * Math.PI * 1.7 + phase) * ripple * (0.3 + t));
-      /* Joined to the previous point rather than dotted along the curve:
-         oversampling alone fills a vertical gap but not a diagonal one, and
-         the tip broke off into loose pixels floating beside the shoulder. */
+      /* joined to the previous point: oversampling fills a vertical gap but
+         not a diagonal one, and the tip broke off into loose pixels */
       g.line(o.ribbon, px, py, x, y);
-      /* body near the shoulder, tapering to a single pixel at the tip */
-      if (t < 0.72) g.line(o.ribbonTurn || o.ribbon, px, py + 1, x, y + 1);
-      if (t < 0.34) g.line(o.ribbonDark || o.ribbonTurn || o.ribbon, px, py + 2, x, y + 2);
+      if (t < 0.7) g.line(o.ribbonTurn || o.ribbon, px, py + 1, x, y + 1);
       px = x; py = y;
     }
   }
 
-  function celestialRibbon(g, o, pad, bodyTop) {
-    var cx = 9 + pad;
+  function celestialRibbon(g, o, padX, padY, bodyTop, headCy) {
+    var cx = 9 + padX;
+    var hy = headCy + padY;
+    var top = bodyTop + padY;
     /* frame 0 rests; 1 and 2 are the two halves of a stride. The silk lags
        behind the body, so the ripple is phase-shifted rather than redrawn. */
     var ph = o.frame === 1 ? 0.9 : (o.frame === 2 ? -0.8 : 0);
+    /* Wide enough to be a ring AROUND the head rather than an outline OF it.
+       At rx 7 / ry 8 the arch sat three pixels off the hair and read as a hood;
+       it needs visible air between the two or the shape is lost. */
+    var rx = o.dir === 'side' ? 6 : 9, ry = 11;
 
-    if (o.dir === 'side') {
-      /* from the side it streams BEHIND you: a stub over the near shoulder,
-         and the whole length trailing back off the far one */
-      g.rect(o.ribbon, cx - 2, bodyTop - 1, 6, 2);
-      g.set(cx + 3, bodyTop + 1, o.ribbonTurn || o.ribbon);
-      ribbonTail(g, cx - 2, bodyTop, -1, pad + 2, 13, 2.4, ph, o);
-      return;
+    /* the arch: lower-left, over the top, lower-right. Two rows thick, and
+       the two rows take different tones so the silk reads as two-sided. */
+    var a0 = Math.PI * 0.86, a1 = Math.PI * 2.14;
+    var steps = 46, ex = [0, 0], ey = [0, 0];
+    var px = null, py = null, pxi = 0, pyi = 0;
+    for (var i = 0; i <= steps; i++) {
+      var t = i / steps;
+      var a = a0 + (a1 - a0) * t;
+      var ca = Math.cos(a), sa = Math.sin(a);
+      var x = Math.round(cx + ca * rx);
+      var y = Math.round(hy + sa * ry);
+      var xi = Math.round(cx + ca * (rx - 1));
+      var yi = Math.round(hy + sa * (ry - 1));
+      if (px !== null) {
+        g.line(o.ribbon, px, py, x, y);                        /* outer face */
+        g.line(o.ribbonTurn || o.ribbon, pxi, pyi, xi, yi);    /* inner face */
+      }
+      px = x; py = y; pxi = xi; pyi = yi;
+      if (i === 0) { ex[0] = x; ey[0] = y; }
+      if (i === steps) { ex[1] = x; ey[1] = y; }
     }
-    /* over both shoulders: pads either side of the neck rather than a band
-       across the chest, since the sash already owns the horizontal here.
-       They sit at bodyTop-1, clear of the arms which start at bodyTop+1. */
-    g.rect(o.ribbon, cx - 6, bodyTop - 1, 3, 2);
-    g.rect(o.ribbon, cx + 4, bodyTop - 1, 3, 2);
-    if (o.dir === 'up') {
-      /* from behind you also see the span across the shoulderblades */
-      g.rect(o.ribbonTurn || o.ribbon, cx - 4, bodyTop - 1, 9, 1);
-    }
-    /* the long streamer, and the short fall on the other hip */
-    ribbonTail(g, cx - 6, bodyTop, -1, pad, 15, 2.6, ph, o);
-    ribbonTail(g, cx + 6, bodyTop, 1, 2, 7, 1.4, -ph, o);
+
+    /* the tails, flowing off the feet of the omega and down past the arms.
+       Unequal on purpose - matched tails read as a pair of anything. */
+    ribbonTail(g, ex[0], ey[0], -1, padX, top + 15 - ey[0], 2.6, ph, o);
+    ribbonTail(g, ex[1], ey[1], 1, padX - 2, top + 11 - ey[1], 1.8, -ph * 1.4, o);
   }
 
   function humanoidGrid(o) {
@@ -2467,6 +2477,19 @@ html, body {
         g.set(3, bodyBot + 4, o.sashTie);
       }
     }
+    /* ---- a choker at the throat and bands at the wrists ---- */
+    if (o.necklace) {
+      g.rect(o.necklace, 7, bodyTop, 4, 1);
+      g.set(6, bodyTop, o.necklace);
+      g.set(11, bodyTop, o.necklace);
+      if (o.pendant) g.set(cx, bodyTop + 1, o.pendant);
+    }
+    if (o.bracelet) {
+      var brY = bodyTop + sleeve;
+      if (o.dir === 'side') g.rect(o.bracelet, 11, brY, 2, 1);
+      else { g.rect(o.bracelet, 4, brY, 2, 1); g.rect(o.bracelet, 12, brY, 2, 1); }
+    }
+
     /* ---- wrapped wrists ---- */
     if (o.wrap) {
       var wy = bodyTop + 1 + sleeve;
@@ -2521,9 +2544,10 @@ html, body {
        last and over the top: a stole sits ON the shoulders, and at this size
        anything drawn behind the torso is simply invisible. */
     if (o.ribbon) {
-      var pad = o.ribbonReach || 7;
-      g = g.pad(pad, pad, 0, 0);
-      celestialRibbon(g, o, pad, bodyTop);
+      var padX = o.ribbonReach || 7;
+      var padY = 8;                      /* headroom for the arch */
+      g = g.pad(padX, padX, padY, 0);
+      celestialRibbon(g, o, padX, padY, bodyTop, headCy);
     }
 
     if (o.form) form(g, o.form);

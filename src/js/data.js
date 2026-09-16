@@ -390,21 +390,21 @@
       ribbon: '+', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
     },
 
-    /* GRAYSON - the one you have to find. Stark black carrying purple, blue and
-       pink: a black plate lit violet, pink-edged pauldrons, an electric-blue
-       collar, black coat tails and a pink-and-violet ribbon. It is the only
-       suit wearing every piece at once, which is the point - it should be
-       unmistakable across an arena. */
+    /* GRAYSON - the one you have to find, and deliberately the quietest build
+       in the shop rather than the loudest. It is the default silhouette: open
+       top, no plate, no pauldrons, no coat. What it carries instead is the
+       celestial ribbon in red and blue, red bands at both wrists and a blue
+       choker at the throat.
+
+       The ribbon is two-sided here: red on the outer face of the arch and
+       blue on the inner, so the loop shows both colours at once rather than
+       alternating along its length, which at this size just looks like dirt. */
     grayson: {
-      plate: 'U', plateLite: 'y', plateTrim: '?',
-      pauldron: 'U', pauldronLite: '?',
-      collar: 'U', collarLite: ';',
-      coat: 'U', coatTrim: ';', coatLong: true,
-      belt: ':',
-      trouser: 'U', trouserLite: 'p',
-      boot: 'U', cuff: '?',
-      wrap: ';',
-      ribbon: '?', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
+      trouser: 'M', trouserLite: 'V',
+      boot: 'U',
+      bracelet: '$',                    /* red bands at the wrists */
+      necklace: ';', pendant: 'c',      /* blue choker, lit stone */
+      ribbon: 'n', ribbonTurn: ';', ribbonReach: 8
     }
   };
 
