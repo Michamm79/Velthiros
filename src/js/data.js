@@ -345,7 +345,12 @@
       trouser: 'o', trouserLite: '%',   /* baggy teal, seam of light */
       baggy: true,
       sash: '#', sashDark: '@', sashTie: '$',
-      cuff: 'Y', wrap: 'q'
+      cuff: 'Y', wrap: 'q',
+      /* celestial ribbon - a silk stole over both shoulders that trails out
+         past the body on either side. Cool and luminous on purpose: the sash
+         already owns the warm gold, and two warm ribbons at sprite size read
+         as one confused shape. */
+      ribbon: '+', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
     }
   };
 

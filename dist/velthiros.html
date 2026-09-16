@@ -567,7 +567,12 @@ html, body {
       trouser: 'o', trouserLite: '%',   /* baggy teal, seam of light */
       baggy: true,
       sash: '#', sashDark: '@', sashTie: '$',
-      cuff: 'Y', wrap: 'q'
+      cuff: 'Y', wrap: 'q',
+      /* celestial ribbon - a silk stole over both shoulders that trails out
+         past the body on either side. Cool and luminous on purpose: the sash
+         already owns the warm gold, and two warm ribbons at sprite size read
+         as one confused shape. */
+      ribbon: '+', ribbonTurn: '=', ribbonDark: ':', ribbonReach: 8
     }
   };
 
@@ -1942,6 +1947,19 @@ html, body {
     for (var i = 0; i < n; i++) this.set(x + r.int(0, w - 1), y + r.int(0, h - 1), c);
     return this;
   };
+  /* Return a wider/taller copy with the existing content offset into it.
+     Some garments hang outside the body's own bounds - a trailing ribbon needs
+     columns the 18-wide humanoid grid does not have - and widening the grid for
+     everyone would pay that cost on all 138 sprites. Bake anchors from the
+     bottom centre, so a padded sprite still stands in the same place. */
+  Grid.prototype.pad = function (l, r, t, b) {
+    var out = new Grid(this.w + l + r, this.h + t + b);
+    for (var y = 0; y < this.h; y++) {
+      for (var x = 0; x < this.w; x++) out.set(x + l, y + t, this.get(x, y));
+    }
+    return out;
+  };
+
   /* copy the left half onto the right, so symmetric sprites are authored once */
   Grid.prototype.mirrorX = function () {
     var mid = Math.floor(this.w / 2);
@@ -2130,7 +2148,10 @@ html, body {
     '-': '#b4bda2',   /* husk flesh, light */
     '(': '#e8e0d2',   /* feather shade - warm, where 'i' is cold */
     '^': '#e07a42',   /* coral growth */
-    ')': '#c2b8a8'    /* feather shadow - warm, where 'i' is cold */
+    ')': '#c2b8a8',   /* feather shadow - warm, where 'i' is cold */
+    '+': '#f4e8ff',   /* celestial silk, the face catching the light */
+    '=': '#b79ae0',   /* celestial silk, where the ribbon turns */
+    ':': '#6d54a6'    /* celestial silk, the far side of a fold */
   });
 
   /* Give a flat fill a lit edge and a shadow, the way the hero's hair, denim
@@ -2185,6 +2206,81 @@ html, body {
   /* Shared humanoid. dir: 'down' | 'up' | 'side'. frame: 0 idle, 1/2 walk.
      `bare` picks the hero's build; without it you get an ordinary clothed
      person, which is what the square crowd needs. */
+  /* ------------------------------------------------------------ RIBBON
+     A celestial ribbon in the Sun Wukong / feitian line: a long silk stole
+     that passes over both shoulders and trails out and down on either side,
+     rather than a scarf knotted at the throat.
+
+     The whole reason it works at 18x28 is that it leaves the body's bounds -
+     a ribbon that stays inside the silhouette is a collar. The grid is padded
+     outward first, and the tails are walked as a wave that opens up as it
+     travels: tight at the shoulder, wide and loose at the tip, drifting
+     downward the whole way. It is thick near the shoulder and one pixel at the
+     end, which is what makes it read as fabric rather than as a wire.
+
+     The wave is phase-shifted per walk frame, so it undulates as you move. */
+  /* One length of silk, hung from the shoulder and falling outward.
+
+     Four passes to get here and each one failed the same way: at 18x28 a
+     SYMMETRIC pair of tails reads as wings, a cape or a pair of parentheses,
+     whatever curve you give it. Straight out was wings. Out-then-down was a
+     cape. Adding a curl so the tips rose turned them into antennae, then into
+     a pair of hooks.
+
+     So the silhouette is asymmetric instead: one long streamer flowing off
+     one shoulder, a short fall off the other, joined over the back. That is
+     also how the reference reads - cloth caught mid-motion, not a matched
+     set of anything.
+
+     The path is a straight fall with a ripple laid over it, the ripple
+     growing with distance from the shoulder because that is how cloth
+     behaves: held at one end, loose at the other. */
+  function ribbonTail(g, x0, y0, side, reach, fall, ripple, phase, o) {
+    var steps = Math.max(reach, 5) * 3;
+    var px = x0, py = y0;
+    for (var i = 1; i <= steps; i++) {
+      var t = i / steps;
+      var x = x0 + side * Math.round(t * reach);
+      var y = y0 + Math.round(t * fall + Math.sin(t * Math.PI * 1.7 + phase) * ripple * (0.3 + t));
+      /* Joined to the previous point rather than dotted along the curve:
+         oversampling alone fills a vertical gap but not a diagonal one, and
+         the tip broke off into loose pixels floating beside the shoulder. */
+      g.line(o.ribbon, px, py, x, y);
+      /* body near the shoulder, tapering to a single pixel at the tip */
+      if (t < 0.72) g.line(o.ribbonTurn || o.ribbon, px, py + 1, x, y + 1);
+      if (t < 0.34) g.line(o.ribbonDark || o.ribbonTurn || o.ribbon, px, py + 2, x, y + 2);
+      px = x; py = y;
+    }
+  }
+
+  function celestialRibbon(g, o, pad, bodyTop) {
+    var cx = 9 + pad;
+    /* frame 0 rests; 1 and 2 are the two halves of a stride. The silk lags
+       behind the body, so the ripple is phase-shifted rather than redrawn. */
+    var ph = o.frame === 1 ? 0.9 : (o.frame === 2 ? -0.8 : 0);
+
+    if (o.dir === 'side') {
+      /* from the side it streams BEHIND you: a stub over the near shoulder,
+         and the whole length trailing back off the far one */
+      g.rect(o.ribbon, cx - 2, bodyTop - 1, 6, 2);
+      g.set(cx + 3, bodyTop + 1, o.ribbonTurn || o.ribbon);
+      ribbonTail(g, cx - 2, bodyTop, -1, pad + 2, 13, 2.4, ph, o);
+      return;
+    }
+    /* over both shoulders: pads either side of the neck rather than a band
+       across the chest, since the sash already owns the horizontal here.
+       They sit at bodyTop-1, clear of the arms which start at bodyTop+1. */
+    g.rect(o.ribbon, cx - 6, bodyTop - 1, 3, 2);
+    g.rect(o.ribbon, cx + 4, bodyTop - 1, 3, 2);
+    if (o.dir === 'up') {
+      /* from behind you also see the span across the shoulderblades */
+      g.rect(o.ribbonTurn || o.ribbon, cx - 4, bodyTop - 1, 9, 1);
+    }
+    /* the long streamer, and the short fall on the other hip */
+    ribbonTail(g, cx - 6, bodyTop, -1, pad, 15, 2.6, ph, o);
+    ribbonTail(g, cx + 6, bodyTop, 1, 2, 7, 1.4, -ph, o);
+  }
+
   function humanoidGrid(o) {
     var W = 18, H = 28;
     var g = new Px.Grid(W, H);
@@ -2300,6 +2396,15 @@ html, body {
     } else if (o.dir === 'side') {
       g.set(cx + 2, headCy + 1, 'K');
       g.rect(o.hairDark || o.hair, cx - 4, headCy - 2, 3, 5);   /* back of the head */
+    }
+
+    /* The ribbon hangs outside the body, so the grid grows to fit it. Drawn
+       last and over the top: a stole sits ON the shoulders, and at this size
+       anything drawn behind the torso is simply invisible. */
+    if (o.ribbon) {
+      var pad = o.ribbonReach || 7;
+      g = g.pad(pad, pad, 0, 0);
+      celestialRibbon(g, o, pad, bodyTop);
     }
 
     if (o.form) form(g, o.form);
