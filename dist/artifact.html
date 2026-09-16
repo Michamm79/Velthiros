@@ -3858,7 +3858,13 @@ html, body {
         p = this.randomPoint(200, this.radius - 150, 340);
         this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
       }
-      this.par = boss.maxHp * 1.35 + 180;
+      /* The old par of maxHp * 1.35 + 180 could not be reached by ANY play.
+         On completion the score tops out near par*0.68 + maxHp*0.3 + the time
+         bonus, so a flawless kill scored 4343 against a par of 4649 - ratio
+         0.93, the 30th percentile. Top 25% was arithmetically impossible, and
+         since only the top 25% is paid, no boss in the game had ever paid a
+         reward. This par is reachable: a clean kill lands around the 19th. */
+      this.par = boss.maxHp * 0.82 + 220;
       this.timeLeft = this.timeLimit;
       return;
     }
@@ -4477,6 +4483,15 @@ html, body {
     var ratio = score / Math.max(1, this.par);
     var percentile = U.clamp(Math.round(100 - 75 * ratio), 1, 99);
     if (reason === 'death') percentile = Math.max(percentile, 62);
+
+    /* The final boss is the ending, not a ranked trial. Killing it wins the
+       game whatever a percentile would have said - it used to be scored like
+       any other trial, so a player could kill Aurelith, be told they failed,
+       and be dropped straight back into the same fight with no way out. */
+    if (completed && this.spec.finalBoss) percentile = 1;
+    /* And no boss you actually killed counts as a failure. Failing is for not
+       finishing: running out of time, losing the objective, or dying. */
+    else if (completed && this.type === 'boss') percentile = Math.min(percentile, 40);
 
     var tier = D.RANK_TIERS[2];
     for (var i = 0; i < D.RANK_TIERS.length; i++) {

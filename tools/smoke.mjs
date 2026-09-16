@@ -558,6 +558,61 @@ async function main() {
     onTitle.hits[0].y - onTitle.h * onTitle.hits[0].scale > 0,
     JSON.stringify(onTitle.hits[0]) + ' in ' + onTitle.ch + 'px');
 
+  /* --- the end of the run ---
+         A player reached trial 50, killed Aurelith, was told they FAILED, and
+         was dropped straight back into the same fight. Completing a trial was
+         scored by percentile even when the trial was the ending, and the boss
+         par was set so high that no boss kill could reach the paying tier at
+         all - so bosses had never paid, and a bad-but-winning final fight
+         looped forever with no way out. */
+  const ending = await page.evaluate(() => {
+    const g = window.VELTHIROS, V = window.V;
+    const kill = (spec, dmg, left, kills) => {
+      const t = new V.Trial(g, spec);
+      t.state = 'play';
+      if (t.boss) { t.boss.dead = true; t.boss.hp = 0; }
+      t.kills = kills; t.timeLeft = left; t.player.damageTaken = dmg;
+      t.finish('complete');
+      return g.pendingResult;
+    };
+    g.newGame();
+
+    /* a mid-run boss, killed cleanly and killed badly */
+    const mid = g.makeSpec(25);
+    const clean = kill(mid, 0, 140, 5);
+    const rough = kill(mid, 1400, 5, 5);
+    /* and one that ran out of time without killing anything */
+    const t = new V.Trial(g, mid);
+    t.state = 'play'; t.kills = 2; t.timeLeft = 0; t.player.damageTaken = 500;
+    t.finish('timeout');
+    const unfinished = g.pendingResult;
+
+    /* the final boss, killed in the worst state a win can be in */
+    g.save.endgame = true; g.save.endgameWave = 4;
+    const finalSpec = g.makeSpec(g.save.trial);
+    const won = kill(finalSpec, 1400, 5, 1);
+    g.leaveRanking();
+    return {
+      finalBoss: !!finalSpec.finalBoss,
+      cleanPct: clean.percentile, cleanOutcome: clean.tier.outcome,
+      roughOutcome: rough.tier.outcome,
+      unfinishedOutcome: unfinished.tier.outcome,
+      wonOutcome: won.tier.outcome,
+      scene: g.scene && g.scene.constructor.name,
+      beaten: !!g.save.beatenGame
+    };
+  });
+  check('killing the final boss ends the game rather than ranking it',
+    ending.finalBoss && ending.wonOutcome !== 'fail' &&
+    ending.scene === 'VictoryScene' && ending.beaten,
+    JSON.stringify(ending));
+  check('a boss you actually killed is never a failure',
+    ending.roughOutcome !== 'fail', 'battered kill ranked ' + ending.roughOutcome);
+  check('a clean boss kill can reach the paying tier at all',
+    ending.cleanOutcome === 'reward', 'clean kill ranked ' + ending.cleanOutcome + ' at p' + ending.cleanPct);
+  check('a boss you did not kill still fails',
+    ending.unfinishedOutcome === 'fail', 'timeout ranked ' + ending.unfinishedOutcome);
+
   /* --- objective trials have to bring the enemies to you ---
          The player is pinned to a zone, and waves spawn at the rim: 1190 units
          out against a goblin's 430 of sight. They used to spawn 'idle', never
