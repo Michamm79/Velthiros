@@ -278,7 +278,7 @@
     /* Four suits of armour, not four dye jobs. Every one of these is a real
        outfit now - the tint still recolours the sleeves, but the garments are
        what you actually see. Priced by how much armour each one is. */
-    { id: 'shirt_red',   cat: 'Armour', name: 'Royal',      price: 120, desc: 'Crimson plate under gold.', tint: '#b02a37', outfit: 'royal' },
+    { id: 'shirt_red',   cat: 'Armour', name: 'Royal',      price: 120, desc: 'Black plate, gold at every edge.', tint: '#1e1a26', outfit: 'royal' },
     { id: 'shirt_gold',  cat: 'Armour', name: 'Ophiuchus',  price: 220, desc: 'Black, emerald and bone.', tint: '#1f7a52', outfit: 'ophiuchus' },
     { id: 'shirt_blue',  cat: 'Armour', name: 'Reaper',     price: 300, desc: 'Sash, wraps and a ribbon.', tint: '#2e2a42', outfit: 'reaper' },
     { id: 'shirt_black', cat: 'Armour', name: 'Grayson',    price: 480, desc: 'Every colour, on black.', tint: '#241d33', outfit: 'grayson' },
@@ -351,15 +351,24 @@
      Royal gets pauldrons and a chest plate, Ophiuchus a long coat and a high
      collar, Reaper a sash and baggy legs, and Grayson all of it at once. */
   D.OUTFITS = {
-    /* ROYAL - crimson under gold. The regal one: plate over the chest, gold
-       trim along its edges, gold-capped pauldrons and a gold belt. */
+    /* ROYAL - strictly black and gold. Every piece of armour is the darkest
+       tone in the palette and ALL the colour is trim: gold at the plate's top
+       and bottom edge, gold caps on the pauldrons, a gold collar band, a gold
+       belt, gold boot tops and a gold sash. The shape is read from where the
+       light catches rather than from a block of colour, which is why the gold
+       has to sit on edges and seams rather than fill anything. */
     royal: {
-      plate: '$', plateLite: 'n', plateTrim: 'Y',
+      plate: 'U', plateLite: '@', plateTrim: 'Y',
       pauldron: 'U', pauldronLite: 'Y',
+      collar: 'U', collarLite: '#',
       belt: 'Y',
-      trouser: 'P', trouserLite: 'p',
+      /* No gold below the waist beyond the sash and the boot tops. Gold piping
+         down both legs plus a gold sash plus its trailing tie turned the whole
+         lower half yellow, and the point is black armour that gold picks out -
+         not a gold suit. */
+      trouser: 'U',
       boot: 'U', cuff: 'Y',
-      sash: 'N', sashDark: '@', sashTie: 'Y'
+      sash: '#', sashDark: '@'
     },
 
     /* OPHIUCHUS - black, green and white. The serpent-bearer: a long coat with
