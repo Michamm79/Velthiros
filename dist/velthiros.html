@@ -347,11 +347,18 @@ html, body {
       score: 0, reward: 0, colour: '#d8c188', dark: '#b09a5c', inert: true
     },
     warden: {
-      /* Slower and far more telegraphed than a Reaper, but it hits like one.
-         Beatable on the tutorial's terms - dodge the wind-up, punish the
-         recovery - which is exactly the lesson the preceding beats taught. */
-      id: 'warden', name: 'Warden', hp: 560, speed: 128, damage: 24, sight: 4000,
-      radius: 28, attackRange: 118, attackWindup: 0.62, attackRecover: 0.62,
+      /* You get ONE attempt at this - die and it keeps the scythe for the rest
+         of the run - so it is tuned to be survived by few.
+
+         The lever is lethality, not health. At 15 damage a sword already needs
+         40 connects to drop it; more health only makes the fight longer, not
+         harder. What was soft was the danger: 24 damage meant five mistakes
+         were survivable and a 0.62s wind-up is a tell you can react to while
+         looking elsewhere. Now three mistakes end the run, the tell is 0.45s -
+         real, but it demands you watch it - and the recovery you punish on has
+         halved, so every opening has to be taken cleanly. */
+      id: 'warden', name: 'Warden', hp: 600, speed: 136, damage: 34, sight: 4000,
+      radius: 28, attackRange: 118, attackWindup: 0.45, attackRecover: 0.42,
       score: 0, reward: 0, colour: '#5c2b4a', dark: '#3a1830', boss: true,
       heavy: true, charge: true
     }
@@ -3319,6 +3326,14 @@ html, body {
     this.homeX = x; this.homeY = y;
     this.leash = opts.leash || 0;
     this.aggro = false;
+    /* Relentless: hunts from the moment it exists and never loses interest.
+       Objective trials set world.huntOnSpawn, because there the player is
+       pinned to a zone or an errand and the enemies spawn at the arena rim -
+       1190 units out, against a goblin's 430 of sight - so without this they
+       never notice anyone and simply wander until the clock runs out. A
+       hiding enemy is exempt: being found is its whole job. */
+    this.relentless = !!(world && world.huntOnSpawn) && !opts.hiding;
+    if (this.relentless) { this.state = 'chase'; this.aggro = true; }
     this.summonedAt = [];
     this.phase = 1;
     this.attackedThisSwing = false;
@@ -3355,6 +3370,7 @@ html, body {
         this.hiding = false;
         this.aggro = true;
         this.state = 'chase';
+        if (w.stickyAggro) this.relentless = true;
         w.floater(this.x, this.y - 40, 'found!', '#ffe45c');
         w.onEnemyFound && w.onEnemyFound(this);
       }
@@ -3390,7 +3406,12 @@ html, body {
           this.step(this.wanderAngle, this.speed * 0.34, dt);
           this.moving = true;
         } else this.moving = false;
-        if (this.detects(p)) { this.state = 'chase'; this.stateTime = 0; this.aggro = true; }
+        if (this.relentless || this.detects(p)) {
+          this.state = 'chase'; this.stateTime = 0; this.aggro = true;
+          /* Sticky aggro: once it has seen you it does not un-see you. Off in
+             'hide' trials, where breaking line of sight is the entire game. */
+          if (w.stickyAggro) this.relentless = true;
+        }
         break;
       }
       case 'chase': {
@@ -3405,7 +3426,7 @@ html, body {
         }
         this.step(toP, chaseSpeed, dt);
         if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
-        else if (!this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
+        else if (!this.relentless && !this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
         break;
       }
       case 'charge': {
@@ -3431,7 +3452,7 @@ html, body {
       case 'recover': {
         this.moving = false;
         if (this.stateTime >= this.def.attackRecover) {
-          this.state = d < this.def.sight ? 'chase' : 'idle';
+          this.state = (this.relentless || d < this.def.sight) ? 'chase' : 'idle';
           this.stateTime = 0;
         }
         break;
@@ -3669,6 +3690,15 @@ html, body {
      is ~18s edge to edge, with everything else scaled to match. */
   var ARENA_R = 1250;
 
+  /* Trials where the objective holds the player in place, so the enemies have
+     to come to them. Three are deliberately absent. 'hide' is about not being
+     noticed and 'seek' about finding something that is waiting. 'defeat' is
+     absent because there the player goes hunting: having the whole arena
+     converge at once is a far steeper change than these modes need, and it is
+     not what was asked for. Enemies there still never give up once they have
+     seen you - that is stickyAggro, which applies everywhere but 'hide'. */
+  var HUNT_MODES = { defend: true, deliver: true, puzzle: true, word: true };
+
   function Trial(game, spec) {
     this.game = game;
     /* spec: { index, type, env, seed, label, boss?, finalBoss?, endgame?,
@@ -3812,6 +3842,7 @@ html, body {
 
     if (this.spec.boss) {
       this.type = 'boss';
+      this.setHuntRules();
       this.objective = { text: 'Defeat the ' + (this.spec.finalBoss ? 'Aurelith' : 'Reaper') };
       this.timeLimit = this.spec.finalBoss ? 300 : 180;
       var bossId = this.spec.finalBoss ? 'aurelith' : 'reaper';
@@ -3829,6 +3860,7 @@ html, body {
     }
 
     this.type = this.spec.type;
+    this.setHuntRules();
 
     switch (this.type) {
       case 'tutorial': { V.Tutorial.setup(this); break; }
@@ -3879,9 +3911,14 @@ html, body {
           this.blocks.push({ x: Math.cos(ang) * 330, y: Math.sin(ang) * 330, r: 34, done: false });
           this.plates.push({ x: Math.cos(ang + 0.9) * 720, y: Math.sin(ang + 0.9) * 720, r: 56, filled: false });
         }
+        /* Tier-appropriate, not goblins forever. The count stays low on
+           purpose - this is a thinking trial - but a trial 43 puzzle used to
+           field a 55hp goblin while a trial 43 defeat fielded a 227hp
+           minotaur, so it was a free pass at exactly the point the run is
+           meant to be squeezing. */
         for (i = 0; i < 2 + Math.floor(tier); i++) {
           p = this.randomPoint(300, this.radius - 150, 420);
-          this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+          this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.par = 430 + this.timeLimit * 1.5;
         break;
@@ -3897,9 +3934,11 @@ html, body {
           p = this.randomPoint(300, this.radius - 150, 300);
           this.hints.push({ x: p.x, y: p.y, found: false });
         }
+        /* as with the puzzle: the riddle is the trial, but the guards should
+           still belong to the tier they are guarding */
         for (i = 0; i < 2 + Math.floor(tier * 1.5); i++) {
           p = this.randomPoint(300, this.radius - 150, 420);
-          this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+          this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.par = 420 + this.timeLimit * 1.4;
         break;
@@ -3943,6 +3982,19 @@ html, body {
   };
 
   /* ============================================================ world hooks */
+  /* Both of these read this.type, so they run only once it is settled - the
+     boss branch assigns it separately from the normal one. */
+  Trial.prototype.setHuntRules = function () {
+    /* Once an enemy has seen you it keeps coming. Off in 'hide', where losing
+       them again is the whole mechanic: it scores you on how long you spent
+       inside someone's chase state. */
+    this.stickyAggro = this.type !== 'hide';
+    /* Modes where the objective pins the player down rather than sending them
+       out to meet the enemy. There they spawn already hunting, or they spawn
+       at the rim well outside their own sight and never arrive at all. */
+    this.huntOnSpawn = HUNT_MODES[this.type] === true;
+  };
+
   Trial.prototype.spawnEnemy = function (id, x, y, opts) {
     var e = new E.Enemy(id, x, y, this, opts || this.scaleOpts);
     e.drawScale = 1.8;

@@ -9,6 +9,15 @@
      is ~18s edge to edge, with everything else scaled to match. */
   var ARENA_R = 1250;
 
+  /* Trials where the objective holds the player in place, so the enemies have
+     to come to them. Three are deliberately absent. 'hide' is about not being
+     noticed and 'seek' about finding something that is waiting. 'defeat' is
+     absent because there the player goes hunting: having the whole arena
+     converge at once is a far steeper change than these modes need, and it is
+     not what was asked for. Enemies there still never give up once they have
+     seen you - that is stickyAggro, which applies everywhere but 'hide'. */
+  var HUNT_MODES = { defend: true, deliver: true, puzzle: true, word: true };
+
   function Trial(game, spec) {
     this.game = game;
     /* spec: { index, type, env, seed, label, boss?, finalBoss?, endgame?,
@@ -152,6 +161,7 @@
 
     if (this.spec.boss) {
       this.type = 'boss';
+      this.setHuntRules();
       this.objective = { text: 'Defeat the ' + (this.spec.finalBoss ? 'Aurelith' : 'Reaper') };
       this.timeLimit = this.spec.finalBoss ? 300 : 180;
       var bossId = this.spec.finalBoss ? 'aurelith' : 'reaper';
@@ -169,6 +179,7 @@
     }
 
     this.type = this.spec.type;
+    this.setHuntRules();
 
     switch (this.type) {
       case 'tutorial': { V.Tutorial.setup(this); break; }
@@ -219,9 +230,14 @@
           this.blocks.push({ x: Math.cos(ang) * 330, y: Math.sin(ang) * 330, r: 34, done: false });
           this.plates.push({ x: Math.cos(ang + 0.9) * 720, y: Math.sin(ang + 0.9) * 720, r: 56, filled: false });
         }
+        /* Tier-appropriate, not goblins forever. The count stays low on
+           purpose - this is a thinking trial - but a trial 43 puzzle used to
+           field a 55hp goblin while a trial 43 defeat fielded a 227hp
+           minotaur, so it was a free pass at exactly the point the run is
+           meant to be squeezing. */
         for (i = 0; i < 2 + Math.floor(tier); i++) {
           p = this.randomPoint(300, this.radius - 150, 420);
-          this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+          this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.par = 430 + this.timeLimit * 1.5;
         break;
@@ -237,9 +253,11 @@
           p = this.randomPoint(300, this.radius - 150, 300);
           this.hints.push({ x: p.x, y: p.y, found: false });
         }
+        /* as with the puzzle: the riddle is the trial, but the guards should
+           still belong to the tier they are guarding */
         for (i = 0; i < 2 + Math.floor(tier * 1.5); i++) {
           p = this.randomPoint(300, this.radius - 150, 420);
-          this.spawnEnemy('goblin', p.x, p.y, scaleOpts);
+          this.spawnEnemy(this.pickEnemy(tier, r), p.x, p.y, scaleOpts);
         }
         this.par = 420 + this.timeLimit * 1.4;
         break;
@@ -283,6 +301,19 @@
   };
 
   /* ============================================================ world hooks */
+  /* Both of these read this.type, so they run only once it is settled - the
+     boss branch assigns it separately from the normal one. */
+  Trial.prototype.setHuntRules = function () {
+    /* Once an enemy has seen you it keeps coming. Off in 'hide', where losing
+       them again is the whole mechanic: it scores you on how long you spent
+       inside someone's chase state. */
+    this.stickyAggro = this.type !== 'hide';
+    /* Modes where the objective pins the player down rather than sending them
+       out to meet the enemy. There they spawn already hunting, or they spawn
+       at the rim well outside their own sight and never arrive at all. */
+    this.huntOnSpawn = HUNT_MODES[this.type] === true;
+  };
+
   Trial.prototype.spawnEnemy = function (id, x, y, opts) {
     var e = new E.Enemy(id, x, y, this, opts || this.scaleOpts);
     e.drawScale = 1.8;

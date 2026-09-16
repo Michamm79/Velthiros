@@ -558,6 +558,68 @@ async function main() {
     onTitle.hits[0].y - onTitle.h * onTitle.hits[0].scale > 0,
     JSON.stringify(onTitle.hits[0]) + ' in ' + onTitle.ch + 'px');
 
+  /* --- objective trials have to bring the enemies to you ---
+         The player is pinned to a zone, and waves spawn at the rim: 1190 units
+         out against a goblin's 430 of sight. They used to spawn 'idle', never
+         notice anyone, and wander until the clock ran out - the zone could not
+         even be damaged. */
+  await page.evaluate(() => {
+    const g = window.VELTHIROS;
+    g.newGame();
+    g.save.trial = 4;                     /* defend */
+    g.enterTrial();
+    g.scene.trial.introTimer = 0.05;
+  });
+  await wait(900);
+  const hunt0 = await page.evaluate(() => {
+    const t = window.VELTHIROS.scene.trial, p = t.player;
+    t.waveTimer = 0.01;                   /* bring the first wave forward */
+    return { type: t.type, hunt: t.huntOnSpawn, sticky: t.stickyAggro,
+             px: Math.round(p.x), py: Math.round(p.y) };
+  });
+  check('a defend trial is set to hunt', hunt0.type === 'defend' && hunt0.hunt === true,
+    JSON.stringify(hunt0));
+
+  await wait(700);
+  const spawned = await page.evaluate(() => {
+    const t = window.VELTHIROS.scene.trial, p = t.player;
+    const live = t.enemies.filter((e) => !e.dead);
+    return { n: live.length,
+             idle: live.filter((e) => e.state === 'idle').length,
+             relentless: live.filter((e) => e.relentless).length,
+             far: live.filter((e) => Math.hypot(e.x - p.x, e.y - p.y) > e.def.sight).length,
+             dist: live.map((e) => Math.round(Math.hypot(e.x - p.x, e.y - p.y))) };
+  });
+  check('they spawn beyond their own sight, which is why this was needed',
+    spawned.n > 0 && spawned.far === spawned.n,
+    JSON.stringify(spawned.dist));
+  check('none of them are idling', spawned.n > 0 && spawned.idle === 0,
+    spawned.idle + ' of ' + spawned.n + ' idle');
+  check('every one of them is hunting', spawned.n > 0 && spawned.relentless === spawned.n,
+    spawned.relentless + ' of ' + spawned.n);
+
+  await wait(4000);
+  const closedIn = await page.evaluate(() => {
+    const g = window.VELTHIROS, t = g.scene.trial;
+    if (!t) return { gone: true };
+    const p = t.player, live = t.enemies.filter((e) => !e.dead);
+    return { closest: Math.min.apply(null, live.map((e) => Math.round(Math.hypot(e.x - p.x, e.y - p.y)))) };
+  });
+  check('and they close the distance rather than wandering',
+    closedIn.gone === true || closedIn.closest < 900, JSON.stringify(closedIn));
+
+  /* 'hide' is the exception: being chased IS the fail state there, so an
+     enemy that can never lose you would make it unplayable. */
+  const hideRules = await page.evaluate(() => {
+    const g = window.VELTHIROS, D = window.V.D;
+    const t = new window.V.Trial(g, { index: 4, type: 'hide', boss: false,
+      env: D.ENVIRONMENTS[0], seed: 7, label: 'hide' });
+    return { type: t.type, sticky: t.stickyAggro, hunt: t.huntOnSpawn };
+  });
+  check('a hide trial is exempt from both rules',
+    hideRules.type === 'hide' && hideRules.sticky === false && hideRules.hunt === false,
+    JSON.stringify(hideRules));
+
   /* --- the install offer: present only where it leads somewhere ---
          Driven through the live loop and real pointer events, because that is
          the path a player takes; headless Chromium fires no

@@ -367,6 +367,14 @@
     this.homeX = x; this.homeY = y;
     this.leash = opts.leash || 0;
     this.aggro = false;
+    /* Relentless: hunts from the moment it exists and never loses interest.
+       Objective trials set world.huntOnSpawn, because there the player is
+       pinned to a zone or an errand and the enemies spawn at the arena rim -
+       1190 units out, against a goblin's 430 of sight - so without this they
+       never notice anyone and simply wander until the clock runs out. A
+       hiding enemy is exempt: being found is its whole job. */
+    this.relentless = !!(world && world.huntOnSpawn) && !opts.hiding;
+    if (this.relentless) { this.state = 'chase'; this.aggro = true; }
     this.summonedAt = [];
     this.phase = 1;
     this.attackedThisSwing = false;
@@ -403,6 +411,7 @@
         this.hiding = false;
         this.aggro = true;
         this.state = 'chase';
+        if (w.stickyAggro) this.relentless = true;
         w.floater(this.x, this.y - 40, 'found!', '#ffe45c');
         w.onEnemyFound && w.onEnemyFound(this);
       }
@@ -438,7 +447,12 @@
           this.step(this.wanderAngle, this.speed * 0.34, dt);
           this.moving = true;
         } else this.moving = false;
-        if (this.detects(p)) { this.state = 'chase'; this.stateTime = 0; this.aggro = true; }
+        if (this.relentless || this.detects(p)) {
+          this.state = 'chase'; this.stateTime = 0; this.aggro = true;
+          /* Sticky aggro: once it has seen you it does not un-see you. Off in
+             'hide' trials, where breaking line of sight is the entire game. */
+          if (w.stickyAggro) this.relentless = true;
+        }
         break;
       }
       case 'chase': {
@@ -453,7 +467,7 @@
         }
         this.step(toP, chaseSpeed, dt);
         if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
-        else if (!this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
+        else if (!this.relentless && !this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
         break;
       }
       case 'charge': {
@@ -479,7 +493,7 @@
       case 'recover': {
         this.moving = false;
         if (this.stateTime >= this.def.attackRecover) {
-          this.state = d < this.def.sight ? 'chase' : 'idle';
+          this.state = (this.relentless || d < this.def.sight) ? 'chase' : 'idle';
           this.stateTime = 0;
         }
         break;
