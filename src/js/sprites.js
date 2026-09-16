@@ -118,78 +118,6 @@
      end, which is what makes it read as fabric rather than as a wire.
 
      The wave is phase-shifted per walk frame, so it undulates as you move. */
-  /* ------------------------------------------------------- CELESTIAL RIBBON
-     An omega: the loop arches above and around the head, comes down outside
-     the shoulders, and the two tails flow off around the arms.
-
-     Earlier passes hung it off the shoulders and it kept reading as something
-     else - straight out was wings, out-and-down was a cape, a curled tip was
-     antennae. The loop fixes that by putting the ribbon somewhere no wing or
-     cape goes: over the head. Nothing else in the sprite occupies that space,
-     so the shape is unambiguous the moment you see it.
-
-     It needs headroom the 18x28 humanoid grid has not got, so the grid pads
-     upward as well as outward. Sprites bake from the bottom centre, so the
-     character still stands in the same place however tall the grid gets. */
-  function ribbonTail(g, x0, y0, side, reach, fall, ripple, phase, o) {
-    var steps = Math.max(reach, 5) * 3;
-    var px = x0, py = y0;
-    for (var i = 1; i <= steps; i++) {
-      var t = i / steps;
-      /* Tucks in past the arm before it sweeps out. A tail that only ever
-         travels outward leaves the omega's foot and never touches the body
-         again, which is not silk falling off a shoulder - it is a streamer
-         pinned to the air beside one. */
-      var x = x0 + side * Math.round(reach * (t * t * 1.9 - t * 0.9));
-      var y = y0 + Math.round(t * fall + Math.sin(t * Math.PI * 1.7 + phase) * ripple * (0.3 + t));
-      /* joined to the previous point: oversampling fills a vertical gap but
-         not a diagonal one, and the tip broke off into loose pixels */
-      g.line(o.ribbon, px, py, x, y);
-      if (t < 0.7) g.line(o.ribbonTurn || o.ribbon, px, py + 1, x, y + 1);
-      px = x; py = y;
-    }
-  }
-
-  function celestialRibbon(g, o, padX, padY, bodyTop, headCy) {
-    var cx = 9 + padX;
-    var hy = headCy + padY;
-    var top = bodyTop + padY;
-    /* frame 0 rests; 1 and 2 are the two halves of a stride. The silk lags
-       behind the body, so the ripple is phase-shifted rather than redrawn. */
-    var ph = o.frame === 1 ? 0.9 : (o.frame === 2 ? -0.8 : 0);
-    /* Wide enough to be a ring AROUND the head rather than an outline OF it.
-       At rx 7 / ry 8 the arch sat three pixels off the hair and read as a hood;
-       it needs visible air between the two or the shape is lost. */
-    var rx = o.dir === 'side' ? 6 : 9, ry = 11;
-
-    /* the arch: lower-left, over the top, lower-right. Two rows thick, and
-       the two rows take different tones so the silk reads as two-sided. */
-    var a0 = Math.PI * 0.86, a1 = Math.PI * 2.14;
-    var steps = 46, ex = [0, 0], ey = [0, 0];
-    var px = null, py = null, pxi = 0, pyi = 0;
-    for (var i = 0; i <= steps; i++) {
-      var t = i / steps;
-      var a = a0 + (a1 - a0) * t;
-      var ca = Math.cos(a), sa = Math.sin(a);
-      var x = Math.round(cx + ca * rx);
-      var y = Math.round(hy + sa * ry);
-      var xi = Math.round(cx + ca * (rx - 1));
-      var yi = Math.round(hy + sa * (ry - 1));
-      if (px !== null) {
-        g.line(o.ribbon, px, py, x, y);                        /* outer face */
-        g.line(o.ribbonTurn || o.ribbon, pxi, pyi, xi, yi);    /* inner face */
-      }
-      px = x; py = y; pxi = xi; pyi = yi;
-      if (i === 0) { ex[0] = x; ey[0] = y; }
-      if (i === steps) { ex[1] = x; ey[1] = y; }
-    }
-
-    /* the tails, flowing off the feet of the omega and down past the arms.
-       Unequal on purpose - matched tails read as a pair of anything. */
-    ribbonTail(g, ex[0], ey[0], -1, padX, top + 15 - ey[0], 2.6, ph, o);
-    ribbonTail(g, ex[1], ey[1], 1, padX - 2, top + 11 - ey[1], 1.8, -ph * 1.4, o);
-  }
-
   function humanoidGrid(o) {
     var W = 18, H = 28;
     var g = new Px.Grid(W, H);
@@ -231,33 +159,47 @@
       if (o.chest) g.rect(o.chest, 7, bodyTop + 2, 2, 3);
     }
 
-    /* ---- a plate over the chest, and coat tails hanging past the hips.
-           Both go on before the arms so the arms read as being in front of
-           the armour rather than buried under it. ---- */
+    /* ---- a long coat split down the front, one half dark and one half light,
+           with a trim line walking the diagonal between them. This is the whole
+           Grayson silhouette: at 18x28 the split IS the garment, so the halves
+           have to be the two furthest-apart tones available or the diagonal
+           disappears and it is just a coat. ---- */
+    /* ---- worn over the body and under the arms. Everything here is FITTED:
+           the panel is the width of the torso, not wider, and nothing flares.
+           Baggy armour reads as a sack at 18x28 - the body is six columns, so
+           a garment eight columns wide has already lost the waist. `loose` is
+           the one opt-out, for the outfit that is meant to hang. ---- */
     if (o.plate) {
-      g.rect(o.plate, 5, bodyTop, 8, bodyBot - bodyTop);
-      if (o.plateLite) g.rect(o.plateLite, 6, bodyTop + 1, 2, 3);   /* lit facet */
+      var pW = o.loose ? 8 : 6;
+      var pX = o.loose ? 5 : 6;
+      g.rect(o.plate, pX, bodyTop, pW, bodyBot - bodyTop);
+      if (o.plateLite) {
+        g.rect(o.plateLite, pX + 1, bodyTop + 1, 2, 3);          /* lit facet */
+        g.rect(o.plateLite, pX + pW - 2, bodyTop + 2, 1, bodyBot - bodyTop - 3);
+      }
       if (o.plateTrim) {
-        g.rect(o.plateTrim, 5, bodyTop, 8, 1);
-        g.rect(o.plateTrim, 5, bodyBot - 1, 8, 1);
+        /* The top edge and a seam down the front, which is how a robe closes.
+           Banding it top and bottom made stripes with the sash; framing all
+           three edges made a gold U around a black hole. A collar line and one
+           vertical seam is the whole garment. */
+        g.rect(o.plateTrim, pX, bodyTop, pW, 1);
+        g.rect(o.plateTrim, cx, bodyTop + 1, 1, bodyBot - bodyTop - 1);
       }
     }
-    if (o.coat) {
-      /* Hung outside the legs rather than over them, so the walk still reads.
-         A coat drawn across the middle just deletes the legs at this size. */
-      var coatBot = legBot + (o.coatLong ? 2 : 0);
-      for (var cy = bodyBot; cy < coatBot; cy++) {
-        var flare = Math.round((cy - bodyBot) * 0.34);
-        /* three columns, not two: at two the tails were thinner than the legs
-           they hang beside and read as piping rather than as a coat */
-        g.rect(o.coat, 3 - flare, cy, 3, 1);
-        g.rect(o.coat, 12 + flare, cy, 3, 1);
-      }
-      if (o.coatTrim) {
-        g.rect(o.coatTrim, 3, bodyBot, 3, 1);
-        g.rect(o.coatTrim, 12, bodyBot, 3, 1);
-        g.set(3 - Math.round((coatBot - 1 - bodyBot) * 0.34), coatBot - 1, o.coatTrim);
-        g.set(14 + Math.round((coatBot - 1 - bodyBot) * 0.34), coatBot - 1, o.coatTrim);
+    /* A cloak clasped at the throat and falling down the OUTSIDE of the arms.
+       Two narrow panels rather than a cape across the back: a cape wide enough
+       to see is wide enough to delete the body it hangs on. */
+    if (o.cloak) {
+      var ckBot = legBot;
+      g.rect(o.cloak, 3, bodyTop, 2, ckBot - bodyTop);
+      g.rect(o.cloak, 13, bodyTop, 2, ckBot - bodyTop);
+      g.rect(o.cloak, 6, bodyTop - 1, 6, 1);              /* the clasp */
+      if (o.cloakTrim) {
+        g.rect(o.cloakTrim, 3, bodyTop - 1, 2, 1);
+        g.rect(o.cloakTrim, 13, bodyTop - 1, 2, 1);
+        g.rect(o.cloakTrim, 6, bodyTop - 1, 6, 1);
+        g.set(3, ckBot - 1, o.cloakTrim);
+        g.set(14, ckBot - 1, o.cloakTrim);
       }
     }
 
@@ -275,27 +217,7 @@
       g.rect('f', 12, bodyTop + 1 + sleeve, 2, hand);
     }
 
-    /* ---- pauldrons and a high collar, worn ON the shoulders, so they go on
-           after the arms. The pauldron is the cheapest strong silhouette
-           change available at this size: it widens the shoulders by two
-           columns and you read it before you read any colour. ---- */
-    if (o.pauldron) {
-      if (o.dir === 'side') {
-        g.rect(o.pauldron, 10, bodyTop, 4, 3);
-        if (o.pauldronLite) g.rect(o.pauldronLite, 10, bodyTop, 4, 1);
-      } else {
-        g.rect(o.pauldron, 2, bodyTop, 5, 3);
-        g.rect(o.pauldron, 11, bodyTop, 5, 3);
-        if (o.pauldronLite) {
-          /* the cap has to be the whole top edge AND the outer corner, or a
-             pauldron in a shade of the plate under it simply is not there */
-          g.rect(o.pauldronLite, 2, bodyTop, 5, 1);
-          g.rect(o.pauldronLite, 11, bodyTop, 5, 1);
-          g.set(2, bodyTop + 1, o.pauldronLite);
-          g.set(15, bodyTop + 1, o.pauldronLite);
-        }
-      }
-    }
+    /* ---- a high collar, worn ON the shoulders, so it goes on after the arms ---- */
     if (o.collar) {
       g.rect(o.collar, 6, bodyTop - 1, 6, 2);
       g.set(5, bodyTop - 1, o.collar);
@@ -315,6 +237,15 @@
         g.set(3, bodyBot + 4, o.sashTie);
       }
     }
+    /* ---- a stone set into the chest, cut as a diamond ---- */
+    if (o.chestGem) {
+      var gy = bodyTop + 3;
+      g.set(cx, gy - 1, o.chestGem);
+      g.rect(o.chestGem, cx - 1, gy, 3, 1);
+      g.set(cx, gy + 1, o.chestGem);
+      if (o.chestGemLite) g.set(cx, gy, o.chestGemLite);
+    }
+
     /* ---- a choker at the throat and bands at the wrists ---- */
     if (o.necklace) {
       g.rect(o.necklace, 7, bodyTop, 4, 1);
@@ -378,14 +309,30 @@
       g.rect(o.hairDark || o.hair, cx - 4, headCy - 2, 3, 5);   /* back of the head */
     }
 
-    /* The ribbon hangs outside the body, so the grid grows to fit it. Drawn
-       last and over the top: a stole sits ON the shoulders, and at this size
-       anything drawn behind the torso is simply invisible. */
-    if (o.ribbon) {
-      var padX = o.ribbonReach || 7;
-      var padY = 8;                      /* headroom for the arch */
-      g = g.pad(padX, padX, padY, 0);
-      celestialRibbon(g, o, padX, padY, bodyTop, headCy);
+    /* ---- a helm, drawn over the head and hair so it replaces them, with a
+           crown of fire above it. The flame leans with the walk frame, which
+           is the only thing on the sprite that moves independently of the
+           body - a still flame reads as a crest, a leaning one reads as fire. */
+    if (o.helm) {
+      /* Sized to the head. At rx 5 over an 11-wide skirt it was wider than the
+         body and read as a black dome sitting on the shoulders, not a helm. */
+      g.oval(o.helm, cx, headCy - 1, 4, 4);
+      g.rect(o.helm, cx - 4, headCy - 1, 9, 3);
+      if (o.helmTrim) g.rect(o.helmTrim, cx - 3, headCy + 2, 7, 1);   /* brow band */
+      if (o.dir !== 'up') {
+        g.rect('K', cx - 3, headCy, 7, 2);                            /* visor slit */
+        if (o.helmEye) { g.set(cx - 2, headCy, o.helmEye); g.set(cx + 2, headCy, o.helmEye); }
+      }
+      if (o.helmFlame) {
+        var fl = o.frame === 1 ? 1 : (o.frame === 2 ? -1 : 0);
+        var lite = o.helmFlameLite || o.helmFlame;
+        g.rect(o.helmFlame, cx - 2, headCy - 6, 5, 2);
+        g.set(cx - 2 + fl, headCy - 7, o.helmFlame);
+        g.set(cx + 1 + fl, headCy - 7, lite);
+        g.set(cx + fl, headCy - 8, lite);
+        g.set(cx - 1 + fl * 2, headCy - 9, lite);
+        g.set(cx + 2, headCy - 5, lite);
+      }
     }
 
     if (o.form) form(g, o.form);
@@ -1493,40 +1440,40 @@
       }, { ax: 9, ay: 13 });
     }
 
-    /* The scythe: the secret one, and the only weapon you may never see. Black
-       haft and a blade that burns rather than reflecting anything - the edge is
-       neon sky blue over a near-black body, hottest along a few segments so it
-       reads as a glow with a core rather than a painted stripe. The light
-       gathers at the collar as a single wisp; scattered across the blade it
-       just read as dirt. */
-    return Px.make(28, 24, function (g) {
-      g.rect('U', 0, 16, 19, 3);                         /* black haft */
-      g.rect('E', 0, 17, 19, 1);
-      /* the light gathers toward the blade rather than striping the whole haft */
-      g.rect('/', 11, 16, 6, 1); g.set(9, 16, 'c');
+    /* The scythe: the secret one, and the only weapon you may never see.
 
-      /* the blade: a continuous arc off the collar, drawn as segments so the
-         curve cannot break into a staircase of loose pixels */
-      var px = 18, py = 15;
-      for (var i = 1; i <= 14; i++) {
-        var t = i / 14;
-        var bx = 18 - Math.round(t * t * 11);
-        var by = 15 - Math.round(t * 13);
-        g.line('E', px, py, bx, by);                     /* body */
-        g.line('/', px + 1, py, bx + 1, by);             /* the burning edge */
-        if (i % 3 === 1) g.line('_', px + 1, py, bx + 1, by);   /* its hot core */
-        g.line('U', px - 1, py, bx - 1, by);             /* the blunt back */
-        px = bx; py = by;
+       Shaped like a capital L. The haft is one straight stroke and the blade
+       turns off its head at a right angle and runs straight up - no doubling
+       back. The previous build arced the blade up and BACK over the haft and
+       then hooked the tip forward again, which is three changes of direction
+       and reads as a Z, not a scythe.
+
+       It burns neon sky blue: the edge is '/' over a near-black body, with '_'
+       laid over it every few rows so it reads as a glow with a hot core rather
+       than a painted stripe. */
+    return Px.make(24, 26, function (g) {
+      /* the long stroke */
+      g.rect('U', 0, 21, 21, 3);
+      g.rect('E', 0, 22, 21, 1);
+      g.rect('/', 13, 21, 7, 1);                    /* light toward the head */
+      g.set(4, 21, 'c'); g.set(9, 21, 'c');
+
+      /* the short stroke: straight up off the head, tapering to a point */
+      for (var y = 20; y >= 3; y--) {
+        var t = (20 - y) / 17;
+        var x = 19 + Math.round(t * t * 2);         /* the faintest forward lean */
+        var back = t < 0.72 ? 2 : 1;
+        g.rect('E', x - back, y, back + 1, 1);      /* body */
+        g.set(x - back, y, 'U');                    /* the blunt back */
+        g.set(x, y, '/');                           /* the burning edge */
+        if (y % 4 === 1) g.set(x, y, '_');          /* its hot core */
       }
-      g.rect('E', 8, 1, 8, 2);                           /* hooked tip */
-      g.rect('/', 8, 1, 8, 1);
-      g.set(15, 1, '_'); g.set(12, 1, '_');
+      g.set(21, 2, '_');                            /* the point */
 
-      g.rect('A', 16, 13, 3, 4);                         /* the collar */
-      g.set(17, 14, 'a');
-      g.set(17, 12, '/'); g.set(17, 11, 'c');            /* one wisp, not many */
+      g.rect('A', 17, 18, 3, 4);                    /* the collar it sockets into */
+      g.set(18, 19, 'a');
       g.outline('K');
-    }, { ax: 1, ay: 17 });
+    }, { ax: 1, ay: 22 });
   }
 
   Spr.weapon = function (id) { return cached('wp:' + id, function () { return weaponSprite(id); }); };

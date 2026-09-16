@@ -117,19 +117,6 @@
     for (var i = 0; i < n; i++) this.set(x + r.int(0, w - 1), y + r.int(0, h - 1), c);
     return this;
   };
-  /* Return a wider/taller copy with the existing content offset into it.
-     Some garments hang outside the body's own bounds - a trailing ribbon needs
-     columns the 18-wide humanoid grid does not have - and widening the grid for
-     everyone would pay that cost on all 138 sprites. Bake anchors from the
-     bottom centre, so a padded sprite still stands in the same place. */
-  Grid.prototype.pad = function (l, r, t, b) {
-    var out = new Grid(this.w + l + r, this.h + t + b);
-    for (var y = 0; y < this.h; y++) {
-      for (var x = 0; x < this.w; x++) out.set(x + l, y + t, this.get(x, y));
-    }
-    return out;
-  };
-
   /* copy the left half onto the right, so symmetric sprites are authored once */
   Grid.prototype.mirrorX = function () {
     var mid = Math.floor(this.w / 2);
