@@ -3594,9 +3594,12 @@ html, body {
        then hooked the tip forward again, which is three changes of direction
        and reads as a Z, not a scythe.
 
-       It burns neon sky blue: the edge is '/' over a near-black body, with '_'
-       laid over it every few rows so it reads as a glow with a hot core rather
-       than a painted stripe. */
+       The BLADE IS BLUE, not a blue edge on a black blade. It was the second
+       for a while, which at this size is a black blade: the edge is one pixel
+       and the body is three, so the colour you actually read is the body. It
+       now runs the full neon ramp across its thickness - ';' deep along the
+       blunt back, '/' through the body, '_' on the cutting edge - so it is a
+       blue blade that is lit rather than a dark one with a stripe. */
     return Px.make(24, 26, function (g) {
       /* The long stroke, two rows and no more. At three it was as thick as the
          blade was wide and the whole weapon read as a club with an edge on it;
@@ -3614,10 +3617,9 @@ html, body {
         var t = (20 - y) / 17;
         var x = 19 + Math.round(t * t * 2);         /* the faintest forward lean */
         var back = t < 0.58 ? 3 : (t < 0.86 ? 2 : 1);
-        g.rect('E', x - back, y, back + 1, 1);      /* body */
-        g.set(x - back, y, 'U');                    /* the blunt back */
-        g.set(x, y, '/');                           /* the burning edge */
-        if (y % 4 === 1) g.set(x, y, '_');          /* its hot core */
+        g.rect('/', x - back, y, back + 1, 1);      /* the blade itself */
+        g.set(x - back, y, ';');                    /* the blunt back, deeper */
+        g.set(x, y, '_');                           /* the burning edge */
       }
       g.set(21, 2, '_');                            /* the point */
 
