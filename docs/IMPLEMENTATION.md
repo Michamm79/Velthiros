@@ -204,14 +204,6 @@ bottom made stripes with the sash, and framing all three of its edges made a gol
 black hole. A collar line and one seam down the front is how a robe closes, and that is all it
 needs.
 
-**Armour that carries a charge arcs it.** An outfit may name a `spark` colour, which the
-player's draw reads rather than the sprite: `drawSparks` lays four short jagged polylines around
-the wearer. Each arc lives about a ninth of a second and then jumps somewhere else entirely -
-that restless relocation is what reads as electricity, where an arc easing from place to place
-reads as a ribbon of light. They are seeded off a counter rather than `Math.random`, so every
-frame within one arc's life draws the *same* arc; re-rolling per frame flickers into mush at
-60fps.
-
 Shop items name their outfit; nothing maps an item id to an outfit by hand. That mapping used
 to live in the smoke test as `shirt_black` -> `'reaper'`, and renaming the line-up failed the
 test on a rename rather than on a bug. It now checks that buying an item equips what that item

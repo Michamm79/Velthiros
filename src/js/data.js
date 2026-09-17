@@ -281,7 +281,7 @@
     { id: 'shirt_red',   cat: 'Armour', name: 'Royal',      price: 120, desc: 'Black and gold robes, crowned in fire.', tint: '#1e1a26', outfit: 'royal' },
     { id: 'shirt_gold',  cat: 'Armour', name: 'Ophiuchus',  price: 220, desc: 'Black, emerald and bone.', tint: '#1f7a52', outfit: 'ophiuchus' },
     { id: 'shirt_blue',  cat: 'Armour', name: 'Reaper',     price: 300, desc: 'Sash, wraps and baggy silks.', tint: '#2e2a42', outfit: 'reaper' },
-    { id: 'shirt_black', cat: 'Armour', name: 'Grayson',    price: 480, desc: 'Gold-trimmed cloak. And it sparks.', tint: '#1b1826', outfit: 'grayson' },
+    { id: 'shirt_black', cat: 'Armour', name: 'Grayson',    price: 480, desc: 'Gold-trimmed cloak, blue stone.', tint: '#1b1826', outfit: 'grayson' },
     { id: 'decor_rug',   cat: 'Decor',   name: 'Woven Rug',      price: 80,  desc: 'The floor is less cold now.',           decor: 'rug' },
     { id: 'decor_plant', cat: 'Decor',   name: 'Corner Fern',    price: 70,  desc: 'It is alive. Probably.',                decor: 'plant' },
     { id: 'decor_lamp',  cat: 'Decor',   name: 'Warm Lamp',      price: 110, desc: 'Makes the room feel like a home.',      decor: 'lamp' },
@@ -394,18 +394,14 @@
 
     /* GRAYSON - a black cloak trimmed in gold, clasped at the throat and
        falling down the outside of the arms, over fitted white clothing, with
-       a blue stone set in the chest that matches the scythe's edge.
-
-       `spark` is read by the player's draw rather than by the sprite: it arcs
-       electricity around whoever is wearing it. */
+       a blue stone set in the chest that matches the scythe's edge. */
     grayson: {
       plate: 'Q', plateLite: 'q', plateTrim: 'q',
       cloak: 'U', cloakTrim: '#',
       collar: 'U', collarLite: '#',
       chestGem: ';', chestGemLite: '/',
       trouser: 'U', trouserLite: 'x',
-      boot: 'U',
-      spark: '#7fe4ff'
+      boot: 'U'
     }
   };
 
