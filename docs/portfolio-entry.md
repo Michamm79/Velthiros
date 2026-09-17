@@ -70,15 +70,15 @@ import Velthiros_Visual from './assets/Velthiros_Visual.jpg'
     category: 'Mobile Action-RPG · No Engine, No Libraries, No Art Files · Playable in Browser',
     color: 'purple',
     thumbnail: Velthiros_Visual,
-    description: 'A demon called Garatu takes you out of an ordinary evening, and the trials begin. Clear them well and watchers you never see pay you; finish below 40% and you run it again with a debuff; die twenty-five times and everything you own is gone. Velthiros is a trial-based action-RPG built for phones — touch controls, portrait or landscape, installable to a home screen and playable offline. It is built with no engine and no dependencies: ~7,300 lines of vanilla JavaScript across 15 modules, rendering to an HTML5 canvas. There are no art files and no audio files in the project. Every one of the 93 sprites is authored in code as a grid of characters resolved against a locked 40-colour palette, and every sound is synthesised at runtime through WebAudio. The whole game ships as one 283 KB HTML file that can be emailed, copied to a USB stick, or uploaded to a portal as-is.',
+    description: 'A demon called Garatu takes you out of an ordinary evening, and the trials begin. Clear them well and watchers you never see pay you; finish below 40% and you run it again with a debuff; die twenty-five times and everything you own is gone. Velthiros is a trial-based action-RPG built for phones — touch controls, portrait or landscape, installable to a home screen and playable offline. It is built with no engine and no dependencies: ~8,000 lines of vanilla JavaScript across 15 modules, rendering to an HTML5 canvas. There are no art files and no audio files in the project. Every one of the 165 sprites is authored in code as a grid of characters resolved against a locked 82-colour palette, and every sound is synthesised at runtime through WebAudio. The whole game ships as one 322 KB HTML file that can be emailed, copied to a USB stick, or uploaded to a portal as-is.',
     tags: ['JavaScript', 'HTML5 Canvas', 'Mobile Web', 'PWA', 'Procedural Pixel Art', 'WebAudio', 'Playwright', 'Playable Vertical Slice'],
     github: 'https://github.com/Michamm79/Velthiros',
     codeDownload: 'https://github.com/Michamm79/Velthiros/archive/refs/heads/main.zip',
     liveDemo: 'https://michamm79.github.io/Velthiros/',
     media: [{ type: 'image', src: Velthiros_Visual, label: 'Title Screen', system: 'Presentation' }],
     recruiterHighlights: [
-      'Playable in any phone browser with no install and no app store — one 283 KB self-contained HTML file with zero dependencies and zero binary assets.',
-      'Zero-asset art pipeline: all 93 sprites are authored in code through a small grid DSL (rect/oval/line/speckle/outline) against a locked 40-colour palette, baked once to offscreen canvases at boot. A test bakes every sprite and fails on any unknown palette key, which is the real defence against a typo in hand-placed pixel data.',
+      'Playable in any phone browser with no install and no app store — one 322 KB self-contained HTML file with zero dependencies and zero binary assets.',
+      'Zero-asset art pipeline: all 165 sprites are authored in code through a small grid DSL (rect/oval/line/speckle/outline) against a locked 82-colour palette, baked once to offscreen canvases at boot. A test bakes every sprite and fails on any unknown palette key, which is the real defence against a typo in hand-placed pixel data.',
       'The world buffer is sized by AREA rather than by height. Sizing by height handed a portrait phone a 98-pixel-wide slice of arena — a giant player and no warning of anything walking at you. Holding area constant shows the same amount of arena whichever way the phone is held; the landscape sizes come out byte-identical to the implementation it replaced.',
       'Safe-area-aware HUD: env(safe-area-inset-*) reaches JavaScript only through a hidden probe element's computed padding. Without it the dodge button sits under the home indicator on every modern iPhone.',
       'Found a silent input bug that a passing test had been hiding: the action buttons overlapped, and because hit-testing walks the zone list backwards, the left edge of ATTACK fired the special instead. The bounding-box test could never catch it — round buttons have to be compared as circles.',
@@ -86,7 +86,7 @@ import Velthiros_Visual from './assets/Velthiros_Visual.jpg'
       'Phone-lifecycle handling: screen wake lock through a trial, visibilitychange pauses the run and parks the music so a phone call cannot cost you one, and haptics toggle separately from sound — playing muted in public is exactly when the buzz earns its keep.',
       'Fully synthesised audio through WebAudio — music moods and effects generated at runtime with no audio files, unlocked on first gesture to satisfy mobile autoplay policy.',
       '94 automated checks run the game headless in Chromium before anything ships: 65 gameplay checks plus 29 device checks across four viewports covering control spacing, safe-area insets, the install manifest, and an offline boot with the server shut down.',
-      'Scale: ~7,300 lines of vanilla JavaScript across 15 modules, 93 procedurally authored sprites, a tutorial zone, a run of trials, a ranking and death-limit economy, and a boss encounter.',
+      'Scale: ~8,000 lines of vanilla JavaScript across 15 modules, 165 procedurally authored sprites, a tutorial zone, a run of trials, a ranking and death-limit economy, and two boss encounters.',
     ],
   },
 ```
@@ -154,7 +154,7 @@ display order, the array order does not.**
                 <div className="card-hub-header">
                   <div className="card-hub-overline">Mobile Action-RPG · No Engine, No Libraries · Playable in Browser</div>
                   <div className="card-hub-title">Velthiros</div>
-                  <div className="card-hub-desc">A trial-based action-RPG that runs in a phone browser with no install and no app store. Built with no engine and no dependencies — ~7,300 lines of vanilla JavaScript on an HTML5 canvas, shipping as a single 283 KB file. Every sprite is authored in code against a locked 40-colour palette and every sound is synthesised at runtime, so the project contains no art or audio assets at all.</div>
+                  <div className="card-hub-desc">A trial-based action-RPG that runs in a phone browser with no install and no app store. Built with no engine and no dependencies — ~8,000 lines of vanilla JavaScript on an HTML5 canvas, shipping as a single 322 KB file. Every sprite is authored in code against a locked 82-colour palette and every sound is synthesised at runtime, so the project contains no art or audio assets at all.</div>
                   <div className="card-hub-tags">{['JavaScript', 'HTML5 Canvas', 'Mobile Web', 'PWA', 'Procedural Pixel Art', 'Playable'].map(t => <span key={t} className="card-hub-tag">{t}</span>)}</div>
                 </div>
                 <div className="card-images-strip" style={{ padding: '0 1rem 6px' }}>
@@ -227,7 +227,7 @@ Everything above is measured from the repository, not estimated.
 |---|---|
 | ~8,300 lines across 15 modules | `wc -l src/js/*.js` → 8,321 |
 | 165 sprites | smoke test: `every sprite bakes against the locked palette — 165 sprites` |
-| 40-colour palette | `src/js/pixel.js` palette map |
+| 82-colour palette | `src/js/pixel.js` palette map |
 | 335 KB single file | `dist/velthiros.html` |
 | No art or audio assets | only binaries in the repo are the PWA icons, themselves rendered from the game's own drawing code |
 | 124 automated checks | `npm test` → 95 gameplay + 29 device |

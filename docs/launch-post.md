@@ -20,11 +20,11 @@ cares about (decisions under constraint), not with the plot.
 >
 > The constraint I set myself was no engine, no libraries, no art files.
 >
-> • ~7,300 lines of vanilla JavaScript across 15 modules. Zero dependencies.
-> • All 93 sprites are authored in code as character grids against a locked 40-colour
+> • ~8,000 lines of vanilla JavaScript across 15 modules. Zero dependencies.
+> • All 165 sprites are authored in code as character grids against a locked 82-colour
 >   palette. There are no images in the project.
 > • Every sound is synthesised at runtime through WebAudio. No audio files either.
-> • The whole game ships as one 283 KB HTML file. You can email it.
+> • The whole game ships as one 322 KB HTML file. You can email it.
 >
 > Three things I did not expect to be the hard parts:
 >
@@ -67,9 +67,9 @@ Shorter, more curiosity-driven. Better if you want plays over technical credibil
 >
 > ▶ https://michamm79.github.io/Velthiros/
 >
-> I built it solo with no engine, no libraries and no art files — ~7,300 lines of
+> I built it solo with no engine, no libraries and no art files — ~8,000 lines of
 > vanilla JavaScript, every sprite authored in code as a grid of characters, every
-> sound synthesised at runtime. It ships as a single 283 KB HTML file that also
+> sound synthesised at runtime. It ships as a single 322 KB HTML file that also
 > installs to a home screen and runs offline.
 >
 > It is a vertical slice rather than a finished game, but it is a real one: a tutorial,
@@ -87,7 +87,7 @@ Shorter, more curiosity-driven. Better if you want plays over technical credibil
 > Built a mobile action-RPG that runs in a phone browser. No install, no store.
 >
 > No engine, no libraries, no art files — ~7.3k lines of vanilla JS, every sprite
-> authored in code, every sound synthesised at runtime, the whole thing one 283 KB
+> authored in code, every sound synthesised at runtime, the whole thing one 322 KB
 > HTML file.
 >
 > ▶ https://michamm79.github.io/Velthiros/
@@ -109,7 +109,7 @@ Store pages cut the description off fast, so the first sentence carries it.
 >
 > A trial-based action-RPG built for phones: touch controls, portrait or landscape, and
 > it installs to your home screen and plays offline. No engine, no libraries, no art
-> files — every sprite is authored in code against a locked 40-colour palette.
+> files — every sprite is authored in code against a locked 82-colour palette.
 >
 > This is a vertical slice: a tutorial, a run of trials, a ranking system and a boss.
 

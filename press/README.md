@@ -130,7 +130,7 @@ What is in the frame, and why:
 | Currency | Vel (◆) |
 | Rules | Top 25% paid · under 40% repeats with a debuff · 25 deaths wipes the run |
 | Built with | Vanilla JavaScript and HTML5 canvas. No engine, no libraries |
-| Size | One self-contained 334 KB HTML file, no external assets |
+| Size | One self-contained 322 KB HTML file, no external assets |
 | Art | All 165 sprites authored in code against a locked palette |
 | Audio | Synthesised at runtime through WebAudio; no audio files |
 | Status | Playable vertical slice |
