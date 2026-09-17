@@ -4,6 +4,18 @@
 
 ---
 
+## Teaser
+
+`teaser-grayson-1600.png` — 16:9, 1600×900.
+
+Regenerate at any width with `node tools/teaser.mjs <width>` (`OUT=path.png` to choose the
+file). Same rule as the cover: it is composed from the game's **own sprites and palette**, so
+it cannot promise a look the game does not deliver. The hero is wearing **Grayson**, the suit
+you have to find, with the electricity that armour actually arcs in play; the Aurelith looms
+behind him at the same scale it fights you at, held back in brightness rather than in size.
+
+---
+
 ## Cover art
 
 `cover-1024.png` — square, 1024×1024.
