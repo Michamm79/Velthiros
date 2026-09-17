@@ -231,19 +231,31 @@ html, body {
 
   /* --------------------------------------------------------------- weapons
      GDD 7.1. Numbers are the first-pass tuning pass for open question #4. */
+  /* MELEE REACH IS SET AGAINST THE SPRITES, NOT THE BODIES. The collision
+     radii are world units drawn through ZOOM 0.26, while sprites are drawn
+     1:1 into the world buffer, so every character LOOKS about 2.4x wider than
+     the body it swings from: the hero is an 18px sprite on a 3.9px on-screen
+     radius, a goblin a 10px sprite on 2.1px.
+
+     Two sprites therefore touch at ~14 buffer px apart, and a sword used to
+     reach 25.5 - a swingable gap of about one goblin, which is "you have to
+     be standing on them". Unarmed reached 16.6, less than three pixels past
+     overlapping. These numbers put roughly two goblin-widths of air between
+     you and a target you can still hit, which is what the swing looks like it
+     should do. The relative order of the weapons is unchanged. */
   D.WEAPONS = {
     sword: {
       id: 'sword', name: 'Sword', kind: 'melee', owned: true, price: 0,
-      damage: 15, arc: 1.5, range: 90, windup: 0.05, recover: 0.19, stamina: 9,
+      damage: 15, arc: 1.5, range: 122, windup: 0.05, recover: 0.19, stamina: 9,
       moveScale: 0.74, knock: 180,
-      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 96, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
+      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 130, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
       blurb: 'Balanced all-rounder. No weakness, no spike.'
     },
     battleaxe: {
       id: 'battleaxe', name: 'Battleaxe', kind: 'melee', owned: false, price: 260,
-      damage: 27, arc: 1.8, range: 108, windup: 0.26, recover: 0.36, stamina: 22,
+      damage: 27, arc: 1.8, range: 142, windup: 0.26, recover: 0.36, stamina: 22,
       moveScale: 0.5, knock: 380,
-      special: { name: 'Cleave', damage: 44, arc: 2.2, range: 122, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
+      special: { name: 'Cleave', damage: 44, arc: 2.2, range: 160, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
       blurb: 'Huge damage in a wide arc. Long wind-up, poor mobility.'
     },
     bow: {
@@ -255,9 +267,9 @@ html, body {
     },
     scythe: {
       id: 'scythe', name: 'Scythe', kind: 'melee', owned: false, price: -1, secret: true,
-      damage: 21, arc: 1.75, range: 102, windup: 0.08, recover: 0.24, stamina: 14,
+      damage: 21, arc: 1.75, range: 134, windup: 0.08, recover: 0.24, stamina: 14,
       moveScale: 0.72, knock: 250,
-      special: { name: 'Reap', damage: 26, arc: 2.7, range: 116, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
+      special: { name: 'Reap', damage: 26, arc: 2.7, range: 152, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
       blurb: 'The secret. Solid damage, quick, no crippling weakness.'
     }
   };
@@ -268,7 +280,7 @@ html, body {
      case; it is kept out of WEAPON_ORDER so it never reaches a shop. */
   D.WEAPONS.none = {
     id: 'none', name: 'Unarmed', kind: 'melee', owned: true, price: 0,
-    damage: 3, arc: 1.1, range: 56, windup: 0.08, recover: 0.26, stamina: 6,
+    damage: 3, arc: 1.1, range: 78, windup: 0.08, recover: 0.26, stamina: 6,
     moveScale: 0.9, knock: 60,
     special: { name: '--', damage: 0, arc: 0.4, range: 40, windup: 0.1, recover: 0.2, stamina: 999, cooldown: 1 },
     blurb: 'Nothing but your fists.'
@@ -3665,7 +3677,13 @@ html, body {
           this.step(this.wanderAngle, this.speed * 0.34, dt);
           this.moving = true;
         } else this.moving = false;
-        if (this.relentless || this.detects(p)) {
+        /* Relentless is suspended, not cancelled, while the player is in
+           cover. Cancelling it would be worse than the bug: huntOnSpawn
+           enemies spawn at the rim, far outside their own sight, so an enemy
+           that lost relentless once would never find anyone again and a
+           Defend trial would end in an empty arena. `detects` still applies
+           its reduced sight, so hiding in a bush at their feet does not work. */
+        if ((this.relentless && !p.hidden) || this.detects(p)) {
           this.state = 'chase'; this.stateTime = 0; this.aggro = true;
           /* Sticky aggro: once it has seen you it does not un-see you. Off in
              'hide' trials, where breaking line of sight is the entire game. */
@@ -3690,7 +3708,22 @@ html, body {
         this.step(this.def.kite && d < this.def.kite ? toP + Math.PI : toP,
           chaseSpeed * (this.def.kite && d < this.def.kite ? 0.85 : 1), dt);
         if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
-        else if (!this.relentless && !this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
+        /* COVER BREAKS A CHASE, including a relentless one. Hiding used to
+           only shrink the sight radius for the FIRST detection, and
+           stickyAggro is on in every trial type except 'hide' - so in 49 of
+           the 50 trials an enemy that had already noticed you walked straight
+           to the bush you were standing in and hit you in it. Which is the
+           whole mechanic not working.
+
+           Losing a hidden player is also much faster than losing a visible
+           one: 2.5s of beelining at someone who has vanished is long enough
+           to feel like the cover did nothing. */
+        else if (!this.detects(p) &&
+                 this.stateTime > (p.hidden ? 0.55 : 2.5) &&
+                 (p.hidden || !this.relentless)) {
+          this.state = 'idle'; this.stateTime = 0;
+          if (p.hidden) { this.aggro = false; w.floater(this.x, this.y - 40, '?', '#9fb6d8'); }
+        }
         break;
       }
       case 'charge': {
@@ -4043,6 +4076,13 @@ html, body {
     this.spawnQueue = [];
     this.push = null;              /* the stone currently being pushed, if any */
     this.message = null; this.messageTime = 0;
+    /* A card stops the trial and waits to be read. The gem used the 4.5s
+       banner, which is the same channel as 'Hint 2/3 found' - so the one
+       permanent stat choice in the run arrived with less ceremony than a
+       hint, slid past in the corner, and players reached the hub with no idea
+       they were carrying anything. Anything that changes the run permanently
+       gets one of these instead. */
+    this.card = null;
 
     /* --- scripted-sequence support (the tutorial; inert everywhere else) --- */
     this.untimed = !!spec.untimed;   /* no clock, and no timeout loss */
@@ -4416,7 +4456,7 @@ html, body {
       return;
     }
     if (this.state === 'done') { this.updateFx(dt); return; }
-    if (this.paused) return;
+    if (this.paused || this.card) return;
 
     var p = this.player, i;
 
@@ -4587,6 +4627,11 @@ html, body {
     p.moving = true;
     this.confine(p);
   };
+
+  /* `card` is { title, role, body, colour, glow }. Everything but title and
+     body is optional. It holds the trial until the player dismisses it. */
+  Trial.prototype.showCard = function (card) { this.card = card; };
+  Trial.prototype.dismissCard = function () { this.card = null; };
 
   Trial.prototype.setMessage = function (txt, time) {
     this.message = txt;
@@ -5385,7 +5430,25 @@ html, body {
         tr.stats = V.Save.resolveStats(tr.game.save);
         tr.player.stats = tr.stats;
         tr.player.hp = tr.stats.maxHp;
-        tr.setMessage(g.name + ' - ' + g.desc(V.Save.gemLevel(tr.game.save)), 4.5);
+
+        /* This is the only permanent stat choice in a run, and it used to be
+           announced through setMessage - the same 4.5 second banner that says
+           'Hint 2/3 found'. It slid past in the corner and players reached the
+           hub carrying something they had never been told about. It stops the
+           trial now, names the gem, says what it is doing, and says that it
+           grows - because none of that is guessable from a coloured dot on
+           the HUD. */
+        var lv = V.Save.gemLevel(tr.game.save);
+        tr.showCard({
+          title: g.name,
+          role: g.role + '  \u00B7  Level ' + U.roman(lv),
+          body: g.desc(lv) + '.  It is yours for the whole run and it is already '
+              + 'working. It levels every eight trials you clear, up to V, and '
+              + 'a full reset takes it.',
+          colour: g.colour,
+          glow: g.glow,
+          cta: 'Take it'
+        });
       }
     },
 
@@ -5891,11 +5954,11 @@ html, body {
     }
 
     /* ---- bottom-left: virtual joystick ---- */
-    Input.stickEnabled = !trial.paused && trial.state === 'play';
+    Input.stickEnabled = !trial.paused && !trial.card && trial.state === 'play';
     HUD.drawStick(ctx, cw, ch, s);
 
     /* ---- bottom-right: action buttons ---- */
-    var live = trial.state === 'play' && !trial.paused && !p.dead;
+    var live = trial.state === 'play' && !trial.paused && !trial.card && !p.dead;
     var lk = trial.lockedActions || {};
     var aR = 44 * s, sR = 31 * s, dR = 26 * s;
     var ax = cw - padR - aR - 6 * s, ay = ch - padB - aR - 6 * s;
@@ -5940,6 +6003,52 @@ html, body {
 
     /* ---- intro card ---- */
     if (trial.state === 'intro') HUD.drawIntro(ctx, trial, cw, ch, s);
+
+    /* ---- a card that has to be read ---- */
+    if (trial.card) HUD.drawCard(ctx, trial, cw, ch, s);
+  };
+
+  /* A full stop. Used for the things that change the run permanently and were
+     previously announced in the same transient banner as a hint counter - the
+     gem above all, which is the only stat choice in a run and used to arrive
+     as four and a half seconds of small text in the corner.
+
+     Drawn over the dim, so the arena is still visible behind it: this is a
+     thing that just happened to you in the world, not a menu. */
+  HUD.drawCard = function (ctx, trial, cw, ch, s) {
+    var c = trial.card;
+    UI.dim(ctx, cw, ch, 0.62);
+
+    var w = Math.min(cw - 40 * s, 360 * s);
+    var x = cw / 2 - w / 2;
+    var body = UI.wrap(ctx, c.body, w - 32 * s, 13);
+    var h = (c.role ? 112 : 96) * s + body.length * 17 * s;
+    var y = ch * 0.5 - h / 2;
+
+    UI.panel(ctx, x, y, w, h);
+
+    /* a band of the gem's own colour, so the card is recognisably about the
+       thing that is now glowing on the HUD */
+    ctx.fillStyle = c.colour || '#ffe45c';
+    ctx.fillRect(x, y, w, 3 * s);
+
+    var ty = y + 30 * s;
+    UI.text(ctx, c.title, cw / 2, ty,
+      { size: 20, align: 'center', weight: '800', colour: c.glow || '#fff' });
+    if (c.role) {
+      ty += 20 * s;
+      UI.text(ctx, c.role, cw / 2, ty,
+        { size: 11, align: 'center', colour: 'rgba(255,255,255,0.55)' });
+    }
+    ty += 26 * s;
+    for (var i = 0; i < body.length; i++) {
+      UI.text(ctx, body[i], cw / 2, ty + i * 17 * s, { size: 13, align: 'center' });
+    }
+
+    if (UI.button(ctx, 'cardok', x + 16 * s, y + h - 44 * s, w - 32 * s, 32 * s,
+                  c.cta || 'Continue', { size: 14 })) {
+      trial.dismissCard();
+    }
   };
 
   HUD.progressText = function (trial) {
