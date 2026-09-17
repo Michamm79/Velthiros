@@ -866,13 +866,67 @@ async function main() {
     };
     const seen = cover(false), unseen = cover(true);
 
-    return { shot, kited, shadeStart, shadeEnd, goblinEnd, seen, unseen };
+    /* GETTING BEHIND ONE HAS TO PAY. Chase used to assign facing = bearing
+       outright and the wind-up tracked all the way through it, so there was no
+       position a swing could be punished from. Same distance both runs - the
+       player is mirrored THROUGH the enemy rather than moved away - so the
+       only thing that differs is the bearing. */
+    const dodge = (behind) => {
+      const t = fresh();
+      const e = t.spawnEnemy('goblin', 70, 0, {});
+      e.relentless = true; e.state = 'chase'; e.aggro = true;
+      const p = t.player;
+      p.x = 0; p.y = 0; p.hp = p.stats.maxHp; p.iframes = 0;
+      let moved = false, swung = false;
+      for (let i = 0; i < 60 * 10; i++) {
+        if (behind && !moved && e.state === 'windup' &&
+            e.stateTime >= e.def.attackWindup * 0.7) {
+          p.x = e.x + (e.x - p.x); p.y = e.y + (e.y - p.y);   /* same range, opposite side */
+          moved = true;
+        }
+        const was = e.state;
+        t.update(1 / 60);
+        if (was === 'windup' && e.state !== 'windup') { swung = true; break; }
+      }
+      return { swung, moved, hurt: p.hp < p.stats.maxHp };
+    };
+    const stood = dodge(false), slipped = dodge(true);
+
+    /* and the turn itself is finite. 180 degrees cannot be free. */
+    const turn = (() => {
+      const t = fresh();
+      const e = t.spawnEnemy('minotaur', 400, 0, {});
+      e.relentless = true; e.state = 'chase'; e.aggro = true;
+      e.facing = Math.PI; e.aim = Math.PI;          /* looking at the player */
+      t.player.x = 0; t.player.y = 0;
+      t.update(1 / 60);
+      t.player.x = 800;                              /* now directly behind it */
+      let secs = 0;
+      for (let i = 0; i < 60 * 6; i++) {
+        t.update(1 / 60); secs += 1 / 60;
+        const off = Math.abs(((Math.atan2(t.player.y - e.y, t.player.x - e.x) - e.facing + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        if (off < 0.15) break;
+      }
+      return { secs: +secs.toFixed(2), react: e.reactTime, rate: +e.turnRate.toFixed(2) };
+    })();
+
+    return { shot, kited, shadeStart, shadeEnd, goblinEnd, seen, unseen,
+             stood, slipped, turn };
   });
   check('a slinger shoots at the player instead of closing',
     behaviours.shot.bolts > 0 || behaviours.shot.hurt,
     JSON.stringify(behaviours.shot));
   check('a slinger gives ground when the player closes on it',
     behaviours.kited > 150, 'ended ' + behaviours.kited.toFixed(0) + ' units out, from 90');
+  check('slipping behind a wind-up beats it; standing there does not',
+    behaviours.stood.swung && behaviours.stood.hurt &&
+    behaviours.slipped.moved && !behaviours.slipped.hurt,
+    JSON.stringify({ stood: behaviours.stood, slipped: behaviours.slipped }));
+  check('turning 180 degrees costs real time',
+    behaviours.turn.secs > behaviours.turn.react &&
+    behaviours.turn.secs >= Math.PI / behaviours.turn.rate * 0.9,
+    behaviours.turn.secs + 's to come about at ' + behaviours.turn.rate +
+    ' rad/s after a ' + behaviours.turn.react + 's beat');
   check('cover breaks a chase, even a relentless one',
     behaviours.unseen.everHidden && behaviours.unseen.state !== 'chase' &&
     behaviours.unseen.end > behaviours.seen.end * 1.8,

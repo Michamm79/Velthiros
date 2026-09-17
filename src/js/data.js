@@ -150,7 +150,8 @@
     ironclad: {
       id: 'ironclad', name: 'Ironclad', hp: 260, speed: 74, damage: 30, sight: 420,
       radius: 28, attackRange: 84, attackWindup: 0.62, attackRecover: 0.7,
-      score: 72, reward: 42, colour: '#6d7b8c', dark: '#2b323d', heavy: true
+      score: 72, reward: 42, colour: '#6d7b8c', dark: '#2b323d', heavy: true,
+      turn: 2.0, react: 0.55   /* a door. Getting round one should simply work */
     },
 
     /* --- Shade: the answer to kiting. It closes half the gap instantly every
@@ -158,6 +159,7 @@
        safe option. Thin enough to drop fast once you commit to it. --- */
     shade: {
       id: 'shade', name: 'Shade', hp: 70, speed: 132, damage: 16, sight: 900,
+      turn: 7.5, react: 0.15,   /* light on its feet - it is the one that gets behind YOU */
       radius: 16, attackRange: 62, attackWindup: 0.3, attackRecover: 0.38,
       score: 32, reward: 19, colour: '#4aa8c8', dark: '#1d4a60', blink: 2.6
     },
