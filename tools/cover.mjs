@@ -170,30 +170,8 @@ const dataUrl = await page.evaluate((S) => {
   ctx.fill();
 
   Px.shadow(ctx, S / 2, heroY, hero.w * hScale * 0.42, 0.42);
-  Px.draw(ctx, hero, S / 2, heroY, { scale: hScale });
 
-  /* The charge that armour actually carries in play - same rule the game uses:
-     short jagged runs that jump, never a smooth halo. The cover would be
-     promising something the game does not do without it. */
-  ctx.lineWidth = Math.max(1, S / 620);
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 14; i++) {
-    const a = rnd() * Math.PI * 2;
-    const rad = (0.4 + rnd() * 0.5) * hero.w * hScale * 0.8;
-    let x = S / 2 + Math.cos(a) * rad;
-    let y = heroY - hero.h * hScale * 0.5 + Math.sin(a) * rad * 0.7;
-    ctx.strokeStyle = rnd() < 0.3 ? '#b6f4ff' : '#4fd8ff';
-    ctx.globalAlpha = 0.4 + rnd() * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    for (let seg = 0; seg < 3; seg++) {
-      x += (rnd() - 0.5) * S * 0.035;
-      y += (rnd() - 0.5) * S * 0.03;
-      ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
+  Px.draw(ctx, hero, S / 2, heroY, { scale: hScale });
 
   /* ---------------------------------------------------------------- title */
   const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
