@@ -166,41 +166,7 @@ const dataUrl = await page.evaluate((W) => {
   ctx.fillStyle = pool;
   ctx.fillRect(W * 0.22, H * 0.72, W * 0.4, H * 0.28);
 
-  /* the scythe, held out and back - drawn before the body so the haft passes
-     behind him and only the blade clears his shoulder */
-  const sc = Spr.weapon('scythe');
-  const ws = 13 * k;
-  ctx.save();
-  ctx.translate(W * 0.42 + 1.5 * hs, H * 0.93 - hero.h * hs * 0.48);
-  ctx.rotate(-0.52);
-  ctx.drawImage(sc.canvas, -sc.w * ws * 0.14, -sc.h * ws * 0.86, sc.w * ws, sc.h * ws);
-  ctx.restore();
-
   ctx.drawImage(hero.canvas, hx, hy, hero.w * hs, hero.h * hs);
-
-  /* the electricity, drawn at key-art scale with the same rule the game uses:
-     short jagged runs that jump, never a smooth halo */
-  ctx.lineWidth = Math.max(2, 2.6 * k);
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 26; i++) {
-    const a = rnd() * Math.PI * 2;
-    /* held close to the body - arcs thrown wide stop reading as HIS charge
-       and start reading as weather */
-    const rad = (0.4 + rnd() * 0.5) * hero.w * hs * 0.72;
-    let x = W * 0.42 + Math.cos(a) * rad;
-    let y = H * 0.93 - hero.h * hs * 0.5 + Math.sin(a) * rad * 0.7;
-    ctx.strokeStyle = rnd() < 0.3 ? '#b6f4ff' : '#4fd8ff';
-    ctx.globalAlpha = 0.35 + rnd() * 0.55;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    for (let s = 0; s < 4; s++) {
-      x += (rnd() - 0.5) * 34 * k;
-      y += (rnd() - 0.5) * 30 * k;
-      ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
 
   /* --------------------------------------------------------------- title */
   ctx.textAlign = 'left';

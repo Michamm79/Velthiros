@@ -3934,21 +3934,29 @@ html, body {
 
   function drawSparks(ctx, cx, cy, t, colour) {
     ctx.save();
-    ctx.lineWidth = 1;
+    /* Two pixels, not one. A single-pixel arc at this size is a hairline and
+       reads as a stray mark rather than as current. */
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
     ctx.strokeStyle = colour;
     for (var i = 0; i < 4; i++) {
       var life = Math.floor(t * 9 + i * 3.7);
+      /* Each bolt TRAVELS: it picks a direction, runs outward along it, and
+         kinks perpendicular on the way. A free random walk instead ties itself
+         in knots, which is what made these look like scribbles. */
       var a = sparkRand(life * 31 + i * 7) * U.TAU;
-      var rad = 8 + sparkRand(life * 17 + i * 3) * 8;
-      var x = cx + Math.cos(a) * rad;
-      var y = cy - 13 + Math.sin(a) * rad * Art.SQUASH;
+      var ca = Math.cos(a), sa = Math.sin(a);
+      var cp = Math.cos(a + Math.PI / 2), sp = Math.sin(a + Math.PI / 2);
+      /* started outside the body, so the arcs ring him rather than cross him */
+      var rIn = 11 + sparkRand(life * 17 + i * 3) * 4;
+      var len = 7 + sparkRand(life * 23 + i) * 7;
       ctx.globalAlpha = 0.6 + sparkRand(life + i * 11) * 0.4;
       ctx.beginPath();
-      ctx.moveTo(x, y);
+      ctx.moveTo(cx + ca * rIn, cy - 13 + sa * rIn * Art.SQUASH);
       for (var seg = 1; seg <= 3; seg++) {
-        x += (sparkRand(life * 7 + i * 5 + seg) - 0.5) * 8;
-        y += (sparkRand(life * 13 + i * 3 + seg) - 0.5) * 7;
-        ctx.lineTo(x, y);
+        var d = rIn + len * seg / 3;
+        var k = (sparkRand(life * 7 + i * 5 + seg) - 0.5) * 7;
+        ctx.lineTo(cx + ca * d + cp * k, cy - 13 + (sa * d + sp * k) * Art.SQUASH);
       }
       ctx.stroke();
     }
@@ -3997,14 +4005,16 @@ html, body {
     var wOpts = { rot: view.flip ? Math.PI - visual : visual, flip: view.flip };
     var behind = Math.sin(swingAngle) < -0.15;
 
+    /* Armour that carries a charge arcs it AROUND the wearer, so it goes down
+       before he does. Drawn over the top it covered the one thing the frame is
+       about and read as doodles on the art. */
+    var kit = this.outfit && V.D.OUTFITS[this.outfit];
+    if (kit && kit.spark && !this.hidden) drawSparks(ctx, this.sx, y, t, kit.spark);
+
     if (behind) Px.draw(ctx, wpn, wx, wy, wOpts);
     var flash = this.hurtFlash > 0 && Math.floor(this.hurtFlash * 24) % 2 === 0;
     Px.draw(ctx, spr, this.sx, y, { flip: view.flip, alpha: flash ? 0.45 : null });
     if (!behind) Px.draw(ctx, wpn, wx, wy, wOpts);
-
-    /* armour that carries a charge arcs it around the wearer */
-    var kit = this.outfit && V.D.OUTFITS[this.outfit];
-    if (kit && kit.spark && !this.hidden) drawSparks(ctx, this.sx, y, t, kit.spark);
 
     if (this.hidden) {
       ctx.fillStyle = 'rgba(120,200,140,0.22)';
