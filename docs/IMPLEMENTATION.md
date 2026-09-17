@@ -204,14 +204,6 @@ bottom made stripes with the sash, and framing all three of its edges made a gol
 black hole. A collar line and one seam down the front is how a robe closes, and that is all it
 needs.
 
-**Armour that carries a charge arcs it.** An outfit may name a `spark` colour, which the
-player's draw reads rather than the sprite: `drawSparks` lays four short jagged polylines around
-the wearer. Each arc lives about a ninth of a second and then jumps somewhere else entirely -
-that restless relocation is what reads as electricity, where an arc easing from place to place
-reads as a ribbon of light. They are seeded off a counter rather than `Math.random`, so every
-frame within one arc's life draws the *same* arc; re-rolling per frame flickers into mush at
-60fps.
-
 Shop items name their outfit; nothing maps an item id to an outfit by hand. That mapping used
 to live in the smoke test as `shirt_black` -> `'reaper'`, and renaming the line-up failed the
 test on a rename rather than on a bug. It now checks that buying an item equips what that item
@@ -345,11 +337,37 @@ whipping through the full sweep, alternating direction each swing so consecutive
 read as back-and-forth. The sweep width is taken from the weapon's own hit arc, so the
 animation and the hitbox agree.
 
-**Garatu is pixel art now.** He only appears on the title screen, in the abduction cutscene
-and on the reset screen, and was the last character still drawn as smooth vectors. Those
+**Garatu is pixel art, and has been redrawn to the standard of the rest of the cast.** He
+appears on the title screen, in the abduction cutscene and on the reset screen, and those
 screens draw him straight onto the full-resolution canvas at an integer scale rather than
 through the world buffer, which keeps the pixels square without making the surrounding text
-chunky. The bedroom and hub interior furniture is the only art still unconverted.
+chunky.
+
+Converting him from vectors got him into the pipeline but not up to it: two flat slabs for
+wings, a rectangle for a torso and a circle for a head. Three things fixed that, and each
+one is a rule worth keeping.
+
+- **A wing needs a frame.** The membrane hangs off an arm bone and three fingers, and the
+  trailing edge scallops between the finger tips. The scallop is the entire read — a wing
+  with a straight trailing edge is a cape, whatever colour it is. The bones are drawn in the
+  demon mid tone, because on a membrane this dark a bone the colour of the membrane is not
+  a bone.
+- **A taper has to be steep to survive the outline.** The torso went from 7 half-columns at
+  the shoulder to 5 at the waist and read as a rectangle with the corners knocked off; at
+  8-to-4 it reads as a body. The legs likewise needed a three-wide gap, because at two the
+  outline closed it and the whole lower half became one slab.
+- **At this size a one-pixel line is not a thin thing, it is a wire.** The horns were
+  two-pixel bone hairlines and read as antennae; branching them read as antlers. What makes
+  a horn is mass at the base and going outward before it goes up.
+
+**The old vector renderer is gone.** Converting the cast to sprites left `art.js` carrying a
+whole second, unreachable way of drawing every character: the `chibi` rig, `Art.RIG`, the
+vector weapons and `drawPlayer` / `drawGoblin` / `drawMinotaur` / `drawReaper` /
+`drawAurelith` / `drawGaratu`, plus `drawRelic`, `drawCoin` and `drawHintGlyph`. Nothing
+outside the module called any of them — they only called each other, which is exactly how
+dead code survives a grep. `art.js` went from 658 lines to 232, and what is left is the part
+that was never sprite work: the primitives, the ground props and the gem. The bedroom and
+hub interior furniture is the only art still unconverted.
 
 **The scythe combo is pinned for testing.** `D.FIXED_COMBO_INDEX` is `0`, so the unlock is
 always up, up, down, down, left, right. Setting it to `null` restores the GDD behaviour of

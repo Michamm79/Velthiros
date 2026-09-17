@@ -277,50 +277,6 @@
     return true;
   };
 
-  /* Electricity. Each arc is a short jagged polyline that lives for about a
-     ninth of a second and then jumps somewhere else entirely - that restless
-     relocation is what reads as electricity; an arc that eases from place to
-     place reads as a ribbon of light instead.
-
-     Seeded off a counter rather than Math.random so every frame inside one
-     arc's life draws the SAME arc. Re-rolling per frame makes it flicker into
-     mush at 60fps. */
-  function sparkRand(n) {
-    n = (n * 1103515245 + 12345) & 0x7fffffff;
-    return ((n >> 8) % 10007) / 10007;
-  }
-
-  function drawSparks(ctx, cx, cy, t, colour) {
-    ctx.save();
-    /* Two pixels, not one. A single-pixel arc at this size is a hairline and
-       reads as a stray mark rather than as current. */
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = colour;
-    for (var i = 0; i < 4; i++) {
-      var life = Math.floor(t * 9 + i * 3.7);
-      /* Each bolt TRAVELS: it picks a direction, runs outward along it, and
-         kinks perpendicular on the way. A free random walk instead ties itself
-         in knots, which is what made these look like scribbles. */
-      var a = sparkRand(life * 31 + i * 7) * U.TAU;
-      var ca = Math.cos(a), sa = Math.sin(a);
-      var cp = Math.cos(a + Math.PI / 2), sp = Math.sin(a + Math.PI / 2);
-      /* started outside the body, so the arcs ring him rather than cross him */
-      var rIn = 11 + sparkRand(life * 17 + i * 3) * 4;
-      var len = 7 + sparkRand(life * 23 + i) * 7;
-      ctx.globalAlpha = 0.6 + sparkRand(life + i * 11) * 0.4;
-      ctx.beginPath();
-      ctx.moveTo(cx + ca * rIn, cy - 13 + sa * rIn * Art.SQUASH);
-      for (var seg = 1; seg <= 3; seg++) {
-        var d = rIn + len * seg / 3;
-        var k = (sparkRand(life * 7 + i * 5 + seg) - 0.5) * 7;
-        ctx.lineTo(cx + ca * d + cp * k, cy - 13 + (sa * d + sp * k) * Art.SQUASH);
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
   Player.prototype.draw = function (ctx, t) {
     var Px = V.Px, Spr = V.Spr;
     var view = viewOf(this.facing);
@@ -362,12 +318,6 @@
     var visual = Math.atan2(Math.sin(swingAngle) * SQ, Math.cos(swingAngle));
     var wOpts = { rot: view.flip ? Math.PI - visual : visual, flip: view.flip };
     var behind = Math.sin(swingAngle) < -0.15;
-
-    /* Armour that carries a charge arcs it AROUND the wearer, so it goes down
-       before he does. Drawn over the top it covered the one thing the frame is
-       about and read as doodles on the art. */
-    var kit = this.outfit && V.D.OUTFITS[this.outfit];
-    if (kit && kit.spark && !this.hidden) drawSparks(ctx, this.sx, y, t, kit.spark);
 
     if (behind) Px.draw(ctx, wpn, wx, wy, wOpts);
     var flash = this.hurtFlash > 0 && Math.floor(this.hurtFlash * 24) % 2 === 0;

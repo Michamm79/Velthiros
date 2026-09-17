@@ -888,71 +888,148 @@
     });
   };
 
-  /* Garatu: the abductor. Only ever seen on the title screen and in the
-     opening cutscene, but he was the last thing still drawn as smooth vectors. */
+  /* Garatu: the abductor, and the first thing anyone sees - he is on the
+     title screen behind the menu. He was the last of the cast still at the
+     old standard: two flat slabs for wings, a rectangle for a torso and a
+     circle for a head, which is why he read as a bat sticker next to the
+     Aurelith.
+
+     He is NOT the Aurelith and is not meant to become it. Garatu is the one
+     who takes you, red and horned and in the frame from the first second;
+     the Aurelith is the pale thing at the end, and putting it on the title
+     screen would spend the reveal before the game starts. What he needed was
+     the same treatment everyone else got, not a different character.
+
+     Three things changed:
+
+       - THE WINGS HAVE A FRAME. The membrane hangs off an arm bone and three
+         fingers, and the trailing edge scallops between the finger tips. The
+         scallop is the whole read: a wing with a straight trailing edge is a
+         cape, whatever colour it is.
+       - THE BODY HAS A SHAPE. Shoulders down to a waist, a ribbed chest and
+         a lit sternum, rather than one flat block of 'demon body'.
+       - THE HORNS ARE HORNS. They were two-pixel hairlines in bone and
+         vanished against the sky; they are tapered now, and they curve. */
   Spr.garatu = function (frame) {
     return cached('ga:' + frame, function () {
-      return Px.make(58, 44, function (g) {
-        var cx = 29;
+      return Px.make(62, 50, function (g) {
+        var cx = 31;
         var flap = frame ? 7 : 0;
 
-        /* One wing, then mirrored: a ribbed membrane on three fingers.
-
-           A wing beats from the shoulder, so the root holds station and the
-           tip travels furthest - `lift` is that arc, squared so the outer
-           half whips. The displacement used to be (1 - span), which is the
-           beat inverted: the root swung three pixels and the tip sat still,
-           which reads as the wing sliding out of its socket.
-
-           Membrane, leading edge and finger bones all take the lift at their
-           own distance out. Give it to the skin alone and the bones come away
-           from it halfway through the beat. */
+        /* A wing beats from the shoulder, so the root holds station and the
+           tip travels furthest - `lift` is that arc, squared so the outer half
+           whips. The displacement used to be (1 - span), which is the beat
+           inverted: the root swung and the tip sat still, which reads as the
+           wing sliding out of its socket. Membrane, leading edge and finger
+           bones all take the lift at their own distance out; give it to the
+           skin alone and the bones come away from it mid-beat. */
         var lift = function (span) { return span * span * flap; };
 
-        for (var i = 0; i < 24; i++) {
-          var span = i / 23;
-          /* The sweep and the lift are rounded together, not separately. Round
-             each and they disagree by a pixel every few columns, and the top
-             edge saws up and down instead of stepping cleanly. */
-          var top = 5 + Math.round(span * 9 - lift(span));
-          var h = Math.round(14 - span * 5 + Math.sin(span * Math.PI * 3) * 3);
-          if (h < 3) h = 3;
-          g.rect('9', cx - 9 - i, top, 1, h);
-          /* Leading edge. Exactly the pixels the straight line from shoulder
-             to tip used to lay down, but stepped per column so it takes the
-             lift with the membrane instead of cutting across it. */
-          g.set(cx - 9 - i, 6 + Math.round(i * 7 / 23 - lift(span)), '4');
+        var WS = 23, sx0 = cx - 7;                    /* span, and the shoulder */
+
+        /* The arm bone sweeps UP and out, hard and early - sqrt, not a gentle
+           arc - so the silhouette is the raised-wing one rather than a pair of
+           wedges held out sideways. The fingers then hang off it. */
+        var lead = function (span) {
+          return 18 - Math.round(Math.sqrt(span) * 15 - lift(span));
+        };
+        /* Depth of membrane below that bone. It swells across the middle of
+           the wing and is BITTEN INTO between each pair of finger tips: `k`
+           runs 0..1 within one scallop, so the bite is deepest halfway between
+           bones and closes to nothing exactly at each tip. That concave bite
+           is the whole read - a wing with a straight trailing edge is a cape,
+           whatever colour it is. */
+        var depth = function (span) {
+          var k = span * 3 - Math.floor(span * 3);
+          if (span >= 1) k = 0;
+          return 13 + Math.round(Math.sin(span * Math.PI) * 8
+                                 - Math.sin(k * Math.PI) * 7);
+        };
+        var trail = function (span) { return lead(span) + depth(span); };
+
+        for (var i = 0; i <= WS; i++) {
+          var span = i / WS;
+          var x = sx0 - i;
+          /* The sweep and the lift are rounded together inside lead, not
+             separately here. Round each and they disagree by a pixel every few
+             columns and the edge saws instead of stepping cleanly. */
+          var t0 = lead(span), t1 = trail(span);
+          if (t1 > t0) g.rect('9', x, t0, 1, t1 - t0 + 1);
+          g.set(x, t0, '4');                          /* the leading edge */
         }
-        for (var f = 0; f < 3; f++) {                 /* finger bones */
-          var fx = cx - 12 - f * 8;
-          g.line('4', fx, 8 + f * 3 - Math.round(lift((3 + f * 8) / 23)),
-                 fx - 4, 20 + f * 4 - Math.round(lift((7 + f * 8) / 23)));
+
+        /* Finger bones, radiating from the wrist to each scallop's tip. Drawn
+           in the mid tone rather than the shadow: on a membrane this dark a
+           bone the colour of the membrane is not a bone. */
+        var wristS = 0.22;
+        var wx = sx0 - Math.round(WS * wristS), wy = lead(wristS) + 2;
+        for (var f = 1; f <= 3; f++) {
+          var fs = f / 3;
+          g.line('6', wx, wy, sx0 - Math.round(WS * fs), trail(fs));
         }
+        g.line('4', sx0, lead(0) + 1, wx, wy);        /* shoulder to wrist */
 
-        /* body */
-        g.rect('5', cx - 5, 18, 10, 13);
-        g.rect('4', cx + 1, 19, 4, 12);
-        g.rect('6', cx - 4, 20, 3, 6);
-        g.rect('4', cx - 5, 30, 10, 3);               /* belt */
-        g.rect('5', cx - 4, 33, 3, 7);                /* legs */
-        g.rect('5', cx + 1, 33, 3, 7);
-        g.rect('4', cx - 4, 40, 3, 2);
-        g.rect('4', cx + 1, 40, 3, 2);
+        /* ---- body: shoulders tapering hard to a waist, not a block ----
+           Eight half-columns at the shoulder down to four at the waist. The
+           taper has to be steep to survive the outline; at 7-to-5 it read as
+           a rectangle with the corners knocked off. */
+        for (var by = 19; by <= 31; by++) {
+          var hw = 8 - Math.round((by - 19) / 12 * 4);
+          g.rect('5', cx - hw, by, hw * 2, 1);
+        }
+        g.rect('6', cx - 6, 21, 4, 7);                /* the lit side of the chest */
+        g.rect('7', cx - 1, 20, 2, 10);               /* sternum, catching light */
+        for (var rib = 0; rib < 3; rib++) {
+          g.rect('4', cx - 6, 23 + rib * 2, 5, 1);
+        }
+        g.rect('4', cx - 5, 32, 10, 3);               /* belt */
+        g.set(cx - 1, 33, '8');                       /* its one hot stone */
 
-        /* arms */
-        g.rect('7', cx - 8, 20, 3, 8);
-        g.rect('7', cx + 5, 20, 3, 8);
+        /* Legs: three wide with a three-wide gap, so the silhouette breaks
+           between them. At four-and-two the outline closed the gap and the
+           whole lower half read as one slab. */
+        g.rect('5', cx - 5, 35, 3, 9);
+        g.rect('5', cx + 2, 35, 3, 9);
+        g.rect('6', cx - 5, 35, 1, 9);
+        g.rect('4', cx - 6, 44, 4, 3);                /* hooves, splayed out */
+        g.rect('4', cx + 2, 44, 4, 3);
 
-        /* head with swept horns and a lit stare */
-        g.oval('7', cx, 12, 5, 5);
-        g.rect('6', cx + 2, 10, 3, 5);
-        g.set(cx - 2, 12, '8'); g.set(cx + 2, 12, '8');
-        g.set(cx - 2, 13, 'N'); g.set(cx + 2, 13, 'N');
-        g.rect('K', cx - 2, 15, 5, 1);
-        g.line('O', cx - 4, 8, cx - 7, 3);
-        g.line('O', cx - 5, 8, cx - 8, 4);
-        g.line('O', cx + 4, 8, cx + 7, 3);
-        g.line('O', cx + 5, 8, cx + 8, 4);
+        /* arms, hanging where the wings are not */
+        g.rect('7', cx - 10, 20, 3, 8);
+        g.rect('6', cx - 10, 20, 1, 8);
+        g.rect('7', cx - 10, 28, 3, 3);               /* the hand */
+
+        /* ---- head: a brow, a jaw, and a stare ---- */
+        g.oval('7', cx, 13, 6, 6);
+        g.rect('6', cx - 6, 9, 12, 2);                /* skull, in shadow */
+        g.rect('4', cx - 5, 11, 10, 2);               /* the brow ridge */
+        g.rect('6', cx - 4, 17, 8, 2);                /* the heavy jaw */
+        g.rect('8', cx - 5, 13, 3, 2);                /* the stare */
+        g.set(cx - 5, 14, 'N');
+        g.rect('K', cx - 3, 18, 6, 1);                /* the mouth */
+
+        /* Horns: ONE solid curve each, swept BACK first and up second, three
+           pixels thick where they leave the skull and one at the point.
+
+           Two earlier goes failed the same way. Branching them read as
+           antlers. Making them near-vertical hairlines read as antennae - at
+           this size a one-pixel line is not a thin horn, it is a wire. What
+           makes a horn is mass at the base, and going outward before it goes
+           up. The base is in the demon mid tone so it grows out of the skull
+           rather than being stuck on it. */
+        var hPrev = 11;
+        for (var hs = 0; hs <= 10; hs++) {
+          var u = hs / 10;
+          var hx = cx - 3 - Math.round(u * 10);
+          var hy = 11 - Math.round(u * u * 4 + u * 5);
+          var hw = hs < 4 ? 3 : (hs < 8 ? 2 : 1);
+          /* Fill back down to where the last step ended. The curve climbs two
+             rows in one step near the point, and drawing each step as its own
+             block left a hole there - the tip came away as a floating speck. */
+          g.rect(hs < 3 ? '6' : 'O', hx - hw + 1, hy, hw,
+                 Math.max(hw, hPrev - hy + 1));
+          hPrev = hy;
+        }
 
         g.mirrorX();
         form(g, { '9': ['4', null], '5': ['6', '4'], '7': ['0', '6'],
@@ -1448,9 +1525,12 @@
        then hooked the tip forward again, which is three changes of direction
        and reads as a Z, not a scythe.
 
-       It burns neon sky blue: the edge is '/' over a near-black body, with '_'
-       laid over it every few rows so it reads as a glow with a hot core rather
-       than a painted stripe. */
+       The BLADE IS BLUE, not a blue edge on a black blade. It was the second
+       for a while, which at this size is a black blade: the edge is one pixel
+       and the body is three, so the colour you actually read is the body. It
+       now runs the full neon ramp across its thickness - ';' deep along the
+       blunt back, '/' through the body, '_' on the cutting edge - so it is a
+       blue blade that is lit rather than a dark one with a stripe. */
     return Px.make(24, 26, function (g) {
       /* The long stroke, two rows and no more. At three it was as thick as the
          blade was wide and the whole weapon read as a club with an edge on it;
@@ -1468,10 +1548,9 @@
         var t = (20 - y) / 17;
         var x = 19 + Math.round(t * t * 2);         /* the faintest forward lean */
         var back = t < 0.58 ? 3 : (t < 0.86 ? 2 : 1);
-        g.rect('E', x - back, y, back + 1, 1);      /* body */
-        g.set(x - back, y, 'U');                    /* the blunt back */
-        g.set(x, y, '/');                           /* the burning edge */
-        if (y % 4 === 1) g.set(x, y, '_');          /* its hot core */
+        g.rect('/', x - back, y, back + 1, 1);      /* the blade itself */
+        g.set(x - back, y, ';');                    /* the blunt back, deeper */
+        g.set(x, y, '_');                           /* the burning edge */
       }
       g.set(21, 2, '_');                            /* the point */
 
