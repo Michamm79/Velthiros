@@ -350,11 +350,20 @@ horror is that he looks like that while saying *"There you are."*
 
 He is deliberately **not** the Aurelith, and the silhouette is what keeps them apart:
 
-- The Aurelith fans four pairs of wings into a **starburst**. Garatu has one great pair that
-  sweeps up and curls inward into an **arch** over his head, a short pair thrown wide and low,
-  and two ribbons trailing off him.
-- Garatu is 58×62 against the Aurelith's 63×68. He is the herald, not the ending.
+- Garatu has **six wings, three a side**, and the work is in making them read as six rather
+  than as one great pair with detail on it: each leaves the shoulder at its own angle from its
+  own root — upper rising and curling in, middle thrown widest, lower angled out and down —
+  and the tones alternate. Three wings the same colour touching edge to edge is one wing with
+  lines on it, whatever the geometry underneath is doing.
+- The middle pair needs **both bend and depth**, the same note the Aurelith's carries: run out
+  level and uniformly thin it is a plank through the sprite.
+- The Aurelith fans its four pairs into a **starburst** and is bigger everywhere. 64×64
+  against 63×68 is close, but the shapes are not.
 - The Aurelith burns a square core; Garatu carries a slit. The ending gets the bigger heart.
+- **His legs are legs.** They were two one-pixel lines with a wander in them, which is a
+  tentacle however it is labelled. A joint and some width is what makes a leg: a thigh out to
+  a knee, a shin back in under the body, a foot. `limb()` draws the width, because `g.line` is
+  one pixel and at this size a one-pixel line is a wire — the same failure as the old horns.
 
 Two things the colour change broke elsewhere, both worth naming because neither is about the
 sprite:

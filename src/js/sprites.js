@@ -820,6 +820,14 @@
     }
   }
 
+  /* A limb with mass. g.line is one pixel, and at this size a one-pixel line
+     is a wire rather than a thin thing - the same reason Garatu's horns read
+     as antennae until they were given a base. Drawn as parallel runs so a
+     mostly-vertical limb keeps its width all the way down. */
+  function limb(g, c, x0, y0, x1, y1, w) {
+    for (var i = 0; i < w; i++) g.line(c, x0 + i, y0, x1 + i, y1);
+  }
+
   Spr.aurelith = function (frame) {
     return cached('au:' + frame, function () {
       return Px.make(63, 68, function (g) {
@@ -898,39 +906,53 @@
      So he is angelic now - bone feathers, coral growth, one red eye - and the
      horror is that he looks like this while he does it.
 
-     HE IS STILL NOT THE AURELITH, and the silhouette keeps them apart. The
-     Aurelith fans four pairs into a starburst; Garatu has one great pair that
-     sweeps up and closes into an ARCH over his head, with a short pair thrown
-     out low and two ribbons hanging off him. Same order of being, read apart
-     at a glance - which is the right relationship, since one of them sends you
-     to the trials and the other one is waiting at the end of them.
+     SIX WINGS, THREE A SIDE, and they have to read as six. One great pair
+     with a couple of smaller ones tucked behind it reads as two wings with
+     detail on them, so each pair leaves the shoulder at its own angle from its
+     own root - upper rising and curling in, middle thrown widest, lower angled
+     out and down - and the tones alternate between them. Three wings the same
+     colour touching edge to edge is one wing with lines on it, whatever the
+     geometry underneath is doing. The middle pair needs both bend and depth
+     for the same reason the Aurelith's does: run out level and uniformly thin
+     it is a plank through the sprite, not a wing.
 
-     He is also smaller than the Aurelith on purpose: 58x62 against 63x68. He
-     is the herald, not the ending. */
+     He is still not the Aurelith. That one fans its four pairs into a
+     starburst and is bigger everywhere; this is a herald, not an ending. */
   Spr.garatu = function (frame) {
     return cached('ga:' + frame, function () {
-      return Px.make(58, 62, function (g) {
-        var cx = 29;
+      return Px.make(64, 64, function (g) {
+        var cx = 32;
         /* the bend that accumulates along each wing spine; the root holds */
         var flap = frame ? 0.014 : 0;
 
-        /* Canvas angles: y grows downward, so PI points left and 4.71 is
-           straight up. The great pair therefore starts up-and-left and curls
-           toward vertical, which is what closes the arch. */
-        wing(g, cx - 4, 28, 3.25, 0.072, 30, 7, '(', '(', 'Q', flap);
-        /* the low pair: thrown wide, nearly level, past everything else */
-        wing(g, cx - 4, 32, 3.02, -0.014, 23, 8, ')', 'i', '(', flap * 0.75);
-        /* ribbons rather than wings - depth 2, so they trail instead of fan */
-        wing(g, cx - 3, 37, 2.26, -0.012, 17, 2, '(', '(', ')', flap * 0.5);
+        /* SIX WINGS, THREE A SIDE, each its own wing rather than one great
+           pair. Canvas angles: y grows downward, so PI points left and 4.71 is
+           straight up.
+
+           What makes them read as six and not as two is that each pair leaves
+           the shoulder at its own angle and from its own root, so they fan
+           with dark between them - and that the tones alternate. Three wings
+           the same colour touching edge to edge is one wing with lines on it,
+           whatever the geometry underneath is doing. */
+        /* upper: rises and curls inward over the head */
+        wing(g, cx - 4, 23, 3.92, 0.044, 21, 6, '(', ')', 'Q', flap * 1.3);
+        /* middle: the widest. It needs BOTH bend and depth - run out nearly
+           level and uniformly thin it was a grey plank stuck through the
+           sprite, which is the same note the Aurelith's middle pair carries. */
+        wing(g, cx - 4, 29, 3.30, -0.034, 23, 9, ')', ')', '(', flap);
+        /* lower: out and down, the shortest of the three. Edged warm rather
+           than in the cold snow tone, which at depth 5 read as blue spikes
+           rather than as the underside of a wing. */
+        wing(g, cx - 3, 35, 2.80, -0.038, 18, 6, '(', ')', ')', flap * 0.7);
 
         /* Growth, seeded so he bakes identically every run. It stays LOW, in
            against the shoulders and the inner wing, the way it does on the
            reference: spread across the whole span it turns the wings to noise
            and the arch stops being a shape. This is also the part that says
            the beauty is diseased rather than holy. */
-        g.speckle('N', cx - 13, 18, 6, 5, 7, 7717);
-        g.speckle('^', cx - 14, 28, 11, 6, 16, 3391);
-        g.speckle('^', cx - 8, 34, 6, 4, 6, 5153);
+        g.speckle('N', cx - 12, 16, 6, 5, 7, 7717);
+        g.speckle('^', cx - 14, 27, 11, 5, 14, 3391);
+        g.speckle('^', cx - 9, 33, 6, 4, 6, 5153);
 
         /* Body: one dark stroke, narrower than the Aurelith's. A pale creature
            on pale wings is only legible if the one dark shape on it survives,
@@ -953,10 +975,18 @@
         g.set(cx, 14, 'X');
         g.rect('U', cx - 1, 18, 3, 3);
 
-        /* legs: long, thin, ending in points rather than feet */
-        g.line('U', cx - 2, 43, cx - 5, 57);
-        g.line('U', cx - 5, 57, cx - 4, 61);
-        g.line('P', cx - 3, 45, cx - 5, 56);
+        /* LEGS, NOT TENTACLES. They were two one-pixel lines with a slight
+           wander in them, which is a tentacle however you label it. What makes
+           a leg is a JOINT and some width: a thigh swinging out to a knee, a
+           shin coming back in under the body, and a foot at the end of it. The
+           lit column down the front gives the limb a round side. */
+        limb(g, 'U', cx - 3, 43, cx - 8, 52, 3);      /* thigh, out to the knee */
+        limb(g, 'U', cx - 8, 52, cx - 6, 59, 3);      /* shin, back in under it */
+        g.rect('U', cx - 8, 59, 5, 2);                /* the foot */
+        g.set(cx - 9, 60, 'U');
+        limb(g, 'P', cx - 3, 43, cx - 8, 52, 1);      /* lit down the front */
+        limb(g, 'P', cx - 8, 52, cx - 6, 59, 1);
+        g.rect('p', cx - 9, 51, 3, 2);                /* the knee catches light */
 
         g.mirrorX();
         form(g, { '(': ['Q', ')'], ')': ['(', 'i'], 'P': ['p', 'U'],
