@@ -216,19 +216,31 @@ html, body {
 
   /* --------------------------------------------------------------- weapons
      GDD 7.1. Numbers are the first-pass tuning pass for open question #4. */
+  /* MELEE REACH IS SET AGAINST THE SPRITES, NOT THE BODIES. The collision
+     radii are world units drawn through ZOOM 0.26, while sprites are drawn
+     1:1 into the world buffer, so every character LOOKS about 2.4x wider than
+     the body it swings from: the hero is an 18px sprite on a 3.9px on-screen
+     radius, a goblin a 10px sprite on 2.1px.
+
+     Two sprites therefore touch at ~14 buffer px apart, and a sword used to
+     reach 25.5 - a swingable gap of about one goblin, which is "you have to
+     be standing on them". Unarmed reached 16.6, less than three pixels past
+     overlapping. These numbers put roughly two goblin-widths of air between
+     you and a target you can still hit, which is what the swing looks like it
+     should do. The relative order of the weapons is unchanged. */
   D.WEAPONS = {
     sword: {
       id: 'sword', name: 'Sword', kind: 'melee', owned: true, price: 0,
-      damage: 15, arc: 1.5, range: 90, windup: 0.05, recover: 0.19, stamina: 9,
+      damage: 15, arc: 1.5, range: 122, windup: 0.05, recover: 0.19, stamina: 9,
       moveScale: 0.74, knock: 180,
-      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 96, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
+      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 130, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
       blurb: 'Balanced all-rounder. No weakness, no spike.'
     },
     battleaxe: {
       id: 'battleaxe', name: 'Battleaxe', kind: 'melee', owned: false, price: 260,
-      damage: 27, arc: 1.8, range: 108, windup: 0.26, recover: 0.36, stamina: 22,
+      damage: 27, arc: 1.8, range: 142, windup: 0.26, recover: 0.36, stamina: 22,
       moveScale: 0.5, knock: 380,
-      special: { name: 'Cleave', damage: 44, arc: 2.2, range: 122, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
+      special: { name: 'Cleave', damage: 44, arc: 2.2, range: 160, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
       blurb: 'Huge damage in a wide arc. Long wind-up, poor mobility.'
     },
     bow: {
@@ -240,9 +252,9 @@ html, body {
     },
     scythe: {
       id: 'scythe', name: 'Scythe', kind: 'melee', owned: false, price: -1, secret: true,
-      damage: 21, arc: 1.75, range: 102, windup: 0.08, recover: 0.24, stamina: 14,
+      damage: 21, arc: 1.75, range: 134, windup: 0.08, recover: 0.24, stamina: 14,
       moveScale: 0.72, knock: 250,
-      special: { name: 'Reap', damage: 26, arc: 2.7, range: 116, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
+      special: { name: 'Reap', damage: 26, arc: 2.7, range: 152, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
       blurb: 'The secret. Solid damage, quick, no crippling weakness.'
     }
   };
@@ -253,7 +265,7 @@ html, body {
      case; it is kept out of WEAPON_ORDER so it never reaches a shop. */
   D.WEAPONS.none = {
     id: 'none', name: 'Unarmed', kind: 'melee', owned: true, price: 0,
-    damage: 3, arc: 1.1, range: 56, windup: 0.08, recover: 0.26, stamina: 6,
+    damage: 3, arc: 1.1, range: 78, windup: 0.08, recover: 0.26, stamina: 6,
     moveScale: 0.9, knock: 60,
     special: { name: '--', damage: 0, arc: 0.4, range: 40, windup: 0.1, recover: 0.2, stamina: 999, cooldown: 1 },
     blurb: 'Nothing but your fists.'
@@ -2525,6 +2537,14 @@ html, body {
     }
   }
 
+  /* A limb with mass. g.line is one pixel, and at this size a one-pixel line
+     is a wire rather than a thin thing - the same reason Garatu's horns read
+     as antennae until they were given a base. Drawn as parallel runs so a
+     mostly-vertical limb keeps its width all the way down. */
+  function limb(g, c, x0, y0, x1, y1, w) {
+    for (var i = 0; i < w; i++) g.line(c, x0 + i, y0, x1 + i, y1);
+  }
+
   Spr.aurelith = function (frame) {
     return cached('au:' + frame, function () {
       return Px.make(63, 68, function (g) {
@@ -2594,151 +2614,100 @@ html, body {
   };
 
   /* Garatu: the abductor, and the first thing anyone sees - he is on the
-     title screen behind the menu. He was the last of the cast still at the
-     old standard: two flat slabs for wings, a rectangle for a torso and a
-     circle for a head, which is why he read as a bat sticker next to the
-     Aurelith.
+     title screen behind the menu.
 
-     He is NOT the Aurelith and is not meant to become it. Garatu is the one
-     who takes you, red and horned and in the frame from the first second;
-     the Aurelith is the pale thing at the end, and putting it on the title
-     screen would spend the reveal before the game starts. What he needed was
-     the same treatment everyone else got, not a different character.
+     He used to be a red winged demon, which was the wrong monster. What takes
+     you is supposed to be beautiful and to be doing something appalling, and
+     the whole point is that those are the same creature: a red demon reads as
+     a villain from the first frame and there is no contradiction left to feel.
+     So he is angelic now - bone feathers, coral growth, one red eye - and the
+     horror is that he looks like this while he does it.
 
-     Three things changed:
+     SIX WINGS, THREE A SIDE, and they have to read as six. One great pair
+     with a couple of smaller ones tucked behind it reads as two wings with
+     detail on them, so each pair leaves the shoulder at its own angle from its
+     own root - upper rising and curling in, middle thrown widest, lower angled
+     out and down - and the tones alternate between them. Three wings the same
+     colour touching edge to edge is one wing with lines on it, whatever the
+     geometry underneath is doing. The middle pair needs both bend and depth
+     for the same reason the Aurelith's does: run out level and uniformly thin
+     it is a plank through the sprite, not a wing.
 
-       - THE WINGS HAVE A FRAME. The membrane hangs off an arm bone and three
-         fingers, and the trailing edge scallops between the finger tips. The
-         scallop is the whole read: a wing with a straight trailing edge is a
-         cape, whatever colour it is.
-       - THE BODY HAS A SHAPE. Shoulders down to a waist, a ribbed chest and
-         a lit sternum, rather than one flat block of 'demon body'.
-       - THE HORNS ARE HORNS. They were two-pixel hairlines in bone and
-         vanished against the sky; they are tapered now, and they curve. */
+     He is still not the Aurelith. That one fans its four pairs into a
+     starburst and is bigger everywhere; this is a herald, not an ending. */
   Spr.garatu = function (frame) {
     return cached('ga:' + frame, function () {
-      return Px.make(62, 50, function (g) {
-        var cx = 31;
-        var flap = frame ? 7 : 0;
+      return Px.make(64, 64, function (g) {
+        var cx = 32;
+        /* the bend that accumulates along each wing spine; the root holds */
+        var flap = frame ? 0.014 : 0;
 
-        /* A wing beats from the shoulder, so the root holds station and the
-           tip travels furthest - `lift` is that arc, squared so the outer half
-           whips. The displacement used to be (1 - span), which is the beat
-           inverted: the root swung and the tip sat still, which reads as the
-           wing sliding out of its socket. Membrane, leading edge and finger
-           bones all take the lift at their own distance out; give it to the
-           skin alone and the bones come away from it mid-beat. */
-        var lift = function (span) { return span * span * flap; };
+        /* SIX WINGS, THREE A SIDE, each its own wing rather than one great
+           pair. Canvas angles: y grows downward, so PI points left and 4.71 is
+           straight up.
 
-        var WS = 23, sx0 = cx - 7;                    /* span, and the shoulder */
+           What makes them read as six and not as two is that each pair leaves
+           the shoulder at its own angle and from its own root, so they fan
+           with dark between them - and that the tones alternate. Three wings
+           the same colour touching edge to edge is one wing with lines on it,
+           whatever the geometry underneath is doing. */
+        /* upper: rises and curls inward over the head */
+        wing(g, cx - 4, 23, 3.92, 0.044, 21, 6, '(', ')', 'Q', flap * 1.3);
+        /* middle: the widest. It needs BOTH bend and depth - run out nearly
+           level and uniformly thin it was a grey plank stuck through the
+           sprite, which is the same note the Aurelith's middle pair carries. */
+        wing(g, cx - 4, 29, 3.30, -0.034, 23, 9, ')', ')', '(', flap);
+        /* lower: out and down, the shortest of the three. Edged warm rather
+           than in the cold snow tone, which at depth 5 read as blue spikes
+           rather than as the underside of a wing. */
+        wing(g, cx - 3, 35, 2.80, -0.038, 18, 6, '(', ')', ')', flap * 0.7);
 
-        /* The arm bone sweeps UP and out, hard and early - sqrt, not a gentle
-           arc - so the silhouette is the raised-wing one rather than a pair of
-           wedges held out sideways. The fingers then hang off it. */
-        var lead = function (span) {
-          return 18 - Math.round(Math.sqrt(span) * 15 - lift(span));
-        };
-        /* Depth of membrane below that bone. It swells across the middle of
-           the wing and is BITTEN INTO between each pair of finger tips: `k`
-           runs 0..1 within one scallop, so the bite is deepest halfway between
-           bones and closes to nothing exactly at each tip. That concave bite
-           is the whole read - a wing with a straight trailing edge is a cape,
-           whatever colour it is. */
-        var depth = function (span) {
-          var k = span * 3 - Math.floor(span * 3);
-          if (span >= 1) k = 0;
-          return 13 + Math.round(Math.sin(span * Math.PI) * 8
-                                 - Math.sin(k * Math.PI) * 7);
-        };
-        var trail = function (span) { return lead(span) + depth(span); };
+        /* Growth, seeded so he bakes identically every run. It stays LOW, in
+           against the shoulders and the inner wing, the way it does on the
+           reference: spread across the whole span it turns the wings to noise
+           and the arch stops being a shape. This is also the part that says
+           the beauty is diseased rather than holy. */
+        g.speckle('N', cx - 12, 16, 6, 5, 7, 7717);
+        g.speckle('^', cx - 14, 27, 11, 5, 14, 3391);
+        g.speckle('^', cx - 9, 33, 6, 4, 6, 5153);
 
-        for (var i = 0; i <= WS; i++) {
-          var span = i / WS;
-          var x = sx0 - i;
-          /* The sweep and the lift are rounded together inside lead, not
-             separately here. Round each and they disagree by a pixel every few
-             columns and the edge saws instead of stepping cleanly. */
-          var t0 = lead(span), t1 = trail(span);
-          if (t1 > t0) g.rect('9', x, t0, 1, t1 - t0 + 1);
-          g.set(x, t0, '4');                          /* the leading edge */
+        /* Body: one dark stroke, narrower than the Aurelith's. A pale creature
+           on pale wings is only legible if the one dark shape on it survives,
+           so this goes down over the inner feathers. */
+        for (var y = 20; y < 45; y++) {
+          var half = y < 30 ? 4 : Math.max(1, 4 - Math.round((y - 30) * 0.24));
+          g.rect('U', cx - half, y, half * 2 + 1, 1);
+          g.set(cx - half, y, 'P');                   /* lit along one edge */
         }
+        /* the lattice over the chest, and a slit of light behind it. A SLIT,
+           where the Aurelith burns a square - the ending gets the bigger heart */
+        for (var w = 0; w < 3; w++) g.line('p', cx - 3 + w * 2, 21, cx - 1 + w, 30);
+        g.rect('$', cx - 1, 26, 3, 6);
+        g.rect('X', cx, 27, 1, 4);
 
-        /* Finger bones, radiating from the wrist to each scallop's tip. Drawn
-           in the mid tone rather than the shadow: on a membrane this dark a
-           bone the colour of the membrane is not a bone. */
-        var wristS = 0.22;
-        var wx = sx0 - Math.round(WS * wristS), wy = lead(wristS) + 2;
-        for (var f = 1; f <= 3; f++) {
-          var fs = f / 3;
-          g.line('6', wx, wy, sx0 - Math.round(WS * fs), trail(fs));
-        }
-        g.line('4', sx0, lead(0) + 1, wx, wy);        /* shoulder to wrist */
+        /* head: small, pale, one eye, on a long neck. Drawn last so the wings
+           cannot bury the one thing that looks back at you. */
+        g.oval('I', cx, 15, 3, 5);
+        g.rect('(', cx - 1, 10, 3, 4);
+        g.set(cx, 14, 'X');
+        g.rect('U', cx - 1, 18, 3, 3);
 
-        /* ---- body: shoulders tapering hard to a waist, not a block ----
-           Eight half-columns at the shoulder down to four at the waist. The
-           taper has to be steep to survive the outline; at 7-to-5 it read as
-           a rectangle with the corners knocked off. */
-        for (var by = 19; by <= 31; by++) {
-          var hw = 8 - Math.round((by - 19) / 12 * 4);
-          g.rect('5', cx - hw, by, hw * 2, 1);
-        }
-        g.rect('6', cx - 6, 21, 4, 7);                /* the lit side of the chest */
-        g.rect('7', cx - 1, 20, 2, 10);               /* sternum, catching light */
-        for (var rib = 0; rib < 3; rib++) {
-          g.rect('4', cx - 6, 23 + rib * 2, 5, 1);
-        }
-        g.rect('4', cx - 5, 32, 10, 3);               /* belt */
-        g.set(cx - 1, 33, '8');                       /* its one hot stone */
-
-        /* Legs: three wide with a three-wide gap, so the silhouette breaks
-           between them. At four-and-two the outline closed the gap and the
-           whole lower half read as one slab. */
-        g.rect('5', cx - 5, 35, 3, 9);
-        g.rect('5', cx + 2, 35, 3, 9);
-        g.rect('6', cx - 5, 35, 1, 9);
-        g.rect('4', cx - 6, 44, 4, 3);                /* hooves, splayed out */
-        g.rect('4', cx + 2, 44, 4, 3);
-
-        /* arms, hanging where the wings are not */
-        g.rect('7', cx - 10, 20, 3, 8);
-        g.rect('6', cx - 10, 20, 1, 8);
-        g.rect('7', cx - 10, 28, 3, 3);               /* the hand */
-
-        /* ---- head: a brow, a jaw, and a stare ---- */
-        g.oval('7', cx, 13, 6, 6);
-        g.rect('6', cx - 6, 9, 12, 2);                /* skull, in shadow */
-        g.rect('4', cx - 5, 11, 10, 2);               /* the brow ridge */
-        g.rect('6', cx - 4, 17, 8, 2);                /* the heavy jaw */
-        g.rect('8', cx - 5, 13, 3, 2);                /* the stare */
-        g.set(cx - 5, 14, 'N');
-        g.rect('K', cx - 3, 18, 6, 1);                /* the mouth */
-
-        /* Horns: ONE solid curve each, swept BACK first and up second, three
-           pixels thick where they leave the skull and one at the point.
-
-           Two earlier goes failed the same way. Branching them read as
-           antlers. Making them near-vertical hairlines read as antennae - at
-           this size a one-pixel line is not a thin horn, it is a wire. What
-           makes a horn is mass at the base, and going outward before it goes
-           up. The base is in the demon mid tone so it grows out of the skull
-           rather than being stuck on it. */
-        var hPrev = 11;
-        for (var hs = 0; hs <= 10; hs++) {
-          var u = hs / 10;
-          var hx = cx - 3 - Math.round(u * 10);
-          var hy = 11 - Math.round(u * u * 4 + u * 5);
-          var hw = hs < 4 ? 3 : (hs < 8 ? 2 : 1);
-          /* Fill back down to where the last step ended. The curve climbs two
-             rows in one step near the point, and drawing each step as its own
-             block left a hole there - the tip came away as a floating speck. */
-          g.rect(hs < 3 ? '6' : 'O', hx - hw + 1, hy, hw,
-                 Math.max(hw, hPrev - hy + 1));
-          hPrev = hy;
-        }
+        /* LEGS, NOT TENTACLES. They were two one-pixel lines with a slight
+           wander in them, which is a tentacle however you label it. What makes
+           a leg is a JOINT and some width: a thigh swinging out to a knee, a
+           shin coming back in under the body, and a foot at the end of it. The
+           lit column down the front gives the limb a round side. */
+        limb(g, 'U', cx - 3, 43, cx - 8, 52, 3);      /* thigh, out to the knee */
+        limb(g, 'U', cx - 8, 52, cx - 6, 59, 3);      /* shin, back in under it */
+        g.rect('U', cx - 8, 59, 5, 2);                /* the foot */
+        g.set(cx - 9, 60, 'U');
+        limb(g, 'P', cx - 3, 43, cx - 8, 52, 1);      /* lit down the front */
+        limb(g, 'P', cx - 8, 52, cx - 6, 59, 1);
+        g.rect('p', cx - 9, 51, 3, 2);                /* the knee catches light */
 
         g.mirrorX();
-        form(g, { '9': ['4', null], '5': ['6', '4'], '7': ['0', '6'],
-                  '4': ['5', '9'], '6': ['7', '5'], 'O': [null, 'q'] });
+        form(g, { '(': ['Q', ')'], ')': ['(', 'i'], 'P': ['p', 'U'],
+                  'p': [null, 'P'], 'I': ['Q', '('] });
         g.outline('K');
       });
     });
@@ -3723,7 +3692,13 @@ html, body {
           this.step(this.wanderAngle, this.speed * 0.34, dt);
           this.moving = true;
         } else this.moving = false;
-        if (this.relentless || this.detects(p)) {
+        /* Relentless is suspended, not cancelled, while the player is in
+           cover. Cancelling it would be worse than the bug: huntOnSpawn
+           enemies spawn at the rim, far outside their own sight, so an enemy
+           that lost relentless once would never find anyone again and a
+           Defend trial would end in an empty arena. `detects` still applies
+           its reduced sight, so hiding in a bush at their feet does not work. */
+        if ((this.relentless && !p.hidden) || this.detects(p)) {
           this.state = 'chase'; this.stateTime = 0; this.aggro = true;
           /* Sticky aggro: once it has seen you it does not un-see you. Off in
              'hide' trials, where breaking line of sight is the entire game. */
@@ -3748,7 +3723,22 @@ html, body {
         this.step(this.def.kite && d < this.def.kite ? toP + Math.PI : toP,
           chaseSpeed * (this.def.kite && d < this.def.kite ? 0.85 : 1), dt);
         if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
-        else if (!this.relentless && !this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
+        /* COVER BREAKS A CHASE, including a relentless one. Hiding used to
+           only shrink the sight radius for the FIRST detection, and
+           stickyAggro is on in every trial type except 'hide' - so in 49 of
+           the 50 trials an enemy that had already noticed you walked straight
+           to the bush you were standing in and hit you in it. Which is the
+           whole mechanic not working.
+
+           Losing a hidden player is also much faster than losing a visible
+           one: 2.5s of beelining at someone who has vanished is long enough
+           to feel like the cover did nothing. */
+        else if (!this.detects(p) &&
+                 this.stateTime > (p.hidden ? 0.55 : 2.5) &&
+                 (p.hidden || !this.relentless)) {
+          this.state = 'idle'; this.stateTime = 0;
+          if (p.hidden) { this.aggro = false; w.floater(this.x, this.y - 40, '?', '#9fb6d8'); }
+        }
         break;
       }
       case 'charge': {
@@ -4101,6 +4091,13 @@ html, body {
     this.spawnQueue = [];
     this.push = null;              /* the stone currently being pushed, if any */
     this.message = null; this.messageTime = 0;
+    /* A card stops the trial and waits to be read. The gem used the 4.5s
+       banner, which is the same channel as 'Hint 2/3 found' - so the one
+       permanent stat choice in the run arrived with less ceremony than a
+       hint, slid past in the corner, and players reached the hub with no idea
+       they were carrying anything. Anything that changes the run permanently
+       gets one of these instead. */
+    this.card = null;
 
     /* --- scripted-sequence support (the tutorial; inert everywhere else) --- */
     this.untimed = !!spec.untimed;   /* no clock, and no timeout loss */
@@ -4474,7 +4471,7 @@ html, body {
       return;
     }
     if (this.state === 'done') { this.updateFx(dt); return; }
-    if (this.paused) return;
+    if (this.paused || this.card) return;
 
     var p = this.player, i;
 
@@ -4645,6 +4642,11 @@ html, body {
     p.moving = true;
     this.confine(p);
   };
+
+  /* `card` is { title, role, body, colour, glow }. Everything but title and
+     body is optional. It holds the trial until the player dismisses it. */
+  Trial.prototype.showCard = function (card) { this.card = card; };
+  Trial.prototype.dismissCard = function () { this.card = null; };
 
   Trial.prototype.setMessage = function (txt, time) {
     this.message = txt;
@@ -5443,7 +5445,25 @@ html, body {
         tr.stats = V.Save.resolveStats(tr.game.save);
         tr.player.stats = tr.stats;
         tr.player.hp = tr.stats.maxHp;
-        tr.setMessage(g.name + ' - ' + g.desc(V.Save.gemLevel(tr.game.save)), 4.5);
+
+        /* This is the only permanent stat choice in a run, and it used to be
+           announced through setMessage - the same 4.5 second banner that says
+           'Hint 2/3 found'. It slid past in the corner and players reached the
+           hub carrying something they had never been told about. It stops the
+           trial now, names the gem, says what it is doing, and says that it
+           grows - because none of that is guessable from a coloured dot on
+           the HUD. */
+        var lv = V.Save.gemLevel(tr.game.save);
+        tr.showCard({
+          title: g.name,
+          role: g.role + '  \u00B7  Level ' + U.roman(lv),
+          body: g.desc(lv) + '.  It is yours for the whole run and it is already '
+              + 'working. It levels every eight trials you clear, up to V, and '
+              + 'a full reset takes it.',
+          colour: g.colour,
+          glow: g.glow,
+          cta: 'Take it'
+        });
       }
     },
 
@@ -5949,11 +5969,11 @@ html, body {
     }
 
     /* ---- bottom-left: virtual joystick ---- */
-    Input.stickEnabled = !trial.paused && trial.state === 'play';
+    Input.stickEnabled = !trial.paused && !trial.card && trial.state === 'play';
     HUD.drawStick(ctx, cw, ch, s);
 
     /* ---- bottom-right: action buttons ---- */
-    var live = trial.state === 'play' && !trial.paused && !p.dead;
+    var live = trial.state === 'play' && !trial.paused && !trial.card && !p.dead;
     var lk = trial.lockedActions || {};
     var aR = 44 * s, sR = 31 * s, dR = 26 * s;
     var ax = cw - padR - aR - 6 * s, ay = ch - padB - aR - 6 * s;
@@ -5998,6 +6018,52 @@ html, body {
 
     /* ---- intro card ---- */
     if (trial.state === 'intro') HUD.drawIntro(ctx, trial, cw, ch, s);
+
+    /* ---- a card that has to be read ---- */
+    if (trial.card) HUD.drawCard(ctx, trial, cw, ch, s);
+  };
+
+  /* A full stop. Used for the things that change the run permanently and were
+     previously announced in the same transient banner as a hint counter - the
+     gem above all, which is the only stat choice in a run and used to arrive
+     as four and a half seconds of small text in the corner.
+
+     Drawn over the dim, so the arena is still visible behind it: this is a
+     thing that just happened to you in the world, not a menu. */
+  HUD.drawCard = function (ctx, trial, cw, ch, s) {
+    var c = trial.card;
+    UI.dim(ctx, cw, ch, 0.62);
+
+    var w = Math.min(cw - 40 * s, 360 * s);
+    var x = cw / 2 - w / 2;
+    var body = UI.wrap(ctx, c.body, w - 32 * s, 13);
+    var h = (c.role ? 112 : 96) * s + body.length * 17 * s;
+    var y = ch * 0.5 - h / 2;
+
+    UI.panel(ctx, x, y, w, h);
+
+    /* a band of the gem's own colour, so the card is recognisably about the
+       thing that is now glowing on the HUD */
+    ctx.fillStyle = c.colour || '#ffe45c';
+    ctx.fillRect(x, y, w, 3 * s);
+
+    var ty = y + 30 * s;
+    UI.text(ctx, c.title, cw / 2, ty,
+      { size: 20, align: 'center', weight: '800', colour: c.glow || '#fff' });
+    if (c.role) {
+      ty += 20 * s;
+      UI.text(ctx, c.role, cw / 2, ty,
+        { size: 11, align: 'center', colour: 'rgba(255,255,255,0.55)' });
+    }
+    ty += 26 * s;
+    for (var i = 0; i < body.length; i++) {
+      UI.text(ctx, body[i], cw / 2, ty + i * 17 * s, { size: 13, align: 'center' });
+    }
+
+    if (UI.button(ctx, 'cardok', x + 16 * s, y + h - 44 * s, w - 32 * s, 32 * s,
+                  c.cta || 'Continue', { size: 14 })) {
+      trial.dismissCard();
+    }
   };
 
   HUD.progressText = function (trial) {
@@ -6266,7 +6332,11 @@ html, body {
     if (garX - gar.w * gScale / 2 < bx + bwid) {
       garY = Math.max(garY, menuBottom + gar.h * gScale + 16 * s);
     }
-    ctx.globalAlpha = 0.34 + 0.06 * Math.sin(t * 0.9);
+    /* 0.34 was tuned when he was a dark red demon against a lit sky - at that
+       alpha a dark shape still reads. Bone feathers at 0.34 over this purple
+       just go grey and muddy, so he has to come up to stay a creature rather
+       than a smudge. Still short of solid: he is watching, not present. */
+    ctx.globalAlpha = 0.66 + 0.07 * Math.sin(t * 0.9);
     V.Px.draw(ctx, gar, garX, garY + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
     ctx.globalAlpha = 1;
 
@@ -7034,9 +7104,15 @@ html, body {
     if (this.phase !== 'walk' && this.phaseTime > 0.6) {
       var em = U.clamp((this.phaseTime - 0.6) / 1.2, 0, 1);
       var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
-      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2),
+      var gar = V.Spr.garatu(Math.floor(t * 3) % 2);
+      /* Sprites anchor bottom-centre, so a fixed lift puts the crown through
+         the top of the frame the moment the sprite gets taller - which is what
+         happened when he stopped being a demon and grew wings that arch. Take
+         the height from the sprite rather than trusting the constant. */
+      var gy = this._originY + (this.meet.y * SQ - 40) * zoom;
+      V.Px.draw(ctx, gar,
         this._originX + this.meet.x * zoom,
-        this._originY + (this.meet.y * SQ - 40) * zoom,
+        Math.max(gy, gar.h * gScale + 10 * UI.setScale(cw, ch)),
         { scale: gScale, alpha: em });
     }
   };
@@ -7138,7 +7214,9 @@ html, body {
     var demonScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
     if (t > 1.4) {
       var em = U.clamp((t - 1.4) / 1.4, 0, 1);
-      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2), gx, gy + 46 * s,
+      var dem = V.Spr.garatu(Math.floor(t * 3) % 2);
+      V.Px.draw(ctx, dem, gx,
+        Math.max(gy + 46 * s, dem.h * demonScale + 10 * s),
         { scale: demonScale, alpha: em });
     }
 
@@ -7394,7 +7472,9 @@ html, body {
     var s = UI.setScale(cw, ch);
     ctx.fillStyle = '#0d0710';
     ctx.fillRect(0, 0, cw, ch);
-    ctx.globalAlpha = 0.28;
+    /* 0.28 read when he was a dark demon on near-black. Bone at 0.28 is not
+       there at all, so this comes up to match the title screen's reasoning. */
+    ctx.globalAlpha = 0.5;
     V.Px.draw(ctx, V.Spr.garatu(Math.floor(this.t * 2) % 2), cw / 2, ch * 0.42,
       { scale: Math.max(2, Math.round(Math.min(cw, ch) / 150)) });
     ctx.globalAlpha = 1;

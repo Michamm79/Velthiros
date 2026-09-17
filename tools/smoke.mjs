@@ -241,8 +241,16 @@ async function main() {
       wasHidden = wasHidden || t.player.hidden;
     }
     guard('gem');
-    /* 7. gem: walk onto it */
+    /* 7. gem: walk onto it. Picking it up raises a card that HOLDS the trial
+       until it is acknowledged - that is the whole point of the card, so the
+       walkthrough has to tap it the way a player does. `cardHeld` proves it
+       actually blocked rather than flashing past. */
     t.player.x = t.tut.gemSpot.x; t.player.y = t.tut.gemSpot.y;
+    step();
+    const cardHeld = !!t.card;
+    const cardBody = t.card ? (t.card.title + ' | ' + t.card.body) : null;
+    if (t.card) { const before = t.tut.beatId; t.update(1 / 60); var cardFroze = t.tut.beatId === before; }
+    t.dismissCard();
     step();
     const gem = g.save.gem && g.save.gem.id;
     /* the gem beat closes the pedestals - only now is the weapon really yours */
@@ -258,6 +266,7 @@ async function main() {
     return {
       order, firstPick, swapped, swappedAgain, dummySurvived, committed,
       dummyMoved: Math.round(dummyMoved), stillStrike, halfWay, gem, wasHidden,
+      cardHeld, cardFroze, cardBody,
       wardenAlive: !!t.tut.warden && !t.tut.warden.dead
     };
   });
@@ -285,6 +294,14 @@ async function main() {
     'drifted ' + beatWalk.dummyMoved + 'u');
   check('the hide beat plants cover you can actually vanish into', beatWalk.wasHidden === true);
   check('the gem is granted by its beat', !!beatWalk.gem, String(beatWalk.gem));
+  /* The gem used to be announced in the same 4.5s banner as 'Hint 2/3 found'
+     and was routinely missed entirely. It raises a card now, and the card has
+     to actually stop the trial - a card that does not block is just a banner
+     with a button on it. */
+  check('the gem stops the trial and explains itself',
+    beatWalk.cardHeld && beatWalk.cardFroze &&
+    /level/i.test(beatWalk.cardBody || '') && /reset/i.test(beatWalk.cardBody || ''),
+    beatWalk.cardBody || 'no card');
   check('the Warden is waiting at the last beat', beatWalk.wardenAlive);
   await shot('07-tutorial-warden');
 
@@ -818,13 +835,49 @@ async function main() {
     run(t4, 3.2, 1 / 60);
     const goblinEnd = Math.hypot(gb.x - t4.player.x, gb.y - t4.player.y);
 
-    return { shot, kited, shadeStart, shadeEnd, goblinEnd };
+    /* COVER BREAKS A LOCK, including a relentless one. stickyAggro is on in
+       every trial type except 'hide', and relentless short-circuited detects()
+       entirely - so in 49 of the 50 trials an enemy that had already seen you
+       walked straight into the bush you were standing in. Two runs from the
+       same setup, one hidden and one not, so the hidden one has to be measured
+       against what the same goblin does when it can see you. */
+    const cover = (hide) => {
+      const t = fresh();
+      const e = t.spawnEnemy('goblin', 520, 0, {});
+      e.relentless = true; e.state = 'chase'; e.aggro = true;
+      t.player.x = 0; t.player.y = 0;
+      /* Real cover, not a forced flag: Player.update recomputes `hidden` from
+         the world every frame and runs BEFORE the enemies, so a flag set from
+         outside is gone by the time anything reads it. Standing still matters
+         too - hiding needs mv.mag < 0.75. */
+      t.cover.length = 0;
+      if (hide) t.cover.push({ x: 0, y: 0, kind: 'bush', s: 1, seed: 1, r: 60 });
+      window.V.Input.move.x = 0; window.V.Input.move.y = 0; window.V.Input.move.mag = 0;
+      const start = 520;
+      let everHidden = false;
+      for (let i = 0; i < 4 * 60; i++) {
+        t.player.x = 0; t.player.y = 0;
+        t.update(1 / 60);
+        everHidden = everHidden || t.player.hidden;
+      }
+      return { start, everHidden,
+               end: Math.round(Math.hypot(e.x - t.player.x, e.y - t.player.y)),
+               state: e.state };
+    };
+    const seen = cover(false), unseen = cover(true);
+
+    return { shot, kited, shadeStart, shadeEnd, goblinEnd, seen, unseen };
   });
   check('a slinger shoots at the player instead of closing',
     behaviours.shot.bolts > 0 || behaviours.shot.hurt,
     JSON.stringify(behaviours.shot));
   check('a slinger gives ground when the player closes on it',
     behaviours.kited > 150, 'ended ' + behaviours.kited.toFixed(0) + ' units out, from 90');
+  check('cover breaks a chase, even a relentless one',
+    behaviours.unseen.everHidden && behaviours.unseen.state !== 'chase' &&
+    behaviours.unseen.end > behaviours.seen.end * 1.8,
+    'hidden: stopped at ' + behaviours.unseen.end + ' in state ' + behaviours.unseen.state +
+    '; seen: closed to ' + behaviours.seen.end);
   check('a shade closes ground a runner could not',
     behaviours.shadeEnd < behaviours.goblinEnd * 0.6,
     'shade ' + behaviours.shadeStart + ' -> ' + behaviours.shadeEnd.toFixed(0) +

@@ -820,6 +820,14 @@
     }
   }
 
+  /* A limb with mass. g.line is one pixel, and at this size a one-pixel line
+     is a wire rather than a thin thing - the same reason Garatu's horns read
+     as antennae until they were given a base. Drawn as parallel runs so a
+     mostly-vertical limb keeps its width all the way down. */
+  function limb(g, c, x0, y0, x1, y1, w) {
+    for (var i = 0; i < w; i++) g.line(c, x0 + i, y0, x1 + i, y1);
+  }
+
   Spr.aurelith = function (frame) {
     return cached('au:' + frame, function () {
       return Px.make(63, 68, function (g) {
@@ -889,151 +897,100 @@
   };
 
   /* Garatu: the abductor, and the first thing anyone sees - he is on the
-     title screen behind the menu. He was the last of the cast still at the
-     old standard: two flat slabs for wings, a rectangle for a torso and a
-     circle for a head, which is why he read as a bat sticker next to the
-     Aurelith.
+     title screen behind the menu.
 
-     He is NOT the Aurelith and is not meant to become it. Garatu is the one
-     who takes you, red and horned and in the frame from the first second;
-     the Aurelith is the pale thing at the end, and putting it on the title
-     screen would spend the reveal before the game starts. What he needed was
-     the same treatment everyone else got, not a different character.
+     He used to be a red winged demon, which was the wrong monster. What takes
+     you is supposed to be beautiful and to be doing something appalling, and
+     the whole point is that those are the same creature: a red demon reads as
+     a villain from the first frame and there is no contradiction left to feel.
+     So he is angelic now - bone feathers, coral growth, one red eye - and the
+     horror is that he looks like this while he does it.
 
-     Three things changed:
+     SIX WINGS, THREE A SIDE, and they have to read as six. One great pair
+     with a couple of smaller ones tucked behind it reads as two wings with
+     detail on them, so each pair leaves the shoulder at its own angle from its
+     own root - upper rising and curling in, middle thrown widest, lower angled
+     out and down - and the tones alternate between them. Three wings the same
+     colour touching edge to edge is one wing with lines on it, whatever the
+     geometry underneath is doing. The middle pair needs both bend and depth
+     for the same reason the Aurelith's does: run out level and uniformly thin
+     it is a plank through the sprite, not a wing.
 
-       - THE WINGS HAVE A FRAME. The membrane hangs off an arm bone and three
-         fingers, and the trailing edge scallops between the finger tips. The
-         scallop is the whole read: a wing with a straight trailing edge is a
-         cape, whatever colour it is.
-       - THE BODY HAS A SHAPE. Shoulders down to a waist, a ribbed chest and
-         a lit sternum, rather than one flat block of 'demon body'.
-       - THE HORNS ARE HORNS. They were two-pixel hairlines in bone and
-         vanished against the sky; they are tapered now, and they curve. */
+     He is still not the Aurelith. That one fans its four pairs into a
+     starburst and is bigger everywhere; this is a herald, not an ending. */
   Spr.garatu = function (frame) {
     return cached('ga:' + frame, function () {
-      return Px.make(62, 50, function (g) {
-        var cx = 31;
-        var flap = frame ? 7 : 0;
+      return Px.make(64, 64, function (g) {
+        var cx = 32;
+        /* the bend that accumulates along each wing spine; the root holds */
+        var flap = frame ? 0.014 : 0;
 
-        /* A wing beats from the shoulder, so the root holds station and the
-           tip travels furthest - `lift` is that arc, squared so the outer half
-           whips. The displacement used to be (1 - span), which is the beat
-           inverted: the root swung and the tip sat still, which reads as the
-           wing sliding out of its socket. Membrane, leading edge and finger
-           bones all take the lift at their own distance out; give it to the
-           skin alone and the bones come away from it mid-beat. */
-        var lift = function (span) { return span * span * flap; };
+        /* SIX WINGS, THREE A SIDE, each its own wing rather than one great
+           pair. Canvas angles: y grows downward, so PI points left and 4.71 is
+           straight up.
 
-        var WS = 23, sx0 = cx - 7;                    /* span, and the shoulder */
+           What makes them read as six and not as two is that each pair leaves
+           the shoulder at its own angle and from its own root, so they fan
+           with dark between them - and that the tones alternate. Three wings
+           the same colour touching edge to edge is one wing with lines on it,
+           whatever the geometry underneath is doing. */
+        /* upper: rises and curls inward over the head */
+        wing(g, cx - 4, 23, 3.92, 0.044, 21, 6, '(', ')', 'Q', flap * 1.3);
+        /* middle: the widest. It needs BOTH bend and depth - run out nearly
+           level and uniformly thin it was a grey plank stuck through the
+           sprite, which is the same note the Aurelith's middle pair carries. */
+        wing(g, cx - 4, 29, 3.30, -0.034, 23, 9, ')', ')', '(', flap);
+        /* lower: out and down, the shortest of the three. Edged warm rather
+           than in the cold snow tone, which at depth 5 read as blue spikes
+           rather than as the underside of a wing. */
+        wing(g, cx - 3, 35, 2.80, -0.038, 18, 6, '(', ')', ')', flap * 0.7);
 
-        /* The arm bone sweeps UP and out, hard and early - sqrt, not a gentle
-           arc - so the silhouette is the raised-wing one rather than a pair of
-           wedges held out sideways. The fingers then hang off it. */
-        var lead = function (span) {
-          return 18 - Math.round(Math.sqrt(span) * 15 - lift(span));
-        };
-        /* Depth of membrane below that bone. It swells across the middle of
-           the wing and is BITTEN INTO between each pair of finger tips: `k`
-           runs 0..1 within one scallop, so the bite is deepest halfway between
-           bones and closes to nothing exactly at each tip. That concave bite
-           is the whole read - a wing with a straight trailing edge is a cape,
-           whatever colour it is. */
-        var depth = function (span) {
-          var k = span * 3 - Math.floor(span * 3);
-          if (span >= 1) k = 0;
-          return 13 + Math.round(Math.sin(span * Math.PI) * 8
-                                 - Math.sin(k * Math.PI) * 7);
-        };
-        var trail = function (span) { return lead(span) + depth(span); };
+        /* Growth, seeded so he bakes identically every run. It stays LOW, in
+           against the shoulders and the inner wing, the way it does on the
+           reference: spread across the whole span it turns the wings to noise
+           and the arch stops being a shape. This is also the part that says
+           the beauty is diseased rather than holy. */
+        g.speckle('N', cx - 12, 16, 6, 5, 7, 7717);
+        g.speckle('^', cx - 14, 27, 11, 5, 14, 3391);
+        g.speckle('^', cx - 9, 33, 6, 4, 6, 5153);
 
-        for (var i = 0; i <= WS; i++) {
-          var span = i / WS;
-          var x = sx0 - i;
-          /* The sweep and the lift are rounded together inside lead, not
-             separately here. Round each and they disagree by a pixel every few
-             columns and the edge saws instead of stepping cleanly. */
-          var t0 = lead(span), t1 = trail(span);
-          if (t1 > t0) g.rect('9', x, t0, 1, t1 - t0 + 1);
-          g.set(x, t0, '4');                          /* the leading edge */
+        /* Body: one dark stroke, narrower than the Aurelith's. A pale creature
+           on pale wings is only legible if the one dark shape on it survives,
+           so this goes down over the inner feathers. */
+        for (var y = 20; y < 45; y++) {
+          var half = y < 30 ? 4 : Math.max(1, 4 - Math.round((y - 30) * 0.24));
+          g.rect('U', cx - half, y, half * 2 + 1, 1);
+          g.set(cx - half, y, 'P');                   /* lit along one edge */
         }
+        /* the lattice over the chest, and a slit of light behind it. A SLIT,
+           where the Aurelith burns a square - the ending gets the bigger heart */
+        for (var w = 0; w < 3; w++) g.line('p', cx - 3 + w * 2, 21, cx - 1 + w, 30);
+        g.rect('$', cx - 1, 26, 3, 6);
+        g.rect('X', cx, 27, 1, 4);
 
-        /* Finger bones, radiating from the wrist to each scallop's tip. Drawn
-           in the mid tone rather than the shadow: on a membrane this dark a
-           bone the colour of the membrane is not a bone. */
-        var wristS = 0.22;
-        var wx = sx0 - Math.round(WS * wristS), wy = lead(wristS) + 2;
-        for (var f = 1; f <= 3; f++) {
-          var fs = f / 3;
-          g.line('6', wx, wy, sx0 - Math.round(WS * fs), trail(fs));
-        }
-        g.line('4', sx0, lead(0) + 1, wx, wy);        /* shoulder to wrist */
+        /* head: small, pale, one eye, on a long neck. Drawn last so the wings
+           cannot bury the one thing that looks back at you. */
+        g.oval('I', cx, 15, 3, 5);
+        g.rect('(', cx - 1, 10, 3, 4);
+        g.set(cx, 14, 'X');
+        g.rect('U', cx - 1, 18, 3, 3);
 
-        /* ---- body: shoulders tapering hard to a waist, not a block ----
-           Eight half-columns at the shoulder down to four at the waist. The
-           taper has to be steep to survive the outline; at 7-to-5 it read as
-           a rectangle with the corners knocked off. */
-        for (var by = 19; by <= 31; by++) {
-          var hw = 8 - Math.round((by - 19) / 12 * 4);
-          g.rect('5', cx - hw, by, hw * 2, 1);
-        }
-        g.rect('6', cx - 6, 21, 4, 7);                /* the lit side of the chest */
-        g.rect('7', cx - 1, 20, 2, 10);               /* sternum, catching light */
-        for (var rib = 0; rib < 3; rib++) {
-          g.rect('4', cx - 6, 23 + rib * 2, 5, 1);
-        }
-        g.rect('4', cx - 5, 32, 10, 3);               /* belt */
-        g.set(cx - 1, 33, '8');                       /* its one hot stone */
-
-        /* Legs: three wide with a three-wide gap, so the silhouette breaks
-           between them. At four-and-two the outline closed the gap and the
-           whole lower half read as one slab. */
-        g.rect('5', cx - 5, 35, 3, 9);
-        g.rect('5', cx + 2, 35, 3, 9);
-        g.rect('6', cx - 5, 35, 1, 9);
-        g.rect('4', cx - 6, 44, 4, 3);                /* hooves, splayed out */
-        g.rect('4', cx + 2, 44, 4, 3);
-
-        /* arms, hanging where the wings are not */
-        g.rect('7', cx - 10, 20, 3, 8);
-        g.rect('6', cx - 10, 20, 1, 8);
-        g.rect('7', cx - 10, 28, 3, 3);               /* the hand */
-
-        /* ---- head: a brow, a jaw, and a stare ---- */
-        g.oval('7', cx, 13, 6, 6);
-        g.rect('6', cx - 6, 9, 12, 2);                /* skull, in shadow */
-        g.rect('4', cx - 5, 11, 10, 2);               /* the brow ridge */
-        g.rect('6', cx - 4, 17, 8, 2);                /* the heavy jaw */
-        g.rect('8', cx - 5, 13, 3, 2);                /* the stare */
-        g.set(cx - 5, 14, 'N');
-        g.rect('K', cx - 3, 18, 6, 1);                /* the mouth */
-
-        /* Horns: ONE solid curve each, swept BACK first and up second, three
-           pixels thick where they leave the skull and one at the point.
-
-           Two earlier goes failed the same way. Branching them read as
-           antlers. Making them near-vertical hairlines read as antennae - at
-           this size a one-pixel line is not a thin horn, it is a wire. What
-           makes a horn is mass at the base, and going outward before it goes
-           up. The base is in the demon mid tone so it grows out of the skull
-           rather than being stuck on it. */
-        var hPrev = 11;
-        for (var hs = 0; hs <= 10; hs++) {
-          var u = hs / 10;
-          var hx = cx - 3 - Math.round(u * 10);
-          var hy = 11 - Math.round(u * u * 4 + u * 5);
-          var hw = hs < 4 ? 3 : (hs < 8 ? 2 : 1);
-          /* Fill back down to where the last step ended. The curve climbs two
-             rows in one step near the point, and drawing each step as its own
-             block left a hole there - the tip came away as a floating speck. */
-          g.rect(hs < 3 ? '6' : 'O', hx - hw + 1, hy, hw,
-                 Math.max(hw, hPrev - hy + 1));
-          hPrev = hy;
-        }
+        /* LEGS, NOT TENTACLES. They were two one-pixel lines with a slight
+           wander in them, which is a tentacle however you label it. What makes
+           a leg is a JOINT and some width: a thigh swinging out to a knee, a
+           shin coming back in under the body, and a foot at the end of it. The
+           lit column down the front gives the limb a round side. */
+        limb(g, 'U', cx - 3, 43, cx - 8, 52, 3);      /* thigh, out to the knee */
+        limb(g, 'U', cx - 8, 52, cx - 6, 59, 3);      /* shin, back in under it */
+        g.rect('U', cx - 8, 59, 5, 2);                /* the foot */
+        g.set(cx - 9, 60, 'U');
+        limb(g, 'P', cx - 3, 43, cx - 8, 52, 1);      /* lit down the front */
+        limb(g, 'P', cx - 8, 52, cx - 6, 59, 1);
+        g.rect('p', cx - 9, 51, 3, 2);                /* the knee catches light */
 
         g.mirrorX();
-        form(g, { '9': ['4', null], '5': ['6', '4'], '7': ['0', '6'],
-                  '4': ['5', '9'], '6': ['7', '5'], 'O': [null, 'q'] });
+        form(g, { '(': ['Q', ')'], ')': ['(', 'i'], 'P': ['p', 'U'],
+                  'p': [null, 'P'], 'I': ['Q', '('] });
         g.outline('K');
       });
     });

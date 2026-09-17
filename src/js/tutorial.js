@@ -239,7 +239,25 @@
         tr.stats = V.Save.resolveStats(tr.game.save);
         tr.player.stats = tr.stats;
         tr.player.hp = tr.stats.maxHp;
-        tr.setMessage(g.name + ' - ' + g.desc(V.Save.gemLevel(tr.game.save)), 4.5);
+
+        /* This is the only permanent stat choice in a run, and it used to be
+           announced through setMessage - the same 4.5 second banner that says
+           'Hint 2/3 found'. It slid past in the corner and players reached the
+           hub carrying something they had never been told about. It stops the
+           trial now, names the gem, says what it is doing, and says that it
+           grows - because none of that is guessable from a coloured dot on
+           the HUD. */
+        var lv = V.Save.gemLevel(tr.game.save);
+        tr.showCard({
+          title: g.name,
+          role: g.role + '  \u00B7  Level ' + U.roman(lv),
+          body: g.desc(lv) + '.  It is yours for the whole run and it is already '
+              + 'working. It levels every eight trials you clear, up to V, and '
+              + 'a full reset takes it.',
+          colour: g.colour,
+          glow: g.glow,
+          cta: 'Take it'
+        });
       }
     },
 

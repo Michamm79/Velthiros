@@ -447,7 +447,13 @@
           this.step(this.wanderAngle, this.speed * 0.34, dt);
           this.moving = true;
         } else this.moving = false;
-        if (this.relentless || this.detects(p)) {
+        /* Relentless is suspended, not cancelled, while the player is in
+           cover. Cancelling it would be worse than the bug: huntOnSpawn
+           enemies spawn at the rim, far outside their own sight, so an enemy
+           that lost relentless once would never find anyone again and a
+           Defend trial would end in an empty arena. `detects` still applies
+           its reduced sight, so hiding in a bush at their feet does not work. */
+        if ((this.relentless && !p.hidden) || this.detects(p)) {
           this.state = 'chase'; this.stateTime = 0; this.aggro = true;
           /* Sticky aggro: once it has seen you it does not un-see you. Off in
              'hide' trials, where breaking line of sight is the entire game. */
@@ -472,7 +478,22 @@
         this.step(this.def.kite && d < this.def.kite ? toP + Math.PI : toP,
           chaseSpeed * (this.def.kite && d < this.def.kite ? 0.85 : 1), dt);
         if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
-        else if (!this.relentless && !this.detects(p) && this.stateTime > 2.5) { this.state = 'idle'; this.stateTime = 0; }
+        /* COVER BREAKS A CHASE, including a relentless one. Hiding used to
+           only shrink the sight radius for the FIRST detection, and
+           stickyAggro is on in every trial type except 'hide' - so in 49 of
+           the 50 trials an enemy that had already noticed you walked straight
+           to the bush you were standing in and hit you in it. Which is the
+           whole mechanic not working.
+
+           Losing a hidden player is also much faster than losing a visible
+           one: 2.5s of beelining at someone who has vanished is long enough
+           to feel like the cover did nothing. */
+        else if (!this.detects(p) &&
+                 this.stateTime > (p.hidden ? 0.55 : 2.5) &&
+                 (p.hidden || !this.relentless)) {
+          this.state = 'idle'; this.stateTime = 0;
+          if (p.hidden) { this.aggro = false; w.floater(this.x, this.y - 40, '?', '#9fb6d8'); }
+        }
         break;
       }
       case 'charge': {

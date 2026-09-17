@@ -57,6 +57,13 @@
     this.spawnQueue = [];
     this.push = null;              /* the stone currently being pushed, if any */
     this.message = null; this.messageTime = 0;
+    /* A card stops the trial and waits to be read. The gem used the 4.5s
+       banner, which is the same channel as 'Hint 2/3 found' - so the one
+       permanent stat choice in the run arrived with less ceremony than a
+       hint, slid past in the corner, and players reached the hub with no idea
+       they were carrying anything. Anything that changes the run permanently
+       gets one of these instead. */
+    this.card = null;
 
     /* --- scripted-sequence support (the tutorial; inert everywhere else) --- */
     this.untimed = !!spec.untimed;   /* no clock, and no timeout loss */
@@ -430,7 +437,7 @@
       return;
     }
     if (this.state === 'done') { this.updateFx(dt); return; }
-    if (this.paused) return;
+    if (this.paused || this.card) return;
 
     var p = this.player, i;
 
@@ -601,6 +608,11 @@
     p.moving = true;
     this.confine(p);
   };
+
+  /* `card` is { title, role, body, colour, glow }. Everything but title and
+     body is optional. It holds the trial until the player dismisses it. */
+  Trial.prototype.showCard = function (card) { this.card = card; };
+  Trial.prototype.dismissCard = function () { this.card = null; };
 
   Trial.prototype.setMessage = function (txt, time) {
     this.message = txt;

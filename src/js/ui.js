@@ -254,11 +254,11 @@
     }
 
     /* ---- bottom-left: virtual joystick ---- */
-    Input.stickEnabled = !trial.paused && trial.state === 'play';
+    Input.stickEnabled = !trial.paused && !trial.card && trial.state === 'play';
     HUD.drawStick(ctx, cw, ch, s);
 
     /* ---- bottom-right: action buttons ---- */
-    var live = trial.state === 'play' && !trial.paused && !p.dead;
+    var live = trial.state === 'play' && !trial.paused && !trial.card && !p.dead;
     var lk = trial.lockedActions || {};
     var aR = 44 * s, sR = 31 * s, dR = 26 * s;
     var ax = cw - padR - aR - 6 * s, ay = ch - padB - aR - 6 * s;
@@ -303,6 +303,52 @@
 
     /* ---- intro card ---- */
     if (trial.state === 'intro') HUD.drawIntro(ctx, trial, cw, ch, s);
+
+    /* ---- a card that has to be read ---- */
+    if (trial.card) HUD.drawCard(ctx, trial, cw, ch, s);
+  };
+
+  /* A full stop. Used for the things that change the run permanently and were
+     previously announced in the same transient banner as a hint counter - the
+     gem above all, which is the only stat choice in a run and used to arrive
+     as four and a half seconds of small text in the corner.
+
+     Drawn over the dim, so the arena is still visible behind it: this is a
+     thing that just happened to you in the world, not a menu. */
+  HUD.drawCard = function (ctx, trial, cw, ch, s) {
+    var c = trial.card;
+    UI.dim(ctx, cw, ch, 0.62);
+
+    var w = Math.min(cw - 40 * s, 360 * s);
+    var x = cw / 2 - w / 2;
+    var body = UI.wrap(ctx, c.body, w - 32 * s, 13);
+    var h = (c.role ? 112 : 96) * s + body.length * 17 * s;
+    var y = ch * 0.5 - h / 2;
+
+    UI.panel(ctx, x, y, w, h);
+
+    /* a band of the gem's own colour, so the card is recognisably about the
+       thing that is now glowing on the HUD */
+    ctx.fillStyle = c.colour || '#ffe45c';
+    ctx.fillRect(x, y, w, 3 * s);
+
+    var ty = y + 30 * s;
+    UI.text(ctx, c.title, cw / 2, ty,
+      { size: 20, align: 'center', weight: '800', colour: c.glow || '#fff' });
+    if (c.role) {
+      ty += 20 * s;
+      UI.text(ctx, c.role, cw / 2, ty,
+        { size: 11, align: 'center', colour: 'rgba(255,255,255,0.55)' });
+    }
+    ty += 26 * s;
+    for (var i = 0; i < body.length; i++) {
+      UI.text(ctx, body[i], cw / 2, ty + i * 17 * s, { size: 13, align: 'center' });
+    }
+
+    if (UI.button(ctx, 'cardok', x + 16 * s, y + h - 44 * s, w - 32 * s, 32 * s,
+                  c.cta || 'Continue', { size: 14 })) {
+      trial.dismissCard();
+    }
   };
 
   HUD.progressText = function (trial) {
