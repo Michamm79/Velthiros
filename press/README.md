@@ -22,8 +22,13 @@ behind him at the same scale it fights you at, held back in brightness rather th
 
 Regenerate at any size with `node tools/cover.mjs <size>` (`OUT=path.png` to choose the
 file). It is composed from the game's **own sprites and palette** rather than drawn
-separately, so the cover cannot drift away from what the game actually looks like — Garatu
-and the hero on it are the same sprites you meet in the game, at a whole-number scale.
+separately, so the cover cannot drift away from what the game actually looks like — the
+Aurelith and the hero on it are the same sprites you meet in the game, at a whole-number
+scale, and the electricity around him is the charge the Grayson armour really arcs in play.
+
+The hero wears **Grayson**. The looming figure is the **Aurelith**, the game's last fight;
+it replaced Garatu there because Garatu is a red demon by construction and the cover wanted
+to be cold. The only warm thing left in frame is the Aurelith's core.
 
 What is in the frame, and why:
 
