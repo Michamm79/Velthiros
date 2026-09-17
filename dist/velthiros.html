@@ -2609,151 +2609,78 @@ html, body {
   };
 
   /* Garatu: the abductor, and the first thing anyone sees - he is on the
-     title screen behind the menu. He was the last of the cast still at the
-     old standard: two flat slabs for wings, a rectangle for a torso and a
-     circle for a head, which is why he read as a bat sticker next to the
-     Aurelith.
+     title screen behind the menu.
 
-     He is NOT the Aurelith and is not meant to become it. Garatu is the one
-     who takes you, red and horned and in the frame from the first second;
-     the Aurelith is the pale thing at the end, and putting it on the title
-     screen would spend the reveal before the game starts. What he needed was
-     the same treatment everyone else got, not a different character.
+     He used to be a red winged demon, which was the wrong monster. What takes
+     you is supposed to be beautiful and to be doing something appalling, and
+     the whole point is that those are the same creature: a red demon reads as
+     a villain from the first frame and there is no contradiction left to feel.
+     So he is angelic now - bone feathers, coral growth, one red eye - and the
+     horror is that he looks like this while he does it.
 
-     Three things changed:
+     HE IS STILL NOT THE AURELITH, and the silhouette keeps them apart. The
+     Aurelith fans four pairs into a starburst; Garatu has one great pair that
+     sweeps up and closes into an ARCH over his head, with a short pair thrown
+     out low and two ribbons hanging off him. Same order of being, read apart
+     at a glance - which is the right relationship, since one of them sends you
+     to the trials and the other one is waiting at the end of them.
 
-       - THE WINGS HAVE A FRAME. The membrane hangs off an arm bone and three
-         fingers, and the trailing edge scallops between the finger tips. The
-         scallop is the whole read: a wing with a straight trailing edge is a
-         cape, whatever colour it is.
-       - THE BODY HAS A SHAPE. Shoulders down to a waist, a ribbed chest and
-         a lit sternum, rather than one flat block of 'demon body'.
-       - THE HORNS ARE HORNS. They were two-pixel hairlines in bone and
-         vanished against the sky; they are tapered now, and they curve. */
+     He is also smaller than the Aurelith on purpose: 58x62 against 63x68. He
+     is the herald, not the ending. */
   Spr.garatu = function (frame) {
     return cached('ga:' + frame, function () {
-      return Px.make(62, 50, function (g) {
-        var cx = 31;
-        var flap = frame ? 7 : 0;
+      return Px.make(58, 62, function (g) {
+        var cx = 29;
+        /* the bend that accumulates along each wing spine; the root holds */
+        var flap = frame ? 0.014 : 0;
 
-        /* A wing beats from the shoulder, so the root holds station and the
-           tip travels furthest - `lift` is that arc, squared so the outer half
-           whips. The displacement used to be (1 - span), which is the beat
-           inverted: the root swung and the tip sat still, which reads as the
-           wing sliding out of its socket. Membrane, leading edge and finger
-           bones all take the lift at their own distance out; give it to the
-           skin alone and the bones come away from it mid-beat. */
-        var lift = function (span) { return span * span * flap; };
+        /* Canvas angles: y grows downward, so PI points left and 4.71 is
+           straight up. The great pair therefore starts up-and-left and curls
+           toward vertical, which is what closes the arch. */
+        wing(g, cx - 4, 28, 3.25, 0.072, 30, 7, '(', '(', 'Q', flap);
+        /* the low pair: thrown wide, nearly level, past everything else */
+        wing(g, cx - 4, 32, 3.02, -0.014, 23, 8, ')', 'i', '(', flap * 0.75);
+        /* ribbons rather than wings - depth 2, so they trail instead of fan */
+        wing(g, cx - 3, 37, 2.26, -0.012, 17, 2, '(', '(', ')', flap * 0.5);
 
-        var WS = 23, sx0 = cx - 7;                    /* span, and the shoulder */
+        /* Growth, seeded so he bakes identically every run. It stays LOW, in
+           against the shoulders and the inner wing, the way it does on the
+           reference: spread across the whole span it turns the wings to noise
+           and the arch stops being a shape. This is also the part that says
+           the beauty is diseased rather than holy. */
+        g.speckle('N', cx - 13, 18, 6, 5, 7, 7717);
+        g.speckle('^', cx - 14, 28, 11, 6, 16, 3391);
+        g.speckle('^', cx - 8, 34, 6, 4, 6, 5153);
 
-        /* The arm bone sweeps UP and out, hard and early - sqrt, not a gentle
-           arc - so the silhouette is the raised-wing one rather than a pair of
-           wedges held out sideways. The fingers then hang off it. */
-        var lead = function (span) {
-          return 18 - Math.round(Math.sqrt(span) * 15 - lift(span));
-        };
-        /* Depth of membrane below that bone. It swells across the middle of
-           the wing and is BITTEN INTO between each pair of finger tips: `k`
-           runs 0..1 within one scallop, so the bite is deepest halfway between
-           bones and closes to nothing exactly at each tip. That concave bite
-           is the whole read - a wing with a straight trailing edge is a cape,
-           whatever colour it is. */
-        var depth = function (span) {
-          var k = span * 3 - Math.floor(span * 3);
-          if (span >= 1) k = 0;
-          return 13 + Math.round(Math.sin(span * Math.PI) * 8
-                                 - Math.sin(k * Math.PI) * 7);
-        };
-        var trail = function (span) { return lead(span) + depth(span); };
-
-        for (var i = 0; i <= WS; i++) {
-          var span = i / WS;
-          var x = sx0 - i;
-          /* The sweep and the lift are rounded together inside lead, not
-             separately here. Round each and they disagree by a pixel every few
-             columns and the edge saws instead of stepping cleanly. */
-          var t0 = lead(span), t1 = trail(span);
-          if (t1 > t0) g.rect('9', x, t0, 1, t1 - t0 + 1);
-          g.set(x, t0, '4');                          /* the leading edge */
+        /* Body: one dark stroke, narrower than the Aurelith's. A pale creature
+           on pale wings is only legible if the one dark shape on it survives,
+           so this goes down over the inner feathers. */
+        for (var y = 20; y < 45; y++) {
+          var half = y < 30 ? 4 : Math.max(1, 4 - Math.round((y - 30) * 0.24));
+          g.rect('U', cx - half, y, half * 2 + 1, 1);
+          g.set(cx - half, y, 'P');                   /* lit along one edge */
         }
+        /* the lattice over the chest, and a slit of light behind it. A SLIT,
+           where the Aurelith burns a square - the ending gets the bigger heart */
+        for (var w = 0; w < 3; w++) g.line('p', cx - 3 + w * 2, 21, cx - 1 + w, 30);
+        g.rect('$', cx - 1, 26, 3, 6);
+        g.rect('X', cx, 27, 1, 4);
 
-        /* Finger bones, radiating from the wrist to each scallop's tip. Drawn
-           in the mid tone rather than the shadow: on a membrane this dark a
-           bone the colour of the membrane is not a bone. */
-        var wristS = 0.22;
-        var wx = sx0 - Math.round(WS * wristS), wy = lead(wristS) + 2;
-        for (var f = 1; f <= 3; f++) {
-          var fs = f / 3;
-          g.line('6', wx, wy, sx0 - Math.round(WS * fs), trail(fs));
-        }
-        g.line('4', sx0, lead(0) + 1, wx, wy);        /* shoulder to wrist */
+        /* head: small, pale, one eye, on a long neck. Drawn last so the wings
+           cannot bury the one thing that looks back at you. */
+        g.oval('I', cx, 15, 3, 5);
+        g.rect('(', cx - 1, 10, 3, 4);
+        g.set(cx, 14, 'X');
+        g.rect('U', cx - 1, 18, 3, 3);
 
-        /* ---- body: shoulders tapering hard to a waist, not a block ----
-           Eight half-columns at the shoulder down to four at the waist. The
-           taper has to be steep to survive the outline; at 7-to-5 it read as
-           a rectangle with the corners knocked off. */
-        for (var by = 19; by <= 31; by++) {
-          var hw = 8 - Math.round((by - 19) / 12 * 4);
-          g.rect('5', cx - hw, by, hw * 2, 1);
-        }
-        g.rect('6', cx - 6, 21, 4, 7);                /* the lit side of the chest */
-        g.rect('7', cx - 1, 20, 2, 10);               /* sternum, catching light */
-        for (var rib = 0; rib < 3; rib++) {
-          g.rect('4', cx - 6, 23 + rib * 2, 5, 1);
-        }
-        g.rect('4', cx - 5, 32, 10, 3);               /* belt */
-        g.set(cx - 1, 33, '8');                       /* its one hot stone */
-
-        /* Legs: three wide with a three-wide gap, so the silhouette breaks
-           between them. At four-and-two the outline closed the gap and the
-           whole lower half read as one slab. */
-        g.rect('5', cx - 5, 35, 3, 9);
-        g.rect('5', cx + 2, 35, 3, 9);
-        g.rect('6', cx - 5, 35, 1, 9);
-        g.rect('4', cx - 6, 44, 4, 3);                /* hooves, splayed out */
-        g.rect('4', cx + 2, 44, 4, 3);
-
-        /* arms, hanging where the wings are not */
-        g.rect('7', cx - 10, 20, 3, 8);
-        g.rect('6', cx - 10, 20, 1, 8);
-        g.rect('7', cx - 10, 28, 3, 3);               /* the hand */
-
-        /* ---- head: a brow, a jaw, and a stare ---- */
-        g.oval('7', cx, 13, 6, 6);
-        g.rect('6', cx - 6, 9, 12, 2);                /* skull, in shadow */
-        g.rect('4', cx - 5, 11, 10, 2);               /* the brow ridge */
-        g.rect('6', cx - 4, 17, 8, 2);                /* the heavy jaw */
-        g.rect('8', cx - 5, 13, 3, 2);                /* the stare */
-        g.set(cx - 5, 14, 'N');
-        g.rect('K', cx - 3, 18, 6, 1);                /* the mouth */
-
-        /* Horns: ONE solid curve each, swept BACK first and up second, three
-           pixels thick where they leave the skull and one at the point.
-
-           Two earlier goes failed the same way. Branching them read as
-           antlers. Making them near-vertical hairlines read as antennae - at
-           this size a one-pixel line is not a thin horn, it is a wire. What
-           makes a horn is mass at the base, and going outward before it goes
-           up. The base is in the demon mid tone so it grows out of the skull
-           rather than being stuck on it. */
-        var hPrev = 11;
-        for (var hs = 0; hs <= 10; hs++) {
-          var u = hs / 10;
-          var hx = cx - 3 - Math.round(u * 10);
-          var hy = 11 - Math.round(u * u * 4 + u * 5);
-          var hw = hs < 4 ? 3 : (hs < 8 ? 2 : 1);
-          /* Fill back down to where the last step ended. The curve climbs two
-             rows in one step near the point, and drawing each step as its own
-             block left a hole there - the tip came away as a floating speck. */
-          g.rect(hs < 3 ? '6' : 'O', hx - hw + 1, hy, hw,
-                 Math.max(hw, hPrev - hy + 1));
-          hPrev = hy;
-        }
+        /* legs: long, thin, ending in points rather than feet */
+        g.line('U', cx - 2, 43, cx - 5, 57);
+        g.line('U', cx - 5, 57, cx - 4, 61);
+        g.line('P', cx - 3, 45, cx - 5, 56);
 
         g.mirrorX();
-        form(g, { '9': ['4', null], '5': ['6', '4'], '7': ['0', '6'],
-                  '4': ['5', '9'], '6': ['7', '5'], 'O': [null, 'q'] });
+        form(g, { '(': ['Q', ')'], ')': ['(', 'i'], 'P': ['p', 'U'],
+                  'p': [null, 'P'], 'I': ['Q', '('] });
         g.outline('K');
       });
     });
@@ -6281,7 +6208,11 @@ html, body {
     if (garX - gar.w * gScale / 2 < bx + bwid) {
       garY = Math.max(garY, menuBottom + gar.h * gScale + 16 * s);
     }
-    ctx.globalAlpha = 0.34 + 0.06 * Math.sin(t * 0.9);
+    /* 0.34 was tuned when he was a dark red demon against a lit sky - at that
+       alpha a dark shape still reads. Bone feathers at 0.34 over this purple
+       just go grey and muddy, so he has to come up to stay a creature rather
+       than a smudge. Still short of solid: he is watching, not present. */
+    ctx.globalAlpha = 0.66 + 0.07 * Math.sin(t * 0.9);
     V.Px.draw(ctx, gar, garX, garY + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
     ctx.globalAlpha = 1;
 
@@ -7049,9 +6980,15 @@ html, body {
     if (this.phase !== 'walk' && this.phaseTime > 0.6) {
       var em = U.clamp((this.phaseTime - 0.6) / 1.2, 0, 1);
       var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
-      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2),
+      var gar = V.Spr.garatu(Math.floor(t * 3) % 2);
+      /* Sprites anchor bottom-centre, so a fixed lift puts the crown through
+         the top of the frame the moment the sprite gets taller - which is what
+         happened when he stopped being a demon and grew wings that arch. Take
+         the height from the sprite rather than trusting the constant. */
+      var gy = this._originY + (this.meet.y * SQ - 40) * zoom;
+      V.Px.draw(ctx, gar,
         this._originX + this.meet.x * zoom,
-        this._originY + (this.meet.y * SQ - 40) * zoom,
+        Math.max(gy, gar.h * gScale + 10 * UI.setScale(cw, ch)),
         { scale: gScale, alpha: em });
     }
   };
@@ -7153,7 +7090,9 @@ html, body {
     var demonScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
     if (t > 1.4) {
       var em = U.clamp((t - 1.4) / 1.4, 0, 1);
-      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2), gx, gy + 46 * s,
+      var dem = V.Spr.garatu(Math.floor(t * 3) % 2);
+      V.Px.draw(ctx, dem, gx,
+        Math.max(gy + 46 * s, dem.h * demonScale + 10 * s),
         { scale: demonScale, alpha: em });
     }
 
@@ -7409,7 +7348,9 @@ html, body {
     var s = UI.setScale(cw, ch);
     ctx.fillStyle = '#0d0710';
     ctx.fillRect(0, 0, cw, ch);
-    ctx.globalAlpha = 0.28;
+    /* 0.28 read when he was a dark demon on near-black. Bone at 0.28 is not
+       there at all, so this comes up to match the title screen's reasoning. */
+    ctx.globalAlpha = 0.5;
     V.Px.draw(ctx, V.Spr.garatu(Math.floor(this.t * 2) % 2), cw / 2, ch * 0.42,
       { scale: Math.max(2, Math.round(Math.min(cw, ch) / 150)) });
     ctx.globalAlpha = 1;

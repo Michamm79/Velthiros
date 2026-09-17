@@ -137,7 +137,11 @@
     if (garX - gar.w * gScale / 2 < bx + bwid) {
       garY = Math.max(garY, menuBottom + gar.h * gScale + 16 * s);
     }
-    ctx.globalAlpha = 0.34 + 0.06 * Math.sin(t * 0.9);
+    /* 0.34 was tuned when he was a dark red demon against a lit sky - at that
+       alpha a dark shape still reads. Bone feathers at 0.34 over this purple
+       just go grey and muddy, so he has to come up to stay a creature rather
+       than a smudge. Still short of solid: he is watching, not present. */
+    ctx.globalAlpha = 0.66 + 0.07 * Math.sin(t * 0.9);
     V.Px.draw(ctx, gar, garX, garY + Math.round(Math.sin(t * 0.7) * 10), { scale: gScale });
     ctx.globalAlpha = 1;
 
@@ -905,9 +909,15 @@
     if (this.phase !== 'walk' && this.phaseTime > 0.6) {
       var em = U.clamp((this.phaseTime - 0.6) / 1.2, 0, 1);
       var gScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
-      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2),
+      var gar = V.Spr.garatu(Math.floor(t * 3) % 2);
+      /* Sprites anchor bottom-centre, so a fixed lift puts the crown through
+         the top of the frame the moment the sprite gets taller - which is what
+         happened when he stopped being a demon and grew wings that arch. Take
+         the height from the sprite rather than trusting the constant. */
+      var gy = this._originY + (this.meet.y * SQ - 40) * zoom;
+      V.Px.draw(ctx, gar,
         this._originX + this.meet.x * zoom,
-        this._originY + (this.meet.y * SQ - 40) * zoom,
+        Math.max(gy, gar.h * gScale + 10 * UI.setScale(cw, ch)),
         { scale: gScale, alpha: em });
     }
   };
@@ -1009,7 +1019,9 @@
     var demonScale = Math.max(2, Math.round(Math.min(cw, ch) / 150));
     if (t > 1.4) {
       var em = U.clamp((t - 1.4) / 1.4, 0, 1);
-      V.Px.draw(ctx, V.Spr.garatu(Math.floor(t * 3) % 2), gx, gy + 46 * s,
+      var dem = V.Spr.garatu(Math.floor(t * 3) % 2);
+      V.Px.draw(ctx, dem, gx,
+        Math.max(gy + 46 * s, dem.h * demonScale + 10 * s),
         { scale: demonScale, alpha: em });
     }
 
@@ -1265,7 +1277,9 @@
     var s = UI.setScale(cw, ch);
     ctx.fillStyle = '#0d0710';
     ctx.fillRect(0, 0, cw, ch);
-    ctx.globalAlpha = 0.28;
+    /* 0.28 read when he was a dark demon on near-black. Bone at 0.28 is not
+       there at all, so this comes up to match the title screen's reasoning. */
+    ctx.globalAlpha = 0.5;
     V.Px.draw(ctx, V.Spr.garatu(Math.floor(this.t * 2) % 2), cw / 2, ch * 0.42,
       { scale: Math.max(2, Math.round(Math.min(cw, ch) / 150)) });
     ctx.globalAlpha = 1;

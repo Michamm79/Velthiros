@@ -337,28 +337,36 @@ whipping through the full sweep, alternating direction each swing so consecutive
 read as back-and-forth. The sweep width is taken from the weapon's own hit arc, so the
 animation and the hitbox agree.
 
-**Garatu is pixel art, and has been redrawn to the standard of the rest of the cast.** He
-appears on the title screen, in the abduction cutscene and on the reset screen, and those
-screens draw him straight onto the full-resolution canvas at an integer scale rather than
-through the world buffer, which keeps the pixels square without making the surrounding text
-chunky.
+**Garatu is an angelic thing, not a demon.** He appears on the title screen, in the abduction
+cutscene and on the reset screen, and those screens draw him straight onto the full-resolution
+canvas at an integer scale rather than through the world buffer, which keeps the pixels square
+without making the surrounding text chunky.
 
-Converting him from vectors got him into the pipeline but not up to it: two flat slabs for
-wings, a rectangle for a torso and a circle for a head. Three things fixed that, and each
-one is a rule worth keeping.
+He was a red winged demon, which was the wrong monster for what he does. The premise is that
+something beautiful takes you off an ordinary street and puts you in a spectacle for other
+people's entertainment — and a red demon reads as a villain in the first frame, so there is no
+contradiction left to feel. He is bone feathers, coral growth and one red eye now, and the
+horror is that he looks like that while saying *"There you are."*
 
-- **A wing needs a frame.** The membrane hangs off an arm bone and three fingers, and the
-  trailing edge scallops between the finger tips. The scallop is the entire read — a wing
-  with a straight trailing edge is a cape, whatever colour it is. The bones are drawn in the
-  demon mid tone, because on a membrane this dark a bone the colour of the membrane is not
-  a bone.
-- **A taper has to be steep to survive the outline.** The torso went from 7 half-columns at
-  the shoulder to 5 at the waist and read as a rectangle with the corners knocked off; at
-  8-to-4 it reads as a body. The legs likewise needed a three-wide gap, because at two the
-  outline closed it and the whole lower half became one slab.
-- **At this size a one-pixel line is not a thin thing, it is a wire.** The horns were
-  two-pixel bone hairlines and read as antennae; branching them read as antlers. What makes
-  a horn is mass at the base and going outward before it goes up.
+He is deliberately **not** the Aurelith, and the silhouette is what keeps them apart:
+
+- The Aurelith fans four pairs of wings into a **starburst**. Garatu has one great pair that
+  sweeps up and curls inward into an **arch** over his head, a short pair thrown wide and low,
+  and two ribbons trailing off him.
+- Garatu is 58×62 against the Aurelith's 63×68. He is the herald, not the ending.
+- The Aurelith burns a square core; Garatu carries a slit. The ending gets the bigger heart.
+
+Two things the colour change broke elsewhere, both worth naming because neither is about the
+sprite:
+
+- **Alpha tuned for a dark sprite does not survive a pale one.** The title screen drew him at
+  0.34 and the reset screen at 0.28, which read fine for a dark red shape against a lit sky.
+  Bone at 0.34 over that purple just goes grey and muddy. They are 0.66 and 0.5 now — still
+  short of solid, because he is watching rather than present.
+- **A fixed lift plus a bottom-centre anchor is a latent clipping bug.** The rift and fall
+  cutscenes lifted him by a constant, so the moment the sprite got 12px taller his crown went
+  through the top of the frame. Both now take the height from the sprite and clamp, so the
+  next time he changes size nothing needs to be re-tuned by hand.
 
 **The old vector renderer is gone.** Converting the cast to sprites left `art.js` carrying a
 whole second, unreachable way of drawing every character: the `chibi` rig, `Art.RIG`, the
