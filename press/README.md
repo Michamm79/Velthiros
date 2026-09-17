@@ -14,8 +14,8 @@ it cannot promise a look the game does not deliver. The hero is wearing **Grayso
 you have to find; the Aurelith looms behind him at the same scale it fights you at, held back
 in brightness rather than in size.
 
-Both pieces are deliberately quiet: no weapon, no effects, just the armour. The electricity
-that suit arcs is a thing you see in play, not on the poster.
+Both pieces are deliberately quiet: no weapon, no effects, just the armour. Grayson is the
+whole subject of the frame, and nothing else in it competes with him.
 
 ---
 
@@ -35,8 +35,8 @@ to be cold. The only warm thing left in frame is the Aurelith's core.
 
 What is in the frame, and why:
 
-- **Garatu**, large and looming. He is the one who takes you, and the only watcher you
-  ever actually see.
+- **The Aurelith**, large and looming. The thing waiting at the end of the fifty trials,
+  drawn as a mass rather than as detail so the eye still lands on the hero.
 - **Eyes in the dark**, dozens of them, dimmer toward the edges. The premise is that unseen
   watchers score every run, and by definition they have no sprite — so they are eyes, and
   they are everywhere.
@@ -105,12 +105,12 @@ What is in the frame, and why:
 | Genre | Trial-based action-RPG |
 | Platform | Any browser; built for phones. Installs as a PWA, plays offline |
 | Controls | Touch (drag to move, tap to attack/dodge) or keyboard |
-| Content | 50 trials across 9 types, 4 weapons, 4 enemy types, a tutorial and a boss |
+| Content | 50 trials across 9 types, 4 weapons, 6 enemy types, a tutorial and two bosses |
 | Currency | Vel (◆) |
 | Rules | Top 25% paid · under 40% repeats with a debuff · 25 deaths wipes the run |
 | Built with | Vanilla JavaScript and HTML5 canvas. No engine, no libraries |
-| Size | One self-contained 283 KB HTML file, no external assets |
-| Art | All 93 sprites authored in code against a locked 40-colour palette |
+| Size | One self-contained 334 KB HTML file, no external assets |
+| Art | All 165 sprites authored in code against a locked palette |
 | Audio | Synthesised at runtime through WebAudio; no audio files |
 | Status | Playable vertical slice |
 
