@@ -6220,23 +6220,154 @@ html, body {
   var U = V.U, D = V.D, Art = V.Art, UI = V.UI, Input = V.Input, Audio = V.Audio, Save = V.Save;
   var S = {};
 
+  /* ================================================================ SECRET
+     The scythe combination. It lives here rather than on a scene because it
+     has to appear in more than one place - the title screen and the room you
+     come back to - and two copies of a secret is two chances for them to
+     disagree about whether it has been found.
+
+     A host scene owns `secret` (the state) and calls into these. It provides
+     one thing of its own: where on screen the reopen mark goes, because a
+     title screen and a bedroom have different furniture to avoid. */
+  var Secret = {};
+
+  Secret.attach = function (scene, game) {
+    scene.game = scene.game || game;
+    scene.secret = {
+      idle: 0,
+      progress: 0,
+      flash: 0,
+      /* Once it has surfaced it does not go back in the box. This used to live
+         on the scene instance, so leaving and coming back started another
+         five-minute wait - the secret found you and then un-found you. */
+      shown: !!game.save.comboSeen && !game.save.scytheUnlocked,
+      combo: D.COMBOS[game.save.comboIndex % D.COMBOS.length]
+    };
+  };
+
+  Secret.taken = function (scene) { return !!scene.game.save.scytheUnlocked; };
+
+  /* `blocked` is the host saying something modal is over it - an install card,
+     a shop, a dialogue - so the arrows are not stolen from it. */
+  Secret.update = function (scene, dt, blocked) {
+    var k = scene.secret, game = scene.game;
+    k.flash = Math.max(0, k.flash - dt);
+    if (Secret.taken(scene)) return;
+
+    /* any interaction resets the idle clock */
+    if (Input.anyInput && !k.shown) k.idle = 0;
+    else k.idle += dt;
+
+    if (!k.shown && k.idle >= game.idleUnlockSeconds) {
+      k.shown = true;
+      k.progress = 0;
+      game.save.comboSeen = true;
+      game.persist();
+      Audio.play('warp');
+    }
+
+    /* Arrows are live whether or not the panel is up, so someone who KNOWS the
+       sequence can just enter it. Gating input on the prompt made the secret
+       worthless to know: you still had to sit through five minutes of nothing
+       before the game would listen. Polled here rather than in the draw so it
+       works with the panel closed - keyPressed is edge-triggered and cleared at
+       the end of the frame, so one read per press either way. */
+    if (!blocked) {
+      if (Input.keyPressed.up) Secret.press(scene, 'up');
+      if (Input.keyPressed.down) Secret.press(scene, 'down');
+      if (Input.keyPressed.left) Secret.press(scene, 'left');
+      if (Input.keyPressed.right) Secret.press(scene, 'right');
+    }
+  };
+
+  Secret.press = function (scene, dir) {
+    var k = scene.secret;
+    if (Secret.taken(scene)) return;
+    if (k.combo[k.progress] === dir) {
+      k.progress++;
+      Audio.play('confirm');
+      if (k.progress >= k.combo.length) {
+        scene.game.unlockScythe();
+        k.shown = false;
+        k.flash = 3.2;
+        Audio.play('unlock');
+      }
+    } else {
+      k.progress = 0;
+      Audio.play('deny');
+    }
+  };
+
+  /* the mark that reopens it. Found once is found: the five minutes only ever
+     bought you knowing it was there. */
+  Secret.drawMark = function (scene, ctx, x, y, s, t) {
+    var k = scene.secret;
+    if (k.shown || Secret.taken(scene) || !scene.game.save.comboSeen) return false;
+    if (UI.button(ctx, 'cmb_open', x - 22 * s, y, 44 * s, 30 * s, '\u25C7',
+                  { size: 17, fill: 'rgba(30,48,52,0.85)',
+                    stroke: 'rgba(160,235,225,' + (0.35 + 0.25 * Math.sin(t * 2.2)) + ')' })) {
+      k.shown = true;
+      k.progress = 0;
+      Audio.play('warp');
+    }
+    return true;
+  };
+
+  Secret.drawPanel = function (scene, ctx, cw, ch, s) {
+    var k = scene.secret;
+    UI.dim(ctx, cw, ch, 0.78);
+    /* 322 rather than 300, and centred on that: the `later` button is 26 tall
+       and sat at 288, so it hung through the panel's floor. */
+    var w = Math.min(330 * s, cw - 30), x = cw / 2 - w / 2, y = ch * 0.5 - 161 * s;
+    UI.panel(ctx, x, y, w, 322 * s, { fill: 'rgba(18,14,26,0.95)', stroke: 'rgba(200,240,235,0.5)' });
+
+    UI.text(ctx, 'something is here', cw / 2, y + 26 * s,
+      { size: 18, align: 'center', weight: '800', colour: '#c9f0ea' });
+
+    var glyph = { up: '\u25B2', down: '\u25BC', left: '\u25C0', right: '\u25B6' };
+    var gy = y + 62 * s;
+    var step = Math.min(38 * s, (w - 40 * s) / k.combo.length);
+    var startX = cw / 2 - (k.combo.length - 1) * step / 2;
+    for (var i = 0; i < k.combo.length; i++) {
+      UI.text(ctx, glyph[k.combo[i]], startX + i * step, gy, {
+        size: 22, align: 'center',
+        colour: i < k.progress ? '#7fe08a' : 'rgba(255,255,255,0.55)'
+      });
+    }
+
+    var cx = cw / 2, cy = y + 175 * s, r = 34 * s, gap = 42 * s;
+    function dirBtn(id, dx, dy, label) {
+      if (UI.roundButton(ctx, id, cx + dx, cy + dy, r, label, { size: 18 })) {
+        Secret.press(scene, id.replace('cmb_', ''));
+      }
+    }
+    dirBtn('cmb_up', 0, -gap, '\u25B2');
+    dirBtn('cmb_down', 0, gap, '\u25BC');
+    dirBtn('cmb_left', -gap, 0, '\u25C0');
+    dirBtn('cmb_right', gap, 0, '\u25B6');
+
+    UI.text(ctx, 'enter it', cw / 2, y + 268 * s,
+      { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+
+    /* A way out that is not "wait another five minutes". Closing it only hides
+       it for this visit - save.comboSeen keeps it found, so the mark brings it
+       straight back. */
+    if (UI.button(ctx, 'cmb_close', cw / 2 - 46 * s, y + 282 * s, 92 * s, 26 * s,
+                  'later', { size: 12 })) {
+      k.shown = false;
+      k.progress = 0;
+    }
+  };
+
   /* ============================================================ START SCREEN
      GDD 12: "New Game" and "Continue", vertically stacked.
      GDD 7.1: idle here for 5 minutes to surface the scythe unlock prompt. */
   function StartScene(game) {
     this.game = game;
     this.t = 0;
-    this.idle = 0;
-    /* Once it has surfaced it does not go back in the box. It used to live only
-       on the scene instance, so walking into Help and back rebuilt StartScene,
-       cleared the flag and started another five-minute wait - the secret found
-       you and then un-found you. */
-    this.promptShown = !!game.save.comboSeen && !game.save.scytheUnlocked;
-    this.comboProgress = 0;
-    this.unlockFlash = 0;
     this.showInstallHelp = false;
     this.installResult = null;
-    this.combo = D.COMBOS[game.save.comboIndex % D.COMBOS.length];
+    Secret.attach(this, game);
     this.stars = [];
     for (var i = 0; i < 60; i++) {
       this.stars.push({ x: Math.random(), y: Math.random() * 0.6, r: Math.random() * 1.6 + 0.4, p: Math.random() * 6 });
@@ -6246,50 +6377,11 @@ html, body {
 
   StartScene.prototype.update = function (dt) {
     this.t += dt;
-    this.unlockFlash = Math.max(0, this.unlockFlash - dt);
-
-    /* any interaction resets the idle clock */
-    if (Input.anyInput && !this.promptShown) this.idle = 0;
-    else this.idle += dt;
-
-    if (!this.promptShown && !this.game.save.scytheUnlocked && this.idle >= this.game.idleUnlockSeconds) {
-      this.promptShown = true;
-      this.comboProgress = 0;
-      this.game.save.comboSeen = true;
-      this.game.persist();
-      Audio.play('warp');
-    }
-
-    /* Arrows are live on the title screen whether or not the panel is up, so
-       someone who KNOWS the sequence can just enter it. Gating input on the
-       prompt made the secret worthless to know: you still had to sit through
-       five minutes of nothing before the game would listen. Polled here rather
-       than in drawCombo so it works with the panel closed - keyPressed is
-       edge-triggered and cleared at the end of the frame, so one read only. */
-    if (!this.game.save.scytheUnlocked && !this.showInstallHelp) {
-      if (Input.keyPressed.up) this.pressDir('up');
-      if (Input.keyPressed.down) this.pressDir('down');
-      if (Input.keyPressed.left) this.pressDir('left');
-      if (Input.keyPressed.right) this.pressDir('right');
-    }
+    Secret.update(this, dt, this.showInstallHelp);
   };
 
-  StartScene.prototype.pressDir = function (dir) {
-    if (this.game.save.scytheUnlocked) return;
-    if (this.combo[this.comboProgress] === dir) {
-      this.comboProgress++;
-      Audio.play('confirm');
-      if (this.comboProgress >= this.combo.length) {
-        this.game.unlockScythe();
-        this.promptShown = false;
-        this.unlockFlash = 3.2;
-        Audio.play('unlock');
-      }
-    } else {
-      this.comboProgress = 0;
-      Audio.play('deny');
-    }
-  };
+  /* kept so anything already holding a StartScene can still poke a direction */
+  StartScene.prototype.pressDir = function (dir) { Secret.press(this, dir); };
 
   StartScene.prototype.render = function (ctx, cw, ch) {
     var s = UI.setScale(cw, ch), t = this.t, i;
@@ -6438,34 +6530,25 @@ html, body {
       (sv.scytheUnlocked ? '   scythe: unlocked' : ''),
       cw - 14 * s, ch - 18 * s, { size: 11, align: 'right', colour: 'rgba(255,255,255,0.45)' });
 
-    if (this.unlockFlash > 0) {
+    if (this.secret.flash > 0) {
       UI.text(ctx, 'THE SCYTHE IS YOURS', uiX, ch * 0.35,
         { size: 22, align: 'center', weight: '800', colour: '#c9f0ea' });
     }
 
     if (this.showInstallHelp) return this.drawInstallHelp(ctx, cw, ch, s);
 
-    if (this.promptShown) this.drawCombo(ctx, cw, ch, s);
-    else if (!this.game.save.scytheUnlocked) {
-      if (this.game.save.comboSeen) {
-        /* Found once is found. The mark sits under the menu from then on and
-           reopens the panel, so the only thing the five minutes ever bought
-           you was knowing it was there. */
-        /* Below the menu, not over it. At ch*0.33 it sat squarely on top of
-           Continue - menuBottom is already measured here for Garatu, so use
-           the same edge rather than another guessed fraction. */
-        if (UI.button(ctx, 'cmb_open', uiX - 22 * s, menuBottom + 10 * s, 44 * s, 30 * s, '\u25C7',
-                      { size: 17, fill: 'rgba(30,48,52,0.85)',
-                        stroke: 'rgba(160,235,225,' + (0.35 + 0.25 * Math.sin(t * 2.2)) + ')' })) {
-          this.promptShown = true;
-          this.comboProgress = 0;
-          Audio.play('warp');
-        }
-      } else {
+    if (this.secret.shown) return Secret.drawPanel(this, ctx, cw, ch, s);
+
+    if (!this.game.save.scytheUnlocked) {
+      /* Below the menu, not over it. At ch*0.33 the mark sat squarely on top
+         of Continue - menuBottom is already measured here for Garatu, so use
+         the same edge rather than another guessed fraction. */
+      if (!Secret.drawMark(this, ctx, uiX, menuBottom + 10 * s, s, t)) {
         /* the faintest nudge - the mechanic is meant to be discovered */
-        var left = Math.max(0, this.game.idleUnlockSeconds - this.idle);
+        var left = Math.max(0, this.game.idleUnlockSeconds - this.secret.idle);
         if (left < 30) {
-          UI.text(ctx, '. . .', uiX, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
+          UI.text(ctx, '. . .', uiX, ch * 0.35, { size: 20, align: 'center',
+            colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
         }
       }
     }
@@ -6499,50 +6582,6 @@ html, body {
 
     if (UI.button(ctx, 'installclose', cw / 2 - 70 * s, y + h - 46 * s, 140 * s, 34 * s, 'Got it')) {
       this.showInstallHelp = false;
-    }
-  };
-
-  StartScene.prototype.drawCombo = function (ctx, cw, ch, s) {
-    UI.dim(ctx, cw, ch, 0.78);
-    /* 322 rather than 300, and centred on the new height: the 'later' button
-       sat at 288 and is 26 tall, so it hung 14px through the panel's floor. */
-    var w = Math.min(330 * s, cw - 30), x = cw / 2 - w / 2, y = ch * 0.5 - 161 * s;
-    UI.panel(ctx, x, y, w, 322 * s, { fill: 'rgba(18,14,26,0.95)', stroke: 'rgba(200,240,235,0.5)' });
-
-    UI.text(ctx, 'something is here', cw / 2, y + 26 * s, { size: 18, align: 'center', weight: '800', colour: '#c9f0ea' });
-
-    /* the sequence */
-    var glyph = { up: '▲', down: '▼', left: '◀', right: '▶' };
-    var gy = y + 62 * s;
-    var step = Math.min(38 * s, (w - 40 * s) / this.combo.length);
-    var startX = cw / 2 - (this.combo.length - 1) * step / 2;
-    for (var i = 0; i < this.combo.length; i++) {
-      var done = i < this.comboProgress;
-      UI.text(ctx, glyph[this.combo[i]], startX + i * step, gy, {
-        size: 22, align: 'center', colour: done ? '#7fe08a' : 'rgba(255,255,255,0.55)'
-      });
-    }
-
-    /* d-pad */
-    var cx = cw / 2, cy = y + 175 * s, r = 34 * s, gap = 42 * s;
-    var self = this;
-    function dirBtn(id, dx, dy, label) {
-      if (UI.roundButton(ctx, id, cx + dx, cy + dy, r, label, { size: 18 })) self.pressDir(id.replace('cmb_', ''));
-    }
-    dirBtn('cmb_up', 0, -gap, '▲');
-    dirBtn('cmb_down', 0, gap, '▼');
-    dirBtn('cmb_left', -gap, 0, '◀');
-    dirBtn('cmb_right', gap, 0, '▶');
-
-    UI.text(ctx, 'enter it', cw / 2, y + 268 * s, { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
-
-    /* A way out that is not "wait another five minutes". Closing it only hides
-       it for this visit - save.comboSeen keeps it found, so the mark below the
-       menu brings it straight back. */
-    if (UI.button(ctx, 'cmb_close', cw / 2 - 46 * s, y + 282 * s, 92 * s, 26 * s,
-                  'later', { size: 12 })) {
-      this.promptShown = false;
-      this.comboProgress = 0;
     }
   };
 
@@ -6601,8 +6640,15 @@ html, body {
     this.fade = mode === 'intro' ? 1 : 0;
     this.dialog = mode === 'intro' ? 'Another night in the tower.' : null;
     this.dialogTime = mode === 'intro' ? 4 : 0;
+    /* The same secret as the title screen, from the same implementation. The
+       room is where anyone actually stands around between trials, so it is the
+       obvious second place for it - and two copies of a secret is two chances
+       for them to disagree about whether it has been found. */
+    Secret.attach(this, game);
     Audio.music(mode === 'intro' ? 'calm' : 'hub');
   }
+
+  RoomScene.prototype.pressDir = function (dir) { Secret.press(this, dir); };
 
   RoomScene.prototype.zones = function () {
     if (this.mode !== 'hub') return [];
@@ -6616,6 +6662,10 @@ html, body {
   RoomScene.prototype.update = function (dt) {
     this.t += dt;
     this.fade = Math.max(0, this.fade - dt * 0.8);
+    /* Blocked while the panel is up: the arrows belong to the combo then, and
+       the room would otherwise walk the player around behind it. */
+    Secret.update(this, dt, false);
+    if (this.secret.shown) return;
     if (this.dialogTime > 0) {
       this.dialogTime -= dt;
       if (this.dialogTime <= 0) this.dialog = null;
@@ -6850,6 +6900,20 @@ html, body {
       ctx.fillStyle = 'rgba(0,0,0,' + this.fade + ')';
       ctx.fillRect(0, 0, cw, ch);
     }
+
+    if (this.secret.shown) {
+      Input.clearZones();               /* the room's buttons are behind this */
+      return Secret.drawPanel(this, ctx, cw, ch, s);
+    }
+    if (this.secret.flash > 0) {
+      UI.text(ctx, 'THE SCYTHE IS YOURS', cw / 2, ch * 0.3,
+        { size: 20, align: 'center', weight: '800', colour: '#c9f0ea' });
+    }
+    /* Top-left in the bedroom, where nothing else is; below the weapon button
+       in the hub, which owns the bottom-right corner. */
+    Secret.drawMark(this, ctx,
+      this.mode === 'hub' ? cw - 34 * s : 34 * s,
+      this.mode === 'hub' ? ch - 112 * s : 74 * s, s, t);
   };
 
   RoomScene.prototype.drawCounter = function (ctx, x, y, colour, label) {

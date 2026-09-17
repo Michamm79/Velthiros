@@ -1307,9 +1307,9 @@ async function main() {
     g.save.weapons.scythe = false;
     const start = new window.V.S.StartScene(g);
     g.setScene(start);
-    start.idle = g.idleUnlockSeconds + 1;
+    start.secret.idle = g.idleUnlockSeconds + 1;
     start.update(0.016);
-    const shown = start.promptShown;
+    const shown = start.secret.shown;
     const seenPersisted = g.save.comboSeen;
 
     /* IT DOES NOT GO AWAY. The flag used to live on the scene instance, so
@@ -1317,21 +1317,36 @@ async function main() {
        minutes - the secret found you and then un-found you. A fresh scene on
        the same save must come up already showing it, with no idle at all. */
     const revisit = new window.V.S.StartScene(g);
-    const shownOnRevisit = revisit.promptShown;
+    const shownOnRevisit = revisit.secret.shown;
 
     /* And knowing the sequence has to be worth something: with the panel
        CLOSED, the arrows still have to take it. pressDir used to return early
        unless the prompt was up, which made the secret worthless to know. */
-    revisit.promptShown = false;
-    for (const dir of revisit.combo) revisit.pressDir(dir);
+    revisit.secret.shown = false;
+    for (const dir of revisit.secret.combo) revisit.pressDir(dir);
     const unlockedWhileClosed = g.save.scytheUnlocked;
+
+    /* THE SAME SECRET IN BOTH PLACES. The bedroom you start in and the room you
+       come back to are one scene, and it has to carry the combo as the title
+       screen does - one implementation, or the two disagree about whether it
+       has been found. */
+    g.save.scytheUnlocked = false; g.save.weapons.scythe = false; g.save.weapon = 'sword';
+    const bedroom = new window.V.S.RoomScene(g, 'intro');
+    const shownInBedroom = bedroom.secret.shown;
+    for (const dir of bedroom.secret.combo) bedroom.pressDir(dir);
+    const unlockedFromBedroom = g.save.scytheUnlocked;
+
+    g.save.scytheUnlocked = false; g.save.weapons.scythe = false; g.save.weapon = 'sword';
+    const hub = new window.V.S.RoomScene(g, 'hub');
+    const shownInHub = hub.secret.shown;
 
     /* re-lock and finish through the panel, the way the original check did */
     g.save.scytheUnlocked = false; g.save.weapons.scythe = false; g.save.weapon = 'sword';
-    for (const dir of start.combo) start.pressDir(dir);
+    for (const dir of start.secret.combo) start.pressDir(dir);
     return { shown, seenPersisted, shownOnRevisit, unlockedWhileClosed,
+             shownInBedroom, unlockedFromBedroom, shownInHub,
              unlocked: g.save.scytheUnlocked, weapon: g.save.weapon,
-             comboLen: start.combo.length };
+             comboLen: start.secret.combo.length };
   });
   const oldSave = await page.evaluate(() => {
     const D = window.V.D, Save = window.V.Save;
@@ -1375,6 +1390,10 @@ async function main() {
     'comboSeen=' + scythe.seenPersisted + ' shown on a fresh StartScene=' + scythe.shownOnRevisit);
   check('knowing the combo is enough - it is taken with the panel closed',
     scythe.unlockedWhileClosed, String(scythe.unlockedWhileClosed));
+  check('the secret is on the title screen AND in the room, from one implementation',
+    scythe.shownInBedroom && scythe.shownInHub && scythe.unlockedFromBedroom,
+    JSON.stringify({ bedroom: scythe.shownInBedroom, hub: scythe.shownInHub,
+                     takenInBedroom: scythe.unlockedFromBedroom }));
 
   await page.evaluate(() => {
     const g = window.VELTHIROS;
