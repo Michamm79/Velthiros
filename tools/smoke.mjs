@@ -451,10 +451,38 @@ async function main() {
   await wait(1600);
   await shot('14-boss');
 
-  /* --- a scripted bot actually plays a trial to completion --- */
+  /* --- a scripted bot actually plays a trial to completion ---
+         The arena layout is seeded, but the FIGHT was not: evasion is a
+         Math.random roll, and every enemy picks its facing, its anim phase and
+         its wander heading the same way. So the bot's clear time drifted by
+         several seconds between runs, and since a Defeat clear scores around
+         the 40% line - the boundary between 'neutral' and 'fail' - the
+         paying-tier check below failed roughly one run in five. It did so on
+         CI while this branch was in flight, at p43.
+
+         Seeding Math.random for the duration of the run fixes that at the
+         cause rather than by widening the threshold, which would have made the
+         check stop meaning anything. The stub is restored in a finally, so
+         nothing after this point inherits it. */
   const botRun = await page.evaluate(() => {
     const g = window.VELTHIROS;
     const U = window.V.U;
+    const realRandom = Math.random;
+    let seed = 0x9e3779b9;
+    Math.random = () => {
+      seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+      return ((seed >>> 0) % 1000003) / 1000003;
+    };
+    /* And pin the gem. Finishing a trial grants one at random, so by the time
+       the bot runs the player is carrying whichever of the six turned up, and
+       a rootstone (+12 max HP) against an emberstone (damage) moves the clear
+       time by ten seconds - most of the gap between p17 and p35 that this
+       check used to swing across. Stats are read off the save when the Trial
+       is built, so it has to be set before that. Emberstone, because what the
+       check is about is fighting well. */
+    const realGem = g.save.gem, realGemLevel = g.save.gemLevel;
+    g.save.gem = { id: 'emberstone' };
+    try {
     const spec = { index: 3, type: 'defeat', boss: false, env: window.V.D.ENVIRONMENTS[0], seed: 77, label: 'bot run' };
     const t = new window.V.Trial(g, spec);
     t.state = 'play';
@@ -487,6 +515,10 @@ async function main() {
       reason: t.result && t.result.reason, percentile: t.result && t.result.percentile,
       outcome: t.result && t.result.tier.outcome, seconds: Math.round(frames / 60)
     };
+    } finally {
+      Math.random = realRandom;
+      g.save.gem = realGem; g.save.gemLevel = realGemLevel;
+    }
   });
   check('a bot can fight and finish a Defeat trial',
     botRun.state === 'done' && botRun.kills >= botRun.target && botRun.reason === 'complete',
