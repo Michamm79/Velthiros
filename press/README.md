@@ -19,6 +19,27 @@ whole subject of the frame, and nothing else in it competes with him.
 
 ---
 
+## Reference sheets
+
+`armour-sheet.png` — all four suits, three views each.
+`weapon-sheet.png` — all four weapons, upright and to scale with one another.
+
+Regenerate both with `node tools/sheets.mjs` (`node tools/sheets.mjs 20` for a chunkier
+scale, `OUT_DIR=path` to choose where). Like the cover, they are drawn from the game's own
+sprite functions and its own shop list — a suit cannot appear on the sheet without being
+buyable, and the sheet cannot show a version of a weapon the game does not draw.
+
+Two things the sheets make visible on purpose:
+
+- **Three views, not one.** A front-only sheet hides the back and the silhouette, which is
+  exactly where garments go wrong at 18×28.
+- **Weapons to scale with each other.** The cell is sized off the largest weapon rather than
+  fixed, so the axe and the scythe are not cropped and the size comparison is honest. They
+  are authored lying down, because that is the angle the game pivots them from; they are
+  stood up here. The bow is the exception — it is authored the way it is held.
+
+---
+
 ## Cover art
 
 `cover-1024.png` — square, 1024×1024.
