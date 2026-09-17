@@ -1452,17 +1452,22 @@
        laid over it every few rows so it reads as a glow with a hot core rather
        than a painted stripe. */
     return Px.make(24, 26, function (g) {
-      /* the long stroke */
-      g.rect('U', 0, 21, 21, 3);
+      /* The long stroke, two rows and no more. At three it was as thick as the
+         blade was wide and the whole weapon read as a club with an edge on it;
+         a snath is a pole. The outline adds a row either side anyway, so two
+         is four on screen. */
+      g.rect('U', 0, 21, 21, 2);
       g.rect('E', 0, 22, 21, 1);
       g.rect('/', 13, 21, 7, 1);                    /* light toward the head */
       g.set(4, 21, 'c'); g.set(9, 21, 'c');
 
-      /* the short stroke: straight up off the head, tapering to a point */
+      /* The short stroke: straight up off the head, tapering to a point. It
+         gets a column BACK as the haft loses one, so slimming the handle makes
+         the blade more prominent rather than shrinking the whole weapon. */
       for (var y = 20; y >= 3; y--) {
         var t = (20 - y) / 17;
         var x = 19 + Math.round(t * t * 2);         /* the faintest forward lean */
-        var back = t < 0.72 ? 2 : 1;
+        var back = t < 0.58 ? 3 : (t < 0.86 ? 2 : 1);
         g.rect('E', x - back, y, back + 1, 1);      /* body */
         g.set(x - back, y, 'U');                    /* the blunt back */
         g.set(x, y, '/');                           /* the burning edge */
@@ -1470,8 +1475,8 @@
       }
       g.set(21, 2, '_');                            /* the point */
 
-      g.rect('A', 17, 18, 3, 4);                    /* the collar it sockets into */
-      g.set(18, 19, 'a');
+      g.rect('A', 18, 19, 2, 3);                    /* the collar it sockets into */
+      g.set(18, 20, 'a');
       g.outline('K');
     }, { ax: 1, ay: 22 });
   }

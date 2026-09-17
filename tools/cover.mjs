@@ -38,11 +38,11 @@ const dataUrl = await page.evaluate((S) => {
 
   /* ---------------------------------------------------------------- sky */
   const sky = ctx.createLinearGradient(0, 0, 0, S);
-  sky.addColorStop(0.00, '#0d0718');
-  sky.addColorStop(0.38, '#241338');
-  sky.addColorStop(0.62, '#3a1f47');
-  sky.addColorStop(0.84, '#6b3352');
-  sky.addColorStop(1.00, '#2a1430');
+  sky.addColorStop(0.00, '#05070e');
+  sky.addColorStop(0.38, '#0e1728');
+  sky.addColorStop(0.62, '#17293f');
+  sky.addColorStop(0.84, '#2a4a68');
+  sky.addColorStop(1.00, '#0b1220');
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, S, S);
 
@@ -81,11 +81,11 @@ const dataUrl = await page.evaluate((S) => {
   for (const e of eyes) {
     const gr = e.gap * 2.2;
     const glow = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, gr);
-    glow.addColorStop(0, 'rgba(247,235,99,' + (e.a * 0.26).toFixed(3) + ')');
-    glow.addColorStop(1, 'rgba(247,235,99,0)');
+    glow.addColorStop(0, 'rgba(127,228,255,' + (e.a * 0.26).toFixed(3) + ')');
+    glow.addColorStop(1, 'rgba(127,228,255,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(e.x - gr, e.y - gr, gr * 2, gr * 2);
-    ctx.fillStyle = 'rgba(255,238,150,' + e.a.toFixed(3) + ')';
+    ctx.fillStyle = 'rgba(190,240,255,' + e.a.toFixed(3) + ')';
     for (const s of [-1, 1]) {
       ctx.beginPath();
       ctx.ellipse(e.x + s * e.gap, e.y, e.r, e.r * 0.72, 0, 0, Math.PI * 2);
@@ -93,18 +93,21 @@ const dataUrl = await page.evaluate((S) => {
     }
   }
 
-  /* ------------------------------------------------------------- Garatu
-     The one watcher you do see. Drawn large and low-contrast so he reads as
-     a mass rather than as detail: the eye should land on the hero. */
-  const gar = Spr.garatu(0);
+  /* ---------------------------------------------------- the thing at the end
+     The Aurelith. Drawn large and low-contrast so it reads as a mass rather
+     than as detail: the eye should still land on the hero. It replaced Garatu
+     here because it is the game's actual last fight, and because Garatu is a
+     red demon by construction - there is no cold version of that sprite, and
+     the cover wanted to be cold. */
+  const gar = Spr.aurelith(0);
   const gScale = Math.max(1, Math.round((S * 0.47) / gar.w));
   const garY = Math.round(S * 0.435);
   const garW = gar.w * gScale, garH = gar.h * gScale;
 
   const aura = ctx.createRadialGradient(S / 2, garY - garH * 0.5, 0, S / 2, garY - garH * 0.5, garW * 0.78);
-  aura.addColorStop(0, 'rgba(158,44,72,0.34)');
-  aura.addColorStop(0.55, 'rgba(120,32,62,0.14)');
-  aura.addColorStop(1, 'rgba(120,32,62,0)');
+  aura.addColorStop(0, 'rgba(126,146,196,0.30)');
+  aura.addColorStop(0.55, 'rgba(90,120,180,0.13)');
+  aura.addColorStop(1, 'rgba(90,120,180,0)');
   ctx.fillStyle = aura;
   ctx.fillRect(S / 2 - garW, garY - garH * 1.5, garW * 2, garH * 2);
 
@@ -117,11 +120,11 @@ const dataUrl = await page.evaluate((S) => {
      frame - it is what he is taken from. */
   const base = S * 0.84;
   const cols = 13, bw = S / (cols - 1);
-  ctx.fillStyle = '#150d22';
+  ctx.fillStyle = '#0a1120';
   for (let i = 0; i < cols; i++) {
     const bh = S * (0.055 + ((i * 37) % 11) / 11 * 0.115);
     ctx.fillRect(i * bw - 6, base - bh, bw + 3, bh + S);
-    ctx.fillStyle = 'rgba(255,220,140,0.42)';
+    ctx.fillStyle = 'rgba(190,225,255,0.40)';
     for (let w = 0; w < 4; w++) {
       if ((i * 7 + w * 3) % 5 < 2) {
         ctx.fillRect(i * bw + bw * 0.16 + w * bw * 0.2,
@@ -129,21 +132,21 @@ const dataUrl = await page.evaluate((S) => {
                      S * 0.0055, S * 0.008);
       }
     }
-    ctx.fillStyle = '#150d22';
+    ctx.fillStyle = '#0a1120';
   }
 
   /* ---------------------------------------------------- the arena, and him
      A ring of light on the ground: the trial floor, and the only bright
      thing in the frame. He is small on purpose - that is the game. */
-  const hero = Spr.player('down', 0, '#17141c');
+  const hero = Spr.player('down', 0, '#1b1826', 'grayson');
   const hScale = Math.max(2, Math.round((S * 0.175) / hero.h));
   const heroY = Math.round(S * 0.905);
   const ringR = hero.w * hScale * 1.6;
 
   const floor = ctx.createRadialGradient(S / 2, heroY, 0, S / 2, heroY, ringR * 1.7);
-  floor.addColorStop(0, 'rgba(255,214,170,0.30)');
-  floor.addColorStop(0.5, 'rgba(255,190,150,0.10)');
-  floor.addColorStop(1, 'rgba(255,190,150,0)');
+  floor.addColorStop(0, 'rgba(127,228,255,0.32)');
+  floor.addColorStop(0.5, 'rgba(90,170,255,0.11)');
+  floor.addColorStop(1, 'rgba(90,170,255,0)');
   ctx.fillStyle = floor;
   ctx.fillRect(S / 2 - ringR * 1.7, heroY - ringR * 1.7, ringR * 3.4, ringR * 3.4);
 
@@ -155,8 +158,8 @@ const dataUrl = await page.evaluate((S) => {
 
   /* a shaft of light from above, so the ring reads as a stage */
   const shaft = ctx.createLinearGradient(0, S * 0.5, 0, heroY);
-  shaft.addColorStop(0, 'rgba(255,214,170,0)');
-  shaft.addColorStop(1, 'rgba(255,214,170,0.09)');
+  shaft.addColorStop(0, 'rgba(127,228,255,0)');
+  shaft.addColorStop(1, 'rgba(127,228,255,0.10)');
   ctx.fillStyle = shaft;
   ctx.beginPath();
   ctx.moveTo(S / 2 - ringR * 0.42, S * 0.5);
@@ -169,6 +172,29 @@ const dataUrl = await page.evaluate((S) => {
   Px.shadow(ctx, S / 2, heroY, hero.w * hScale * 0.42, 0.42);
   Px.draw(ctx, hero, S / 2, heroY, { scale: hScale });
 
+  /* The charge that armour actually carries in play - same rule the game uses:
+     short jagged runs that jump, never a smooth halo. The cover would be
+     promising something the game does not do without it. */
+  ctx.lineWidth = Math.max(1, S / 620);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 14; i++) {
+    const a = rnd() * Math.PI * 2;
+    const rad = (0.4 + rnd() * 0.5) * hero.w * hScale * 0.8;
+    let x = S / 2 + Math.cos(a) * rad;
+    let y = heroY - hero.h * hScale * 0.5 + Math.sin(a) * rad * 0.7;
+    ctx.strokeStyle = rnd() < 0.3 ? '#b6f4ff' : '#4fd8ff';
+    ctx.globalAlpha = 0.4 + rnd() * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let seg = 0; seg < 3; seg++) {
+      x += (rnd() - 0.5) * S * 0.035;
+      y += (rnd() - 0.5) * S * 0.03;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
   /* ---------------------------------------------------------------- title */
   const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
   const titlePx = Math.round(S * 0.103);
@@ -180,14 +206,14 @@ const dataUrl = await page.evaluate((S) => {
   ctx.shadowColor = 'rgba(0,0,0,0.75)';
   ctx.shadowBlur = S * 0.03;
   ctx.shadowOffsetY = S * 0.006;
-  ctx.fillStyle = '#ffe9c9';
+  ctx.fillStyle = '#f2f7ff';
   ctx.letterSpacing = (S * 0.007) + 'px';
   ctx.fillText('VELTHIROS', S / 2, ty);
   ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
   ctx.font = '600 ' + Math.round(S * 0.028) + 'px ' + FONT;
   ctx.letterSpacing = (S * 0.017) + 'px';
-  ctx.fillStyle = 'rgba(255,220,190,0.78)';
+  ctx.fillStyle = 'rgba(127,228,255,0.85)';
   ctx.fillText('THEY ARE WATCHING', S / 2, ty + titlePx * 0.58);
   ctx.letterSpacing = '0px';
 
