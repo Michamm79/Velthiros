@@ -1310,8 +1310,28 @@ async function main() {
     start.idle = g.idleUnlockSeconds + 1;
     start.update(0.016);
     const shown = start.promptShown;
+    const seenPersisted = g.save.comboSeen;
+
+    /* IT DOES NOT GO AWAY. The flag used to live on the scene instance, so
+       walking into Help and back rebuilt StartScene and started another five
+       minutes - the secret found you and then un-found you. A fresh scene on
+       the same save must come up already showing it, with no idle at all. */
+    const revisit = new window.V.S.StartScene(g);
+    const shownOnRevisit = revisit.promptShown;
+
+    /* And knowing the sequence has to be worth something: with the panel
+       CLOSED, the arrows still have to take it. pressDir used to return early
+       unless the prompt was up, which made the secret worthless to know. */
+    revisit.promptShown = false;
+    for (const dir of revisit.combo) revisit.pressDir(dir);
+    const unlockedWhileClosed = g.save.scytheUnlocked;
+
+    /* re-lock and finish through the panel, the way the original check did */
+    g.save.scytheUnlocked = false; g.save.weapons.scythe = false; g.save.weapon = 'sword';
     for (const dir of start.combo) start.pressDir(dir);
-    return { shown, unlocked: g.save.scytheUnlocked, weapon: g.save.weapon, comboLen: start.combo.length };
+    return { shown, seenPersisted, shownOnRevisit, unlockedWhileClosed,
+             unlocked: g.save.scytheUnlocked, weapon: g.save.weapon,
+             comboLen: start.combo.length };
   });
   const oldSave = await page.evaluate(() => {
     const D = window.V.D, Save = window.V.Save;
@@ -1350,6 +1370,11 @@ async function main() {
     JSON.stringify(migrate));
 
   check('scythe unlock prompt + combo', scythe.shown && scythe.unlocked && scythe.weapon === 'scythe', JSON.stringify(scythe));
+  check('once the combo has surfaced it stays surfaced',
+    scythe.seenPersisted && scythe.shownOnRevisit,
+    'comboSeen=' + scythe.seenPersisted + ' shown on a fresh StartScene=' + scythe.shownOnRevisit);
+  check('knowing the combo is enough - it is taken with the panel closed',
+    scythe.unlockedWhileClosed, String(scythe.unlockedWhileClosed));
 
   await page.evaluate(() => {
     const g = window.VELTHIROS;

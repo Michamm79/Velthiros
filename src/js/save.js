@@ -22,6 +22,11 @@
       weapon: 'sword',
       weapons: { sword: true },
       scytheUnlocked: false,
+      comboSeen: false,        /* the prompt has surfaced at least once. Once it has,
+                                  it stops being a five-minute window and becomes a
+                                  thing that is simply there until the scythe is taken.
+                                  Blank() owns it, so a New Game and a full reset both
+                                  clear it - correct, because both reroll the combo. */
       comboIndex: D.FIXED_COMBO_INDEX != null ? D.FIXED_COMBO_INDEX : Math.floor(Math.random() * D.COMBOS.length),
       owned: {},               /* shop item id -> true (or count for stackables) */
       equippedTint: null,

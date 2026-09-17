@@ -673,6 +673,11 @@ html, body {
       weapon: 'sword',
       weapons: { sword: true },
       scytheUnlocked: false,
+      comboSeen: false,        /* the prompt has surfaced at least once. Once it has,
+                                  it stops being a five-minute window and becomes a
+                                  thing that is simply there until the scythe is taken.
+                                  Blank() owns it, so a New Game and a full reset both
+                                  clear it - correct, because both reroll the combo. */
       comboIndex: D.FIXED_COMBO_INDEX != null ? D.FIXED_COMBO_INDEX : Math.floor(Math.random() * D.COMBOS.length),
       owned: {},               /* shop item id -> true (or count for stackables) */
       equippedTint: null,
@@ -6222,7 +6227,11 @@ html, body {
     this.game = game;
     this.t = 0;
     this.idle = 0;
-    this.promptShown = false;
+    /* Once it has surfaced it does not go back in the box. It used to live only
+       on the scene instance, so walking into Help and back rebuilt StartScene,
+       cleared the flag and started another five-minute wait - the secret found
+       you and then un-found you. */
+    this.promptShown = !!game.save.comboSeen && !game.save.scytheUnlocked;
     this.comboProgress = 0;
     this.unlockFlash = 0;
     this.showInstallHelp = false;
@@ -6246,12 +6255,27 @@ html, body {
     if (!this.promptShown && !this.game.save.scytheUnlocked && this.idle >= this.game.idleUnlockSeconds) {
       this.promptShown = true;
       this.comboProgress = 0;
+      this.game.save.comboSeen = true;
+      this.game.persist();
       Audio.play('warp');
+    }
+
+    /* Arrows are live on the title screen whether or not the panel is up, so
+       someone who KNOWS the sequence can just enter it. Gating input on the
+       prompt made the secret worthless to know: you still had to sit through
+       five minutes of nothing before the game would listen. Polled here rather
+       than in drawCombo so it works with the panel closed - keyPressed is
+       edge-triggered and cleared at the end of the frame, so one read only. */
+    if (!this.game.save.scytheUnlocked && !this.showInstallHelp) {
+      if (Input.keyPressed.up) this.pressDir('up');
+      if (Input.keyPressed.down) this.pressDir('down');
+      if (Input.keyPressed.left) this.pressDir('left');
+      if (Input.keyPressed.right) this.pressDir('right');
     }
   };
 
   StartScene.prototype.pressDir = function (dir) {
-    if (!this.promptShown) return;
+    if (this.game.save.scytheUnlocked) return;
     if (this.combo[this.comboProgress] === dir) {
       this.comboProgress++;
       Audio.play('confirm');
@@ -6423,10 +6447,26 @@ html, body {
 
     if (this.promptShown) this.drawCombo(ctx, cw, ch, s);
     else if (!this.game.save.scytheUnlocked) {
-      /* the faintest nudge - the mechanic is meant to be discovered */
-      var left = Math.max(0, this.game.idleUnlockSeconds - this.idle);
-      if (left < 30) {
-        UI.text(ctx, '. . .', uiX, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
+      if (this.game.save.comboSeen) {
+        /* Found once is found. The mark sits under the menu from then on and
+           reopens the panel, so the only thing the five minutes ever bought
+           you was knowing it was there. */
+        /* Below the menu, not over it. At ch*0.33 it sat squarely on top of
+           Continue - menuBottom is already measured here for Garatu, so use
+           the same edge rather than another guessed fraction. */
+        if (UI.button(ctx, 'cmb_open', uiX - 22 * s, menuBottom + 10 * s, 44 * s, 30 * s, '\u25C7',
+                      { size: 17, fill: 'rgba(30,48,52,0.85)',
+                        stroke: 'rgba(160,235,225,' + (0.35 + 0.25 * Math.sin(t * 2.2)) + ')' })) {
+          this.promptShown = true;
+          this.comboProgress = 0;
+          Audio.play('warp');
+        }
+      } else {
+        /* the faintest nudge - the mechanic is meant to be discovered */
+        var left = Math.max(0, this.game.idleUnlockSeconds - this.idle);
+        if (left < 30) {
+          UI.text(ctx, '. . .', uiX, ch * 0.35, { size: 20, align: 'center', colour: 'rgba(255,255,255,' + (0.15 + 0.2 * Math.sin(t * 4)) + ')' });
+        }
       }
     }
   };
@@ -6464,8 +6504,10 @@ html, body {
 
   StartScene.prototype.drawCombo = function (ctx, cw, ch, s) {
     UI.dim(ctx, cw, ch, 0.78);
-    var w = Math.min(330 * s, cw - 30), x = cw / 2 - w / 2, y = ch * 0.5 - 150 * s;
-    UI.panel(ctx, x, y, w, 300 * s, { fill: 'rgba(18,14,26,0.95)', stroke: 'rgba(200,240,235,0.5)' });
+    /* 322 rather than 300, and centred on the new height: the 'later' button
+       sat at 288 and is 26 tall, so it hung 14px through the panel's floor. */
+    var w = Math.min(330 * s, cw - 30), x = cw / 2 - w / 2, y = ch * 0.5 - 161 * s;
+    UI.panel(ctx, x, y, w, 322 * s, { fill: 'rgba(18,14,26,0.95)', stroke: 'rgba(200,240,235,0.5)' });
 
     UI.text(ctx, 'something is here', cw / 2, y + 26 * s, { size: 18, align: 'center', weight: '800', colour: '#c9f0ea' });
 
@@ -6492,13 +6534,16 @@ html, body {
     dirBtn('cmb_left', -gap, 0, '◀');
     dirBtn('cmb_right', gap, 0, '▶');
 
-    UI.text(ctx, 'enter it', cw / 2, y + 274 * s, { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+    UI.text(ctx, 'enter it', cw / 2, y + 268 * s, { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
 
-    /* keyboard also works */
-    if (Input.keyPressed.up) this.pressDir('up');
-    if (Input.keyPressed.down) this.pressDir('down');
-    if (Input.keyPressed.left) this.pressDir('left');
-    if (Input.keyPressed.right) this.pressDir('right');
+    /* A way out that is not "wait another five minutes". Closing it only hides
+       it for this visit - save.comboSeen keeps it found, so the mark below the
+       menu brings it straight back. */
+    if (UI.button(ctx, 'cmb_close', cw / 2 - 46 * s, y + 282 * s, 92 * s, 26 * s,
+                  'later', { size: 12 })) {
+      this.promptShown = false;
+      this.comboProgress = 0;
+    }
   };
 
   /* =================================================================== HELP */
