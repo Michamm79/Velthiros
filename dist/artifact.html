@@ -357,7 +357,8 @@ html, body {
     ironclad: {
       id: 'ironclad', name: 'Ironclad', hp: 260, speed: 74, damage: 30, sight: 420,
       radius: 28, attackRange: 84, attackWindup: 0.62, attackRecover: 0.7,
-      score: 72, reward: 42, colour: '#6d7b8c', dark: '#2b323d', heavy: true
+      score: 72, reward: 42, colour: '#6d7b8c', dark: '#2b323d', heavy: true,
+      turn: 2.0, react: 0.55   /* a door. Getting round one should simply work */
     },
 
     /* --- Shade: the answer to kiting. It closes half the gap instantly every
@@ -365,6 +366,7 @@ html, body {
        safe option. Thin enough to drop fast once you commit to it. --- */
     shade: {
       id: 'shade', name: 'Shade', hp: 70, speed: 132, damage: 16, sight: 900,
+      turn: 7.5, react: 0.15,   /* light on its feet - it is the one that gets behind YOU */
       radius: 16, attackRange: 62, attackWindup: 0.3, attackRecover: 0.38,
       score: 32, reward: 19, colour: '#4aa8c8', dark: '#1d4a60', blink: 2.6
     },
@@ -3603,6 +3605,19 @@ html, body {
     this.damage = def.damage * (opts.dmgScale || 1);
     this.speed = def.speed * (opts.speedScale || 1);
     this.facing = Math.random() * U.TAU;
+    /* WHAT IT IS TRYING TO FACE, as opposed to where its body has got to.
+       Keeping these apart is the whole of the fix below: an enemy used to set
+       facing = bearing-to-player every frame, so stepping behind one was
+       answered in the same frame by it already looking at you. */
+    this.aim = this.facing;
+    this.reactTimer = 0;
+    /* Mass turns slower and notices later. Both derive from radius so the rule
+       holds for anything added later without a table to keep in sync; `turn`
+       and `react` in the def override it where a creature is meant to break
+       the rule - a shade is light on its feet, an ironclad is a door. */
+    this.turnRate = def.turn || U.clamp(96 / (def.radius + 6), 2.2, 8);
+    this.reactTime = def.react != null ? def.react
+                                       : U.clamp(def.radius * 0.014 + 0.12, 0.12, 0.5);
     this.state = 'idle';
     this.stateTime = 0;
     this.animPhase = Math.random() * 6;
@@ -3712,7 +3727,7 @@ html, body {
         break;
       }
       case 'chase': {
-        this.facing = toP;
+        this.face(toP, dt);
         this.moving = true;
         var chaseSpeed = this.speed;
         if (this.def.charge && d > 220 && d < 620 && this.stateTime > 1.0) {
@@ -3727,7 +3742,16 @@ html, body {
            time, so the wind-up telegraph stays readable while it retreats. */
         this.step(this.def.kite && d < this.def.kite ? toP + Math.PI : toP,
           chaseSpeed * (this.def.kite && d < this.def.kite ? 0.85 : 1), dt);
-        if (d < this.def.attackRange) { this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false; }
+        /* IT HAS TO BE LOOKING AT YOU TO START. Range alone used to be enough,
+           which was fine when facing snapped to the bearing in the same frame -
+           with a real turn rate it meant an enemy could commit to a swing while
+           still coming about, and miss a player standing perfectly still. It
+           keeps closing and turning until it is lined up; the gate is inside
+           the swing's own half-arc so a shot it commits to is one it can land. */
+        if (d < this.def.attackRange &&
+            Math.abs(U.angleDelta(this.facing, toP)) < this.swingArc() * 0.4) {
+          this.state = 'windup'; this.stateTime = 0; this.attackedThisSwing = false;
+        }
         /* COVER BREAKS A CHASE, including a relentless one. Hiding used to
            only shrink the sight radius for the FIRST detection, and
            stickyAggro is on in every trial type except 'hide' - so in 49 of
@@ -3759,7 +3783,12 @@ html, body {
       }
       case 'windup': {
         this.moving = false;
-        this.facing = U.lerp(this.facing, this.facing + U.angleDelta(this.facing, toP), 0.18);
+        /* IT COMMITS. Tracking all the way through the wind-up meant a dodge
+           behind it was answered by the swing simply following you round, so
+           the telegraph was decoration - there was no position the wind-up
+           could be punished from. It aims over the first third and is locked
+           after that, which is what makes getting behind one worth doing. */
+        if (this.stateTime < this.def.attackWindup * 0.35) this.face(toP, dt);
         if (this.stateTime >= this.def.attackWindup) {
           this.swing(p);
           this.state = 'recover'; this.stateTime = 0;
@@ -3789,12 +3818,48 @@ html, body {
     this.animPhase += dt * (this.moving ? 15 : 2);
   };
 
+  /* Turn toward a bearing, with a beat before it accepts a big change and a
+     finite rate once it does.
+
+     Two things were wrong. The chase state assigned facing = toP outright, so
+     there was no turn at all - dodging round someone was answered instantly,
+     which is what makes a body feel like a turret. And the wind-up used
+     U.lerp(facing, ..., 0.18) with no dt, so how fast an enemy tracked you
+     depended on the frame rate: twice as fast at 120fps as at 60.
+
+     `react` is the part that reads as thought. A small correction is free -
+     it is already following you - but a bearing that jumps by more than a
+     quarter turn means something happened, and it costs a beat before the
+     body commits to the new direction. That beat is the dodge paying off. */
+  var REACT_ARC = Math.PI * 0.45;      /* how far you must get round it to count */
+
+  Enemy.prototype.face = function (toP, dt) {
+    var drift = Math.abs(U.angleDelta(this.aim, toP));
+    if (this.reactTimer > 0) {
+      this.reactTimer -= dt;
+      if (this.reactTimer <= 0) this.aim = toP;   /* now it commits */
+    } else if (drift > REACT_ARC) {
+      this.reactTimer = this.reactTime;          /* noticed; has not moved yet */
+    } else {
+      this.aim = toP;                            /* small corrections are free */
+    }
+
+    var d = U.angleDelta(this.facing, this.aim);
+    var max = this.turnRate * dt;
+    this.facing += Math.abs(d) <= max ? d : (d < 0 ? -max : max);
+  };
+
   Enemy.prototype.step = function (angle, speed, dt) {
     var nx = this.x + Math.cos(angle) * speed * dt;
     var ny = this.y + Math.sin(angle) * speed * dt;
     this.x = nx; this.y = ny;
     this.world.confine(this);
   };
+
+  /* One definition, because the wind-up gate below and the swing itself have
+     to agree: an enemy that commits to a swing it cannot land is not a
+     creature that commits, it is one that misses. */
+  Enemy.prototype.swingArc = function () { return this.def.boss ? 1.6 : 1.1; };
 
   Enemy.prototype.swing = function (p) {
     var w = this.world;
@@ -3808,7 +3873,7 @@ html, body {
       V.Audio.play('bow');
       return;
     }
-    var arc = this.def.boss ? 1.6 : 1.1;
+    var arc = this.swingArc();
     w.swipe(this.x, this.y, this.facing, this.def.attackRange, arc / 2, 'enemy');
     if (U.inArcVisual(this.x, this.y, this.facing, arc / 2, this.def.attackRange + p.radius,
       p.x, p.y, Art.SQUASH)) {
