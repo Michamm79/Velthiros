@@ -414,6 +414,40 @@ async function main() {
   await wait(300);
   await shot('13-shop-reality');
 
+  /* --- one counter, two shelves ---
+         There used to be two counters on opposite walls and two scenes behind
+         them, so finding out whether a thing was trial stock or home stock
+         meant walking the length of the hub - a distinction the player cannot
+         make until they have already looked. */
+  const market = await page.evaluate(() => {
+    const g = window.VELTHIROS, V = window.V, D = V.D;
+    const hub = new V.S.RoomScene(g, 'hub');
+    const ids = hub.zones().map((z) => z.id);
+
+    /* the counter opens the shop, on the trial shelf by default */
+    hub.trigger('shop');
+    const opened = g.scene && g.scene.constructor && g.scene.constructor.name;
+    const shop = g.scene;
+    const first = { shelf: shop.which, len: shop.list().length };
+    shop.scroll = 120;
+    shop.setShelf('reality');
+    const second = { shelf: shop.which, len: shop.list().length, scroll: shop.scroll };
+
+    return { ids, opened, first, second,
+             trialLen: D.TRIAL_SHOP.length, homeLen: D.REALITY_SHOP.length };
+  });
+  check('the hub has one counter and a rack, not two counters',
+    market.ids.join(',') === 'shop,rack,gate', market.ids.join(','));
+  check('the counter opens one shop carrying both shelves',
+    market.opened === 'ShopScene' &&
+    market.first.shelf === 'trial' && market.first.len === market.trialLen &&
+    market.second.shelf === 'reality' && market.second.len === market.homeLen,
+    JSON.stringify({ opened: market.opened, first: market.first, second: market.second }));
+  /* the shelves are different lengths, so a scroll carried across would start
+     the shorter one part-way down an empty list */
+  check('switching shelf resets the scroll', market.second.scroll === 0,
+    String(market.second.scroll));
+
   /* --- every trial type renders and simulates without throwing --- */
   const typeReport = await page.evaluate(async () => {
     const g = window.VELTHIROS;
@@ -876,19 +910,34 @@ async function main() {
       const e = t.spawnEnemy('goblin', 70, 0, {});
       e.relentless = true; e.state = 'chase'; e.aggro = true;
       const p = t.player;
-      p.x = 0; p.y = 0; p.hp = p.stats.maxHp; p.iframes = 0;
-      let moved = false, swung = false;
+      /* The control is "standing there", so it has to actually stand: Input is
+         global and whatever the previous check left on the stick would walk the
+         player out of the arc and pass the test for the wrong reason. */
+      window.V.Input.move.x = 0; window.V.Input.move.y = 0; window.V.Input.move.mag = 0;
+      p.x = 0; p.y = 0; p.hp = p.stats.maxHp;
+      /* The arena keeps spawning on its own queue, and anything else that
+         wanders in can hit the player during the second this runs. So the
+         damage is attributed to THIS enemy's swing frame rather than to the
+         run: hp is read either side of the single update that ends its
+         wind-up. Comparing hp to maxHp over the whole loop made the check
+         answer "did anything hurt me", which is not what it is about. */
+      t.spawnQueue.length = 0;
+      let moved = false, swung = false, hurt = false;
       for (let i = 0; i < 60 * 10; i++) {
         if (behind && !moved && e.state === 'windup' &&
             e.stateTime >= e.def.attackWindup * 0.7) {
           p.x = e.x + (e.x - p.x); p.y = e.y + (e.y - p.y);   /* same range, opposite side */
           moved = true;
         }
-        const was = e.state;
+        if (!behind) { p.x = 0; p.y = 0; }      /* and stays standing */
+        t.spawnQueue.length = 0;
+        const was = e.state, hpWas = p.hp;
         t.update(1 / 60);
-        if (was === 'windup' && e.state !== 'windup') { swung = true; break; }
+        if (was === 'windup' && e.state !== 'windup') {
+          swung = true; hurt = p.hp < hpWas; break;
+        }
       }
-      return { swung, moved, hurt: p.hp < p.stats.maxHp };
+      return { swung, moved, hurt };
     };
     const stood = dodge(false), slipped = dodge(true);
 

@@ -438,8 +438,11 @@
   RoomScene.prototype.zones = function () {
     if (this.mode !== 'hub') return [];
     return [
-      { id: 'reality', x: -220, y: 0, r: 66, label: 'Reality Shop' },
-      { id: 'trial', x: 220, y: 0, r: 66, label: 'Trial Shop' },
+      /* Pulled in from +/-220. The room is 620 wide and a portrait phone does
+         not show all of it, so at the old spacing both fixtures sat half off
+         the edge - which the two counters did before this as well. */
+      { id: 'shop', x: -168, y: 0, r: 62, label: 'Market' },
+      { id: 'rack', x: 168, y: 0, r: 62, label: 'Weapon Rack' },
       { id: 'gate', x: 0, y: -112, r: 60, label: 'Enter Trial ' + this.game.save.trial }
     ];
   };
@@ -491,8 +494,8 @@
 
   RoomScene.prototype.trigger = function (id) {
     Audio.play('confirm');
-    if (id === 'reality') this.game.setScene(new S.ShopScene(this.game, 'reality'));
-    else if (id === 'trial') this.game.setScene(new S.ShopScene(this.game, 'trial'));
+    if (id === 'shop') this.game.setScene(new S.ShopScene(this.game));
+    else if (id === 'rack') this.game.cycleWeapon();
     else if (id === 'gate') this.game.enterTrial();
   };
 
@@ -596,10 +599,12 @@
       }
     }
 
-    /* hub fixtures */
+    /* hub fixtures. One counter where there were two, and the wall the second
+       one used to take is a rack carrying the weapons you actually own - the
+       room's only readout of progress that is not a number on the HUD. */
     if (this.mode === 'hub') {
-        this.drawCounter(ctx, -220, 0, '#4a7fd8', 'REALITY');
-      this.drawCounter(ctx, 220, 0, '#d84a4a', 'TRIAL');
+      this.drawCounter(ctx, -168, 0, '#6a5bd8', 'MARKET');
+      this.drawRack(ctx, 168, 0, t);
       this.drawGate(ctx, 0, -112, t);
     }
 
@@ -710,6 +715,60 @@
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     Art.roundRect(ctx, x - 42, yy - 24, 84, 14, 5); ctx.fill();
     this._labels.push({ x: x, y: yy + 34, text: label, size: 11, colour: 'rgba(255,255,255,0.85)' });
+  };
+
+  /* The rack. Drawn from save.weapons, so it fills in as the run does and a
+     weapon you have never bought leaves an empty peg rather than a gap you
+     cannot read. The sprites are the game's own, at a whole-number scale. */
+  RoomScene.prototype.drawRack = function (ctx, x, y, t) {
+    var yy = y * Art.SQUASH;
+    var sv = this.game.save;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    Art.ellipse(ctx, x, yy + 20, 52, 16); ctx.fill();
+
+    /* the frame */
+    ctx.fillStyle = '#5e3a24';
+    Art.roundRect(ctx, x - 52, yy - 34, 104, 12, 4); ctx.fill(); Art.outline(ctx, 3);
+    Art.roundRect(ctx, x - 46, yy - 24, 8, 44, 3); ctx.fill(); Art.outline(ctx, 2);
+    Art.roundRect(ctx, x + 38, yy - 24, 8, 44, 3); ctx.fill(); Art.outline(ctx, 2);
+
+    var order = D.WEAPON_ORDER, step = 26;
+    var startX = x - (order.length - 1) * step / 2;
+    for (var i = 0; i < order.length; i++) {
+      var id = order[i], px = startX + i * step;
+      if (!sv.weapons[id]) {
+        /* an empty peg: the shape of what is missing */
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        Art.roundRect(ctx, px - 2, yy - 20, 4, 30, 2); ctx.fill();
+        continue;
+      }
+      var spr = V.Spr.weapon(id);
+      var held = sv.weapon === id;
+      /* stood upright the way the reference sheet does it - the three swung
+         weapons are authored lying down because that is the angle the game
+         pivots them from, and the bow is authored as it is held. */
+      ctx.save();
+      ctx.translate(px, yy - 4);
+      if (id !== 'bow') ctx.rotate(-Math.PI / 2);
+      ctx.imageSmoothingEnabled = false;
+      var sc = 1;
+      ctx.globalAlpha = held ? 1 : 0.62;
+      ctx.drawImage(spr.canvas, -spr.w * sc / 2, -spr.h * sc / 2, spr.w * sc, spr.h * sc);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+
+      if (held) {
+        /* the one in your hands gets the light, so the rack answers "what am I
+           carrying" without opening anything */
+        var hg = ctx.createRadialGradient(px, yy - 4, 2, px, yy - 4, 26);
+        hg.addColorStop(0, 'rgba(255,225,160,0.35)');
+        hg.addColorStop(1, 'rgba(255,225,160,0)');
+        ctx.fillStyle = hg;
+        ctx.fillRect(px - 26, yy - 30, 52, 52);
+      }
+    }
+    this._labels.push({ x: x, y: yy + 34, text: 'RACK', size: 11,
+                        colour: 'rgba(255,255,255,0.85)' });
   };
 
   RoomScene.prototype.drawGate = function (ctx, x, y, t) {
@@ -1175,15 +1234,45 @@
   };
 
   /* =================================================================== SHOPS */
+  /* ONE SHOP, TWO SHELVES. There used to be two counters on opposite sides of
+     the room and two scenes behind them, which meant walking the length of the
+     hub to find out whether the thing you wanted was trial stock or home
+     stock - a distinction the player cannot make until they have already
+     looked. It is one counter and one scene now, and the two shelves are a
+     pair of buttons at the top. The lists themselves are untouched. */
+  var SHELVES = [
+    { id: 'trial',   label: 'Trial',  tint: '#2d1a26', accent: '#d84a4a',
+      blurb: 'the arena' },
+    { id: 'reality', label: 'Home',   tint: '#1e2a3d', accent: '#4a7fd8',
+      blurb: 'the tower' }
+  ];
+
+  function shelfOf(id) {
+    for (var i = 0; i < SHELVES.length; i++) if (SHELVES[i].id === id) return SHELVES[i];
+    return SHELVES[0];
+  }
+
   function ShopScene(game, which) {
     this.game = game;
-    this.which = which;
-    this.items = which === 'reality' ? D.REALITY_SHOP : D.TRIAL_SHOP;
+    this.which = which || 'trial';
     this.scroll = 0;
     this.t = 0;
     this.flash = null; this.flashTime = 0;
     Audio.music('hub');
   }
+
+  /* Read from `which` rather than cached at construction, so switching shelf
+     is a one-line state change instead of a rebuild. */
+  ShopScene.prototype.list = function () {
+    return this.which === 'reality' ? D.REALITY_SHOP : D.TRIAL_SHOP;
+  };
+
+  ShopScene.prototype.setShelf = function (id) {
+    if (this.which === id) return;
+    this.which = id;
+    this.scroll = 0;            /* the other shelf is a different length */
+    this.flash = null; this.flashTime = 0;
+  };
 
   ShopScene.prototype.update = function (dt) {
     this.t += dt;
@@ -1201,17 +1290,33 @@
   ShopScene.prototype.render = function (ctx, cw, ch) {
     var s = UI.setScale(cw, ch);
     var sv = this.game.save;
-    ctx.fillStyle = this.which === 'reality' ? '#1e2a3d' : '#2d1a26';
+    var shelf = shelfOf(this.which);
+    var items = this.list();
+    ctx.fillStyle = shelf.tint;
     ctx.fillRect(0, 0, cw, ch);
 
-    var title = this.which === 'reality' ? 'Reality Shop' : 'Trial Shop';
-    UI.text(ctx, title, 18 * s, 26 * s, { size: 22, weight: '800' });
+    UI.text(ctx, 'Market', 18 * s, 26 * s, { size: 22, weight: '800' });
     UI.text(ctx, D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency), cw - 18 * s, 26 * s,
       { size: 20, align: 'right', weight: '800', colour: '#ffe45c' });
 
-    var listTop = 52 * s, listBottom = ch - 62 * s;
+    /* the two shelves. The selected one takes the accent so which list you are
+       looking at survives a glance, which the two separate scenes got for free
+       by being different rooms. */
+    var tabW = Math.min(150 * s, (cw - 42 * s) / 2), tabH = 32 * s, tabY = 40 * s;
+    for (var sh = 0; sh < SHELVES.length; sh++) {
+      var tab = SHELVES[sh], on = tab.id === this.which;
+      if (UI.button(ctx, 'shelf_' + tab.id, 14 * s + sh * (tabW + 10 * s), tabY, tabW, tabH,
+            tab.label, {
+              size: 14, sub: on ? tab.blurb : null,
+              fill: on ? tab.accent : 'rgba(255,255,255,0.08)',
+              colour: on ? '#fff' : 'rgba(255,255,255,0.6)',
+              stroke: on ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.14)'
+            })) this.setShelf(tab.id);
+    }
+
+    var listTop = tabY + tabH + 12 * s, listBottom = ch - 62 * s;
     var rowH = 62 * s;
-    var maxScroll = Math.max(0, this.items.length * rowH - (listBottom - listTop));
+    var maxScroll = Math.max(0, items.length * rowH - (listBottom - listTop));
 
     /* drag to scroll */
     if (Input.stick.active) {
@@ -1227,8 +1332,8 @@
     ctx.rect(0, listTop, cw, listBottom - listTop);
     ctx.clip();
 
-    for (var i = 0; i < this.items.length; i++) {
-      var it = this.items[i];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
       var y = listTop + i * rowH - this.scroll;
       if (y > listBottom || y + rowH < listTop) continue;
 
@@ -1243,7 +1348,19 @@
       });
       UI.text(ctx, it.name, x + 14 * s, y + 22 * s, { size: 15, weight: '700' });
       UI.text(ctx, it.cat, x + 14 * s, y + 40 * s, { size: 10, colour: 'rgba(255,255,255,0.45)' });
-      UI.text(ctx, it.desc + (it.stack && count ? '  (x' + count + ')' : ''), x + 60 * s, y + 40 * s,
+      /* 60 was not wide enough for the longest category - 'Consumable' ran
+         straight under the description on every potion in the list.
+
+         And the description is CLIPPED to the room it actually has rather than
+         drawn until it disappears under the price pill, which is how 'Black and
+         gold robes, crowned in fire' had been reading as '...crowne' since the
+         armour was renamed. UI.wrap already does the measuring; taking its
+         first line and marking the cut is the whole trick. */
+      var descX = x + 88 * s;
+      var descRoom = (x + w - 100 * s) - descX;
+      var descTxt = it.desc + (it.stack && count ? '  (x' + count + ')' : '');
+      var descLines = UI.wrap(ctx, descTxt, descRoom, 11);
+      UI.text(ctx, descLines[0] + (descLines.length > 1 ? '\u2026' : ''), descX, y + 40 * s,
         { size: 11, colour: 'rgba(255,255,255,0.7)' });
 
       var bw = 88 * s;
