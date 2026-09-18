@@ -19,21 +19,27 @@
      reach 25.5 - a swingable gap of about one goblin, which is "you have to
      be standing on them". Unarmed reached 16.6, less than three pixels past
      overlapping. These numbers put roughly two goblin-widths of air between
-     you and a target you can still hit, which is what the swing looks like it
-     should do. The relative order of the weapons is unchanged. */
+     you and a target you can still hit.
+
+     A SECOND PASS pushed them out again - roughly a further 28% - because two
+     goblin-widths still played as close-quarters. It is nearer three now: a
+     sword reaches 164 world units against a goblin, 42.6 buffer px, where the
+     two sprites touch at about 14. The swing's own arc is drawn from the same
+     `range`, so the telegraph grows with the reach rather than lying about it.
+     The relative order of the weapons is unchanged throughout. */
   D.WEAPONS = {
     sword: {
       id: 'sword', name: 'Sword', kind: 'melee', owned: true, price: 0,
-      damage: 15, arc: 1.5, range: 122, windup: 0.05, recover: 0.19, stamina: 9,
+      damage: 15, arc: 1.5, range: 156, windup: 0.05, recover: 0.19, stamina: 9,
       moveScale: 0.74, knock: 180,
-      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 130, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
+      special: { name: 'Spin', damage: 13, arc: Math.PI, range: 166, windup: 0.11, recover: 0.34, stamina: 30, cooldown: 2.8, knock: 280, spin: true },
       blurb: 'Balanced all-rounder. No weakness, no spike.'
     },
     battleaxe: {
       id: 'battleaxe', name: 'Battleaxe', kind: 'melee', owned: false, price: 260,
-      damage: 27, arc: 1.8, range: 142, windup: 0.26, recover: 0.36, stamina: 22,
+      damage: 27, arc: 1.8, range: 180, windup: 0.26, recover: 0.36, stamina: 22,
       moveScale: 0.5, knock: 380,
-      special: { name: 'Cleave', damage: 44, arc: 2.2, range: 160, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
+      special: { name: 'Cleave', damage: 44, arc: 2.2, range: 202, windup: 0.4, recover: 0.42, stamina: 40, cooldown: 4.4, knock: 560, quake: true },
       blurb: 'Huge damage in a wide arc. Long wind-up, poor mobility.'
     },
     bow: {
@@ -45,9 +51,9 @@
     },
     scythe: {
       id: 'scythe', name: 'Scythe', kind: 'melee', owned: false, price: -1, secret: true,
-      damage: 21, arc: 1.75, range: 134, windup: 0.08, recover: 0.24, stamina: 14,
+      damage: 21, arc: 1.75, range: 170, windup: 0.08, recover: 0.24, stamina: 14,
       moveScale: 0.72, knock: 250,
-      special: { name: 'Reap', damage: 26, arc: 2.7, range: 152, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
+      special: { name: 'Reap', damage: 26, arc: 2.7, range: 192, windup: 0.1, recover: 0.3, stamina: 32, cooldown: 3.2, knock: 320, dash: 340, lifesteal: 0.3 },
       blurb: 'The secret. Solid damage, quick, no crippling weakness.'
     }
   };
@@ -58,7 +64,7 @@
      case; it is kept out of WEAPON_ORDER so it never reaches a shop. */
   D.WEAPONS.none = {
     id: 'none', name: 'Unarmed', kind: 'melee', owned: true, price: 0,
-    damage: 3, arc: 1.1, range: 78, windup: 0.08, recover: 0.26, stamina: 6,
+    damage: 3, arc: 1.1, range: 100, windup: 0.08, recover: 0.26, stamina: 6,
     moveScale: 0.9, knock: 60,
     special: { name: '--', damage: 0, arc: 0.4, range: 40, windup: 0.1, recover: 0.2, stamina: 999, cooldown: 1 },
     blurb: 'Nothing but your fists.'
