@@ -436,8 +436,8 @@ async function main() {
     return { ids, opened, first, second,
              trialLen: D.TRIAL_SHOP.length, homeLen: D.REALITY_SHOP.length };
   });
-  check('the hub has one counter and a rack, not two counters',
-    market.ids.join(',') === 'shop,rack,gate', market.ids.join(','));
+  check('the hub has one counter, a rack and a way out, not two counters',
+    market.ids.join(',') === 'shop,rack,gate,street', market.ids.join(','));
   check('the counter opens one shop carrying both shelves',
     market.opened === 'ShopScene' &&
     market.first.shelf === 'trial' && market.first.len === market.trialLen &&
@@ -447,6 +447,52 @@ async function main() {
      the shorter one part-way down an empty list */
   check('switching shelf resets the scroll', market.second.scroll === 0,
     String(market.second.scroll));
+
+  /* --- the street ---
+         The five businesses were already in the economy and nowhere else: they
+         pay Vel every trial and the city they are in did not exist as a place.
+         The plots are read from the shop rather than listed, so a sixth
+         business gets a building without anyone remembering to add one. */
+  const street = await page.evaluate(() => {
+    const g = window.VELTHIROS, V = window.V, D = V.D, Save = V.Save;
+    const biz = D.REALITY_SHOP.filter((i) => i.cat === 'Business');
+    g.save.owned = {};
+    g.save.currency = 10000;
+
+    const st = new V.S.StreetScene(g);
+    const plots = st.plots.length;
+    const ids = st.zones().map((z) => z.id);
+
+    /* buying where it stands, through the same Game.buy the counter uses */
+    const target = biz[0];
+    const before = g.save.currency, incomeBefore = Save.passiveIncome(g.save);
+    st.trigger('biz:' + target.id);
+    const after = { spent: before - g.save.currency,
+                    owned: Save.ownedCount(g.save, target.id) > 0,
+                    income: Save.passiveIncome(g.save) };
+
+    /* and the plot's label flips from a price to what it earns */
+    const label = st.zones().find((z) => z.id === 'biz:' + target.id).label;
+
+    /* the door goes home */
+    st.trigger('home');
+    const wentHome = g.scene && g.scene.mode;
+
+    return { plots, bizCount: biz.length, ids, after, label, wentHome,
+             price: target.price, income: target.income,
+             incomeBefore };
+  });
+  check('the street has a plot for every business, a door and the square',
+    street.plots === street.bizCount &&
+    street.ids[0] === 'home' && street.ids[street.ids.length - 1] === 'square',
+    JSON.stringify({ plots: street.plots, businesses: street.bizCount, zones: street.ids }));
+  check('a business can be bought where it stands, and starts paying',
+    street.after.owned && street.after.spent === street.price &&
+    street.after.income === street.incomeBefore + street.income,
+    JSON.stringify(street.after));
+  check('an owned plot advertises its income rather than its price',
+    street.label.indexOf('/ trial') > 0 && street.label.indexOf('Buy ') !== 0, street.label);
+  check('the door takes you back inside', street.wentHome === 'hub', String(street.wentHome));
 
   /* --- every trial type renders and simulates without throwing --- */
   const typeReport = await page.evaluate(async () => {
