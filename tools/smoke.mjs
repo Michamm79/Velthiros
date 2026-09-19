@@ -907,30 +907,28 @@ async function main() {
        only thing that differs is the bearing. */
     const dodge = (behind) => {
       const t = fresh();
-      const e = t.spawnEnemy('goblin', 70, 0, {});
-      e.relentless = true; e.state = 'chase'; e.aggro = true;
+      t.spawnQueue.length = 0;
       const p = t.player;
-      /* The control is "standing there", so it has to actually stand: Input is
-         global and whatever the previous check left on the stick would walk the
-         player out of the arc and pass the test for the wrong reason. */
       window.V.Input.move.x = 0; window.V.Input.move.y = 0; window.V.Input.move.mag = 0;
       p.x = 0; p.y = 0; p.hp = p.stats.maxHp;
-      /* The arena keeps spawning on its own queue, and anything else that
-         wanders in can hit the player during the second this runs. So the
-         damage is attributed to THIS enemy's swing frame rather than to the
-         run: hp is read either side of the single update that ends its
-         wind-up. Comparing hp to maxHp over the whole loop made the check
-         answer "did anything hurt me", which is not what it is about. */
-      t.spawnQueue.length = 0;
+
+      /* The enemy is placed, aimed and put into its wind-up BY HAND. Letting a
+         real chase play out is what made this check flaky twice: the approach
+         ends with the two bodies overlapping, separation shoves them apart
+         mid-swing, and whether the swing lands stops being about the bearing.
+         40 units is inside the goblin's 52 attack range and outside the 23
+         where the two bodies touch, so nothing pushes anything. */
+      const e = t.spawnEnemy('goblin', 40, 0, {});
+      e.hiding = false; e.speed = 0; e.relentless = true;
+      e.facing = Math.PI; e.aim = Math.PI;        /* looking straight at you */
+      e.state = 'windup'; e.stateTime = 0; e.attackedThisSwing = false;
+
       let moved = false, swung = false, hurt = false;
-      for (let i = 0; i < 60 * 10; i++) {
-        if (behind && !moved && e.state === 'windup' &&
-            e.stateTime >= e.def.attackWindup * 0.7) {
-          p.x = e.x + (e.x - p.x); p.y = e.y + (e.y - p.y);   /* same range, opposite side */
+      for (let i = 0; i < 60 * 4; i++) {
+        if (behind && !moved && e.stateTime >= e.def.attackWindup * 0.7) {
+          p.x = -p.x || -40; p.y = 0;             /* same range, opposite side */
           moved = true;
         }
-        if (!behind) { p.x = 0; p.y = 0; }      /* and stays standing */
-        t.spawnQueue.length = 0;
         const was = e.state, hpWas = p.hp;
         t.update(1 / 60);
         if (was === 'windup' && e.state !== 'windup') {
