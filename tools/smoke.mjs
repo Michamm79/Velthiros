@@ -414,6 +414,86 @@ async function main() {
   await wait(300);
   await shot('13-shop-reality');
 
+  /* --- one counter, two shelves ---
+         There used to be two counters on opposite walls and two scenes behind
+         them, so finding out whether a thing was trial stock or home stock
+         meant walking the length of the hub - a distinction the player cannot
+         make until they have already looked. */
+  const market = await page.evaluate(() => {
+    const g = window.VELTHIROS, V = window.V, D = V.D;
+    const hub = new V.S.RoomScene(g, 'hub');
+    const ids = hub.zones().map((z) => z.id);
+
+    /* the counter opens the shop, on the trial shelf by default */
+    hub.trigger('shop');
+    const opened = g.scene && g.scene.constructor && g.scene.constructor.name;
+    const shop = g.scene;
+    const first = { shelf: shop.which, len: shop.list().length };
+    shop.scroll = 120;
+    shop.setShelf('reality');
+    const second = { shelf: shop.which, len: shop.list().length, scroll: shop.scroll };
+
+    return { ids, opened, first, second,
+             trialLen: D.TRIAL_SHOP.length, homeLen: D.REALITY_SHOP.length };
+  });
+  check('the hub has one counter, a rack and a way out, not two counters',
+    market.ids.join(',') === 'shop,rack,gate,street', market.ids.join(','));
+  check('the counter opens one shop carrying both shelves',
+    market.opened === 'ShopScene' &&
+    market.first.shelf === 'trial' && market.first.len === market.trialLen &&
+    market.second.shelf === 'reality' && market.second.len === market.homeLen,
+    JSON.stringify({ opened: market.opened, first: market.first, second: market.second }));
+  /* the shelves are different lengths, so a scroll carried across would start
+     the shorter one part-way down an empty list */
+  check('switching shelf resets the scroll', market.second.scroll === 0,
+    String(market.second.scroll));
+
+  /* --- the street ---
+         The five businesses were already in the economy and nowhere else: they
+         pay Vel every trial and the city they are in did not exist as a place.
+         The plots are read from the shop rather than listed, so a sixth
+         business gets a building without anyone remembering to add one. */
+  const street = await page.evaluate(() => {
+    const g = window.VELTHIROS, V = window.V, D = V.D, Save = V.Save;
+    const biz = D.REALITY_SHOP.filter((i) => i.cat === 'Business');
+    g.save.owned = {};
+    g.save.currency = 10000;
+
+    const st = new V.S.StreetScene(g);
+    const plots = st.plots.length;
+    const ids = st.zones().map((z) => z.id);
+
+    /* buying where it stands, through the same Game.buy the counter uses */
+    const target = biz[0];
+    const before = g.save.currency, incomeBefore = Save.passiveIncome(g.save);
+    st.trigger('biz:' + target.id);
+    const after = { spent: before - g.save.currency,
+                    owned: Save.ownedCount(g.save, target.id) > 0,
+                    income: Save.passiveIncome(g.save) };
+
+    /* and the plot's label flips from a price to what it earns */
+    const label = st.zones().find((z) => z.id === 'biz:' + target.id).label;
+
+    /* the door goes home */
+    st.trigger('home');
+    const wentHome = g.scene && g.scene.mode;
+
+    return { plots, bizCount: biz.length, ids, after, label, wentHome,
+             price: target.price, income: target.income,
+             incomeBefore };
+  });
+  check('the street has a plot for every business, a door and the square',
+    street.plots === street.bizCount &&
+    street.ids[0] === 'home' && street.ids[street.ids.length - 1] === 'square',
+    JSON.stringify({ plots: street.plots, businesses: street.bizCount, zones: street.ids }));
+  check('a business can be bought where it stands, and starts paying',
+    street.after.owned && street.after.spent === street.price &&
+    street.after.income === street.incomeBefore + street.income,
+    JSON.stringify(street.after));
+  check('an owned plot advertises its income rather than its price',
+    street.label.indexOf('/ trial') > 0 && street.label.indexOf('Buy ') !== 0, street.label);
+  check('the door takes you back inside', street.wentHome === 'hub', String(street.wentHome));
+
   /* --- every trial type renders and simulates without throwing --- */
   const typeReport = await page.evaluate(async () => {
     const g = window.VELTHIROS;
@@ -873,22 +953,35 @@ async function main() {
        only thing that differs is the bearing. */
     const dodge = (behind) => {
       const t = fresh();
-      const e = t.spawnEnemy('goblin', 70, 0, {});
-      e.relentless = true; e.state = 'chase'; e.aggro = true;
+      t.spawnQueue.length = 0;
       const p = t.player;
-      p.x = 0; p.y = 0; p.hp = p.stats.maxHp; p.iframes = 0;
-      let moved = false, swung = false;
-      for (let i = 0; i < 60 * 10; i++) {
-        if (behind && !moved && e.state === 'windup' &&
-            e.stateTime >= e.def.attackWindup * 0.7) {
-          p.x = e.x + (e.x - p.x); p.y = e.y + (e.y - p.y);   /* same range, opposite side */
+      window.V.Input.move.x = 0; window.V.Input.move.y = 0; window.V.Input.move.mag = 0;
+      p.x = 0; p.y = 0; p.hp = p.stats.maxHp;
+
+      /* The enemy is placed, aimed and put into its wind-up BY HAND. Letting a
+         real chase play out is what made this check flaky twice: the approach
+         ends with the two bodies overlapping, separation shoves them apart
+         mid-swing, and whether the swing lands stops being about the bearing.
+         40 units is inside the goblin's 52 attack range and outside the 23
+         where the two bodies touch, so nothing pushes anything. */
+      const e = t.spawnEnemy('goblin', 40, 0, {});
+      e.hiding = false; e.speed = 0; e.relentless = true;
+      e.facing = Math.PI; e.aim = Math.PI;        /* looking straight at you */
+      e.state = 'windup'; e.stateTime = 0; e.attackedThisSwing = false;
+
+      let moved = false, swung = false, hurt = false;
+      for (let i = 0; i < 60 * 4; i++) {
+        if (behind && !moved && e.stateTime >= e.def.attackWindup * 0.7) {
+          p.x = -p.x || -40; p.y = 0;             /* same range, opposite side */
           moved = true;
         }
-        const was = e.state;
+        const was = e.state, hpWas = p.hp;
         t.update(1 / 60);
-        if (was === 'windup' && e.state !== 'windup') { swung = true; break; }
+        if (was === 'windup' && e.state !== 'windup') {
+          swung = true; hurt = p.hp < hpWas; break;
+        }
       }
-      return { swung, moved, hurt: p.hp < p.stats.maxHp };
+      return { swung, moved, hurt };
     };
     const stood = dodge(false), slipped = dodge(true);
 

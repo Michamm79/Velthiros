@@ -370,6 +370,361 @@
     }
   };
 
+  /* ================================================================ STREET
+     The city, at last, as a place.
+
+     It was already in the economy and nowhere else: the Home shelf sells five
+     businesses that pay Vel every trial, and the GDD has the player living in
+     an apartment on one floor of a city skyscraper. So the money said there
+     was a city and the game never showed it. This is that street - you leave
+     the flat, walk it, and the things you have bought are standing there.
+
+     Every plot is read from D.REALITY_SHOP rather than listed here, so a sixth
+     business added to the shop gets a building for free and cannot be bought
+     without one appearing. */
+  var STREET_W = 1500, STREET_H = 150;
+
+  function businesses() {
+    var out = [];
+    for (var i = 0; i < D.REALITY_SHOP.length; i++) {
+      if (D.REALITY_SHOP[i].cat === 'Business') out.push(D.REALITY_SHOP[i]);
+    }
+    return out;
+  }
+
+  function StreetScene(game) {
+    this.game = game;
+    this.t = 0;
+    this.px = -560; this.py = 30;
+    this.pfacing = 0;
+    this.animPhase = 0;
+    this.moving = false;
+    this.prompt = null;
+    this.flash = null; this.flashTime = 0;
+    this.camX = this.px;
+    this.fade = 1;
+    /* the plots are spread across the middle, the door and the square are the
+       two ends - so the street reads as somewhere you live rather than a menu */
+    var biz = businesses();
+    this.plots = biz.map(function (item, i) {
+      return { item: item, x: -300 + i * 190 };
+    });
+    Secret.attach(this, game);
+    Audio.music('hub');
+  }
+
+  StreetScene.prototype.zones = function () {
+    var zs = [{ id: 'home', x: -620, y: 0, r: 70, label: 'Go inside' }];
+    for (var i = 0; i < this.plots.length; i++) {
+      var pl = this.plots[i], owned = Save.ownedCount(this.game.save, pl.item.id) > 0;
+      zs.push({ id: 'biz:' + pl.item.id, x: pl.x, y: 0, r: 64,
+                label: owned ? pl.item.name + '  \u25C6 ' + pl.item.income + ' / trial'
+                             : 'Buy ' + pl.item.name + '  \u25C6 ' + pl.item.price });
+    }
+    zs.push({ id: 'square', x: 640, y: 0, r: 70, label: 'Aurelia Square' });
+    return zs;
+  };
+
+  StreetScene.prototype.update = function (dt) {
+    this.t += dt;
+    this.fade = Math.max(0, this.fade - dt * 1.2);
+    if (this.flashTime > 0) { this.flashTime -= dt; if (this.flashTime <= 0) this.flash = null; }
+    Secret.update(this, dt, false);
+    if (this.secret.shown) return;
+
+    var mv = Input.move, speed = 118;
+    if (mv.mag > 0.08) {
+      this.px += mv.x * speed * mv.mag * dt;
+      this.py += mv.y * speed * 0.5 * mv.mag * dt;
+      this.pfacing = Math.atan2(mv.y, mv.x);
+      this.moving = true;
+      this.animPhase += dt * 12;
+    } else { this.moving = false; this.animPhase += dt * 2; }
+    this.px = U.clamp(this.px, -STREET_W / 2 + 40, STREET_W / 2 - 40);
+    this.py = U.clamp(this.py, -10, STREET_H / 2);
+
+    this.prompt = null;
+    var zs = this.zones();
+    for (var i = 0; i < zs.length; i++) {
+      if (U.dist2(this.px, this.py, zs[i].x, zs[i].y) < zs[i].r * zs[i].r) { this.prompt = zs[i]; break; }
+    }
+    if (this.prompt && (Input.wasPressed('interact') || Input.wasPressed('actionbtn'))) {
+      this.trigger(this.prompt.id);
+    }
+  };
+
+  StreetScene.prototype.trigger = function (id) {
+    if (id === 'home') {
+      Audio.play('confirm');
+      return this.game.setScene(new S.RoomScene(this.game, 'hub'));
+    }
+    if (id === 'square') {
+      /* Aurelia Square is where he was taken from. Standing in it again is a
+         thing to build; for now the street says so rather than pretending. */
+      this.flash = 'The square is taped off. Nobody will say why.';
+      this.flashTime = 3;
+      Audio.play('deny');
+      return;
+    }
+    if (id.indexOf('biz:') !== 0) return;
+    var wanted = id.slice(4), item = null;
+    for (var i = 0; i < this.plots.length; i++) {
+      if (this.plots[i].item.id === wanted) item = this.plots[i].item;
+    }
+    if (!item) return;
+    if (Save.ownedCount(this.game.save, item.id) > 0) {
+      this.flash = item.name + ' took \u25C6 ' + item.income + ' last trial.';
+      this.flashTime = 2.6;
+      Audio.play('ui');
+      return;
+    }
+    /* BOUGHT WHERE IT STANDS. Going back to the counter to buy a building you
+       are looking at is the kind of errand that makes a place feel like a menu
+       with scenery. It is the same Game.buy the shop uses, so price, currency
+       and persistence cannot drift apart. */
+    var res = this.game.buy(item);
+    this.flash = res.ok ? item.name + ' is yours. It opens tomorrow.' : res.message;
+    this.flashTime = 3;
+    Audio.play(res.ok ? 'coin' : 'deny');
+  };
+
+  StreetScene.prototype.render = function (ctx, cw, ch) {
+    var target = this.game.worldTarget();
+    this.renderWorld(target.ctx, target.w, target.h);
+    this.game.flushWorld(target);
+    this.renderUI(ctx, cw, ch);
+  };
+
+  StreetScene.prototype.renderWorld = function (ctx, cw, ch) {
+    var t = this.t, SQ = Art.SQUASH;
+    this._labels = [];
+    var zoom = U.clamp(Math.min(cw / 520, ch / 300), 0.5, 1.6);
+
+    /* the camera follows, clamped so the ends of the street stay ends */
+    var half = cw / 2 / zoom;
+    this.camX = U.clamp(this.px, -STREET_W / 2 + half, STREET_W / 2 - half);
+    if (half > STREET_W / 2) this.camX = 0;
+
+    var sky = ctx.createLinearGradient(0, 0, 0, ch);
+    sky.addColorStop(0, '#0d1018');
+    sky.addColorStop(0.55, '#1b2133');
+    sky.addColorStop(1, '#2b3446');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, cw, ch);
+
+    this._originX = cw / 2;
+    this._originY = ch * 0.62;
+    this._zoom = zoom;
+
+    ctx.save();
+    ctx.translate(this._originX, this._originY);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-this.camX, 0);
+
+    /* skyline, two layers, the far one barely moving - the city is bigger than
+       the bit of it you can walk */
+    for (var layer = 0; layer < 2; layer++) {
+      var par = layer ? 0.55 : 0.25;
+      ctx.save();
+      ctx.translate(this.camX * (1 - par), 0);
+      /* Both layers were darker than the sky they sit against, which at this
+         gradient is almost no contrast at all - the city read as a smudge. The
+         near one is now lighter than the sky behind it and the far one only
+         slightly darker, which is what puts air between them. */
+      ctx.fillStyle = layer ? '#252d42' : '#161d2e';
+      for (var b = -14; b < 14; b++) {
+        var bx = b * 120 + (layer ? 40 : 0);
+        var bh = 150 + ((b * (layer ? 53 : 37)) % 7) * 34;
+        ctx.fillRect(bx, -bh - 40 * SQ, 104, bh);
+        ctx.fillStyle = layer ? 'rgba(255,220,140,0.42)' : 'rgba(190,215,255,0.18)';
+        for (var w = 0; w < 9; w++) {
+          if ((b * 5 + w * 3 + layer) % 4 < 2) {
+            ctx.fillRect(bx + 12 + (w % 3) * 32, -bh + 22 + Math.floor(w / 3) * 38, 10, 14);
+          }
+        }
+        ctx.fillStyle = layer ? '#252d42' : '#161d2e';
+      }
+      ctx.restore();
+    }
+
+    /* road, kerb, pavement */
+    ctx.fillStyle = '#20232c';
+    ctx.fillRect(-STREET_W / 2, 46 * SQ, STREET_W, 260);
+    ctx.fillStyle = '#3a3f4a';
+    ctx.fillRect(-STREET_W / 2, 40 * SQ, STREET_W, 6);
+    ctx.fillStyle = '#4a4f5a';
+    ctx.fillRect(-STREET_W / 2, -40 * SQ, STREET_W, 80 * SQ);
+    ctx.fillStyle = 'rgba(0,0,0,0.13)';
+    for (var pv = -STREET_W / 2; pv < STREET_W / 2; pv += 58) ctx.fillRect(pv, -40 * SQ, 2, 80 * SQ);
+    ctx.fillStyle = 'rgba(255,225,160,0.5)';
+    for (var ln = -STREET_W / 2; ln < STREET_W / 2; ln += 90) ctx.fillRect(ln, 92 * SQ, 40, 4);
+
+    /* the door home */
+    this.drawDoorway(ctx, -620, t);
+
+    /* the plots */
+    for (var i = 0; i < this.plots.length; i++) {
+      this.drawPlot(ctx, this.plots[i], t);
+    }
+
+    /* the square, taped off */
+    this.drawSquareEnd(ctx, 640, t);
+
+    var pp = { x: this.px, y: this.py * SQ };
+    Art.shadow(ctx, pp.x, pp.y, 9);
+    this._playerAt = { x: this._originX + (pp.x - this.camX) * zoom, y: this._originY + pp.y * zoom };
+    ctx.restore();
+
+    var ps = this.game.pixScale || 1;
+    var hero = V.Spr.player(
+      Math.abs(Math.cos(this.pfacing)) > 0.5 ? 'side' : (Math.sin(this.pfacing) < 0 ? 'up' : 'down'),
+      this.moving ? (Math.floor(this.animPhase) % 4 === 1 ? 1 : (Math.floor(this.animPhase) % 4 === 3 ? 2 : 0)) : 0,
+      this.game.playerTint(), this.game.playerOutfit());
+    V.Px.draw(ctx, hero, Math.round(this._playerAt.x), Math.round(this._playerAt.y),
+      { flip: Math.cos(this.pfacing) < 0 });
+  };
+
+  StreetScene.prototype.drawDoorway = function (ctx, x, t) {
+    var SQ = Art.SQUASH, yy = 0;
+    ctx.fillStyle = '#2a2433';
+    ctx.fillRect(x - 92, -190, 184, 190 + 40 * SQ);
+    ctx.fillStyle = '#39314a';
+    ctx.fillRect(x - 92, -190, 184, 12);
+    for (var f = 0; f < 3; f++) {
+      ctx.fillStyle = 'rgba(255,220,140,0.22)';
+      ctx.fillRect(x - 70 + f * 50, -160, 30, 38);
+    }
+    ctx.fillStyle = '#7a4b3a';
+    Art.roundRect(ctx, x - 30, -84, 60, 84 + 12 * SQ, 5); ctx.fill(); Art.outline(ctx, 3);
+    ctx.fillStyle = '#e8c14a';
+    Art.ellipse(ctx, x + 16, -40, 4, 4); ctx.fill();
+    var g = ctx.createRadialGradient(x, -30, 4, x, -30, 90);
+    g.addColorStop(0, 'rgba(255,225,160,0.22)');
+    g.addColorStop(1, 'rgba(255,225,160,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 90, -120, 180, 170);
+    this._labels.push({ x: x, y: 30 * SQ, text: 'HOME', size: 11, colour: 'rgba(255,255,255,0.8)' });
+  };
+
+  /* A plot is the same building either way - what changes is whether the
+     lights are on. A boarded shell you can see the shape of is a much better
+     advert than an empty lot, because you can tell what you would be buying. */
+  StreetScene.prototype.drawPlot = function (ctx, plot, t) {
+    var SQ = Art.SQUASH, x = plot.x;
+    var item = plot.item;
+    var owned = Save.ownedCount(this.game.save, item.id) > 0;
+    var h = 96 + (item.income > 40 ? 52 : item.income > 12 ? 26 : 0);
+
+    ctx.fillStyle = owned ? '#3b3450' : '#262231';
+    ctx.fillRect(x - 74, -h, 148, h + 40 * SQ);
+    Art.outline(ctx, 3);
+    ctx.fillStyle = owned ? '#4a4163' : '#2e2939';
+    ctx.fillRect(x - 74, -h, 148, 10);
+
+    /* the shopfront */
+    ctx.fillStyle = owned ? '#12212b' : '#1a1722';
+    Art.roundRect(ctx, x - 56, -62, 112, 52, 4); ctx.fill();
+    if (owned) {
+      ctx.fillStyle = 'rgba(255,225,160,0.55)';
+      Art.roundRect(ctx, x - 50, -56, 100, 40, 3); ctx.fill();
+      /* awning */
+      ctx.fillStyle = item.income > 40 ? '#c9a24a' : '#b5504f';
+      ctx.beginPath();
+      ctx.moveTo(x - 64, -66); ctx.lineTo(x + 64, -66);
+      ctx.lineTo(x + 50, -86); ctx.lineTo(x - 50, -86);
+      ctx.closePath(); ctx.fill(); Art.outline(ctx, 2);
+      var g = ctx.createRadialGradient(x, -40, 6, x, -40, 120);
+      g.addColorStop(0, 'rgba(255,225,160,0.26)');
+      g.addColorStop(1, 'rgba(255,225,160,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - 120, -150, 240, 210);
+    } else {
+      /* boards across the glass, and a sign saying what it would cost */
+      ctx.strokeStyle = '#6b4a2c'; ctx.lineWidth = 7;
+      for (var bd = 0; bd < 3; bd++) {
+        ctx.beginPath();
+        ctx.moveTo(x - 58, -56 + bd * 16); ctx.lineTo(x + 58, -48 + bd * 16);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#d8d2c4';
+      Art.roundRect(ctx, x - 34, -104, 68, 26, 3); ctx.fill(); Art.outline(ctx, 2);
+    }
+
+    this._labels.push({ x: x, y: owned ? -74 : -92, text: owned ? item.name : 'FOR SALE',
+                        size: 11, colour: owned ? '#ffe9b0' : '#2a2135' });
+    this._labels.push({ x: x, y: 30 * SQ,
+                        text: owned ? '\u25C6 ' + item.income + ' / trial'
+                                    : '\u25C6 ' + item.price,
+                        size: 11, colour: owned ? '#7fe08a' : 'rgba(255,255,255,0.7)' });
+  };
+
+  StreetScene.prototype.drawSquareEnd = function (ctx, x, t) {
+    var SQ = Art.SQUASH;
+    ctx.fillStyle = '#262b38';
+    ctx.fillRect(x - 40, -46 * SQ, 300, 86 * SQ);
+    ctx.fillStyle = '#3a4152';
+    ctx.fillRect(x - 40, -46 * SQ, 300, 5);
+    /* the tape */
+    for (var k = 0; k < 2; k++) {
+      ctx.strokeStyle = k ? '#e8c14a' : '#2a2135';
+      ctx.lineWidth = k ? 7 : 11;
+      ctx.beginPath();
+      ctx.moveTo(x - 30, -34 + k * 2); ctx.lineTo(x + 120, -46 + k * 2);
+      ctx.stroke();
+    }
+    this._labels.push({ x: x + 50, y: 30 * SQ, text: 'AURELIA SQUARE', size: 11,
+                        colour: 'rgba(255,255,255,0.6)' });
+  };
+
+  StreetScene.prototype.renderUI = function (ctx, cw, ch) {
+    var s = UI.setScale(cw, ch), t = this.t;
+    var sv = this.game.save;
+
+    var ps = this.game.pixScale || 1;
+    for (var li = 0; li < (this._labels || []).length; li++) {
+      var lb = this._labels[li];
+      UI.text(ctx, lb.text,
+        (this._originX + (lb.x - this.camX) * this._zoom) * ps,
+        (this._originY + lb.y * this._zoom) * ps,
+        { size: lb.size, align: 'center', weight: '800', colour: lb.colour });
+    }
+
+    Input.stickEnabled = !this.secret.shown;
+    V.HUD.drawStick(ctx, cw, ch, s);
+
+    UI.text(ctx, D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency), 16 * s, 22 * s,
+      { size: 18, weight: '800', colour: '#ffe45c' });
+    var income = Save.passiveIncome(sv);
+    UI.text(ctx, income > 0 ? '+' + income + ' / trial from the street' : 'nothing of yours out here yet',
+      16 * s, 42 * s, { size: 11, colour: income > 0 ? '#7fe08a' : 'rgba(255,255,255,0.5)' });
+
+    if (this.prompt) {
+      /* clear of the stick, which owns the bottom-left corner */
+      var bw = Math.min(280 * s, cw * 0.72);
+      if (UI.button(ctx, 'actionbtn', cw / 2 - bw / 2, ch - 186 * s, bw, 44 * s, this.prompt.label)) {
+        this.trigger(this.prompt.id);
+      }
+    } else {
+      UI.text(ctx, 'walk to a door or a shopfront', cw / 2, ch - 170 * s,
+        { size: 12, align: 'center', colour: 'rgba(255,255,255,0.45)' });
+    }
+
+    if (this.flash) {
+      var fw = Math.min(420 * s, cw - 40);
+      UI.panel(ctx, cw / 2 - fw / 2, ch - 132 * s, fw, 44 * s, { fill: 'rgba(14,10,22,0.85)' });
+      UI.text(ctx, this.flash, cw / 2, ch - 110 * s,
+        { size: 13, align: 'center', colour: 'rgba(255,240,220,0.92)' });
+    }
+
+    if (this.secret.shown) { Input.clearZones(); return Secret.drawPanel(this, ctx, cw, ch, s); }
+    Secret.drawMark(this, ctx, cw - 34 * s, 74 * s, s, t);
+
+    if (this.fade > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,' + this.fade + ')';
+      ctx.fillRect(0, 0, cw, ch);
+    }
+  };
+
   /* =================================================================== HELP */
   function HelpScene(game) { this.game = game; this.t = 0; }
   HelpScene.prototype.update = function (dt) { this.t += dt; };
@@ -438,9 +793,15 @@
   RoomScene.prototype.zones = function () {
     if (this.mode !== 'hub') return [];
     return [
-      { id: 'reality', x: -220, y: 0, r: 66, label: 'Reality Shop' },
-      { id: 'trial', x: 220, y: 0, r: 66, label: 'Trial Shop' },
-      { id: 'gate', x: 0, y: -112, r: 60, label: 'Enter Trial ' + this.game.save.trial }
+      /* Pulled in from +/-220. The room is 620 wide and a portrait phone does
+         not show all of it, so at the old spacing both fixtures sat half off
+         the edge - which the two counters did before this as well. */
+      { id: 'shop', x: -168, y: 0, r: 62, label: 'Market' },
+      { id: 'rack', x: 168, y: 0, r: 62, label: 'Weapon Rack' },
+      { id: 'gate', x: 0, y: -112, r: 60, label: 'Enter Trial ' + this.game.save.trial },
+      /* the way out. The flat is one floor of a city skyscraper per the GDD,
+         so the door is the front of the room and the street is below it. */
+      { id: 'street', x: 0, y: 108, r: 70, label: 'Go out to the street' }
     ];
   };
 
@@ -491,8 +852,9 @@
 
   RoomScene.prototype.trigger = function (id) {
     Audio.play('confirm');
-    if (id === 'reality') this.game.setScene(new S.ShopScene(this.game, 'reality'));
-    else if (id === 'trial') this.game.setScene(new S.ShopScene(this.game, 'trial'));
+    if (id === 'shop') this.game.setScene(new S.ShopScene(this.game));
+    else if (id === 'rack') this.game.cycleWeapon();
+    else if (id === 'street') this.game.setScene(new S.StreetScene(this.game));
     else if (id === 'gate') this.game.enterTrial();
   };
 
@@ -596,11 +958,14 @@
       }
     }
 
-    /* hub fixtures */
+    /* hub fixtures. One counter where there were two, and the wall the second
+       one used to take is a rack carrying the weapons you actually own - the
+       room's only readout of progress that is not a number on the HUD. */
     if (this.mode === 'hub') {
-        this.drawCounter(ctx, -220, 0, '#4a7fd8', 'REALITY');
-      this.drawCounter(ctx, 220, 0, '#d84a4a', 'TRIAL');
+      this.drawCounter(ctx, -168, 0, '#6a5bd8', 'MARKET');
+      this.drawRack(ctx, 168, 0, t);
       this.drawGate(ctx, 0, -112, t);
+      this.drawFrontDoor(ctx, 0, 108);
     }
 
     /* the player is a sprite, so remember where the room transform puts them
@@ -710,6 +1075,74 @@
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     Art.roundRect(ctx, x - 42, yy - 24, 84, 14, 5); ctx.fill();
     this._labels.push({ x: x, y: yy + 34, text: label, size: 11, colour: 'rgba(255,255,255,0.85)' });
+  };
+
+  /* The rack. Drawn from save.weapons, so it fills in as the run does and a
+     weapon you have never bought leaves an empty peg rather than a gap you
+     cannot read. The sprites are the game's own, at a whole-number scale. */
+  RoomScene.prototype.drawRack = function (ctx, x, y, t) {
+    var yy = y * Art.SQUASH;
+    var sv = this.game.save;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    Art.ellipse(ctx, x, yy + 20, 52, 16); ctx.fill();
+
+    /* the frame */
+    ctx.fillStyle = '#5e3a24';
+    Art.roundRect(ctx, x - 52, yy - 34, 104, 12, 4); ctx.fill(); Art.outline(ctx, 3);
+    Art.roundRect(ctx, x - 46, yy - 24, 8, 44, 3); ctx.fill(); Art.outline(ctx, 2);
+    Art.roundRect(ctx, x + 38, yy - 24, 8, 44, 3); ctx.fill(); Art.outline(ctx, 2);
+
+    var order = D.WEAPON_ORDER, step = 26;
+    var startX = x - (order.length - 1) * step / 2;
+    for (var i = 0; i < order.length; i++) {
+      var id = order[i], px = startX + i * step;
+      if (!sv.weapons[id]) {
+        /* an empty peg: the shape of what is missing */
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        Art.roundRect(ctx, px - 2, yy - 20, 4, 30, 2); ctx.fill();
+        continue;
+      }
+      var spr = V.Spr.weapon(id);
+      var held = sv.weapon === id;
+      /* stood upright the way the reference sheet does it - the three swung
+         weapons are authored lying down because that is the angle the game
+         pivots them from, and the bow is authored as it is held. */
+      ctx.save();
+      ctx.translate(px, yy - 4);
+      if (id !== 'bow') ctx.rotate(-Math.PI / 2);
+      ctx.imageSmoothingEnabled = false;
+      var sc = 1;
+      ctx.globalAlpha = held ? 1 : 0.62;
+      ctx.drawImage(spr.canvas, -spr.w * sc / 2, -spr.h * sc / 2, spr.w * sc, spr.h * sc);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+
+      if (held) {
+        /* the one in your hands gets the light, so the rack answers "what am I
+           carrying" without opening anything */
+        var hg = ctx.createRadialGradient(px, yy - 4, 2, px, yy - 4, 26);
+        hg.addColorStop(0, 'rgba(255,225,160,0.35)');
+        hg.addColorStop(1, 'rgba(255,225,160,0)');
+        ctx.fillStyle = hg;
+        ctx.fillRect(px - 26, yy - 30, 52, 52);
+      }
+    }
+    this._labels.push({ x: x, y: yy + 34, text: 'RACK', size: 11,
+                        colour: 'rgba(255,255,255,0.85)' });
+  };
+
+  /* the door out. Set into the near wall, so leaving reads as going down and
+     out rather than further into the building. */
+  RoomScene.prototype.drawFrontDoor = function (ctx, x, y) {
+    var yy = y * Art.SQUASH;
+    ctx.fillStyle = '#4a3a2a';
+    Art.roundRect(ctx, x - 34, yy - 14, 68, 30, 5); ctx.fill(); Art.outline(ctx, 3);
+    ctx.fillStyle = '#6b4a2c';
+    Art.roundRect(ctx, x - 28, yy - 9, 56, 20, 4); ctx.fill();
+    ctx.fillStyle = '#e8c14a';
+    Art.ellipse(ctx, x + 18, yy + 1, 3, 3); ctx.fill();
+    this._labels.push({ x: x, y: yy + 30, text: 'OUT', size: 11,
+                        colour: 'rgba(255,255,255,0.85)' });
   };
 
   RoomScene.prototype.drawGate = function (ctx, x, y, t) {
@@ -1175,15 +1608,45 @@
   };
 
   /* =================================================================== SHOPS */
+  /* ONE SHOP, TWO SHELVES. There used to be two counters on opposite sides of
+     the room and two scenes behind them, which meant walking the length of the
+     hub to find out whether the thing you wanted was trial stock or home
+     stock - a distinction the player cannot make until they have already
+     looked. It is one counter and one scene now, and the two shelves are a
+     pair of buttons at the top. The lists themselves are untouched. */
+  var SHELVES = [
+    { id: 'trial',   label: 'Trial',  tint: '#2d1a26', accent: '#d84a4a',
+      blurb: 'the arena' },
+    { id: 'reality', label: 'Home',   tint: '#1e2a3d', accent: '#4a7fd8',
+      blurb: 'the tower' }
+  ];
+
+  function shelfOf(id) {
+    for (var i = 0; i < SHELVES.length; i++) if (SHELVES[i].id === id) return SHELVES[i];
+    return SHELVES[0];
+  }
+
   function ShopScene(game, which) {
     this.game = game;
-    this.which = which;
-    this.items = which === 'reality' ? D.REALITY_SHOP : D.TRIAL_SHOP;
+    this.which = which || 'trial';
     this.scroll = 0;
     this.t = 0;
     this.flash = null; this.flashTime = 0;
     Audio.music('hub');
   }
+
+  /* Read from `which` rather than cached at construction, so switching shelf
+     is a one-line state change instead of a rebuild. */
+  ShopScene.prototype.list = function () {
+    return this.which === 'reality' ? D.REALITY_SHOP : D.TRIAL_SHOP;
+  };
+
+  ShopScene.prototype.setShelf = function (id) {
+    if (this.which === id) return;
+    this.which = id;
+    this.scroll = 0;            /* the other shelf is a different length */
+    this.flash = null; this.flashTime = 0;
+  };
 
   ShopScene.prototype.update = function (dt) {
     this.t += dt;
@@ -1201,17 +1664,33 @@
   ShopScene.prototype.render = function (ctx, cw, ch) {
     var s = UI.setScale(cw, ch);
     var sv = this.game.save;
-    ctx.fillStyle = this.which === 'reality' ? '#1e2a3d' : '#2d1a26';
+    var shelf = shelfOf(this.which);
+    var items = this.list();
+    ctx.fillStyle = shelf.tint;
     ctx.fillRect(0, 0, cw, ch);
 
-    var title = this.which === 'reality' ? 'Reality Shop' : 'Trial Shop';
-    UI.text(ctx, title, 18 * s, 26 * s, { size: 22, weight: '800' });
+    UI.text(ctx, 'Market', 18 * s, 26 * s, { size: 22, weight: '800' });
     UI.text(ctx, D.CURRENCY.symbol + ' ' + U.fmtNum(sv.currency), cw - 18 * s, 26 * s,
       { size: 20, align: 'right', weight: '800', colour: '#ffe45c' });
 
-    var listTop = 52 * s, listBottom = ch - 62 * s;
+    /* the two shelves. The selected one takes the accent so which list you are
+       looking at survives a glance, which the two separate scenes got for free
+       by being different rooms. */
+    var tabW = Math.min(150 * s, (cw - 42 * s) / 2), tabH = 32 * s, tabY = 40 * s;
+    for (var sh = 0; sh < SHELVES.length; sh++) {
+      var tab = SHELVES[sh], on = tab.id === this.which;
+      if (UI.button(ctx, 'shelf_' + tab.id, 14 * s + sh * (tabW + 10 * s), tabY, tabW, tabH,
+            tab.label, {
+              size: 14, sub: on ? tab.blurb : null,
+              fill: on ? tab.accent : 'rgba(255,255,255,0.08)',
+              colour: on ? '#fff' : 'rgba(255,255,255,0.6)',
+              stroke: on ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.14)'
+            })) this.setShelf(tab.id);
+    }
+
+    var listTop = tabY + tabH + 12 * s, listBottom = ch - 62 * s;
     var rowH = 62 * s;
-    var maxScroll = Math.max(0, this.items.length * rowH - (listBottom - listTop));
+    var maxScroll = Math.max(0, items.length * rowH - (listBottom - listTop));
 
     /* drag to scroll */
     if (Input.stick.active) {
@@ -1227,8 +1706,8 @@
     ctx.rect(0, listTop, cw, listBottom - listTop);
     ctx.clip();
 
-    for (var i = 0; i < this.items.length; i++) {
-      var it = this.items[i];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
       var y = listTop + i * rowH - this.scroll;
       if (y > listBottom || y + rowH < listTop) continue;
 
@@ -1243,7 +1722,19 @@
       });
       UI.text(ctx, it.name, x + 14 * s, y + 22 * s, { size: 15, weight: '700' });
       UI.text(ctx, it.cat, x + 14 * s, y + 40 * s, { size: 10, colour: 'rgba(255,255,255,0.45)' });
-      UI.text(ctx, it.desc + (it.stack && count ? '  (x' + count + ')' : ''), x + 60 * s, y + 40 * s,
+      /* 60 was not wide enough for the longest category - 'Consumable' ran
+         straight under the description on every potion in the list.
+
+         And the description is CLIPPED to the room it actually has rather than
+         drawn until it disappears under the price pill, which is how 'Black and
+         gold robes, crowned in fire' had been reading as '...crowne' since the
+         armour was renamed. UI.wrap already does the measuring; taking its
+         first line and marking the cut is the whole trick. */
+      var descX = x + 88 * s;
+      var descRoom = (x + w - 100 * s) - descX;
+      var descTxt = it.desc + (it.stack && count ? '  (x' + count + ')' : '');
+      var descLines = UI.wrap(ctx, descTxt, descRoom, 11);
+      UI.text(ctx, descLines[0] + (descLines.length > 1 ? '\u2026' : ''), descX, y + 40 * s,
         { size: 11, colour: 'rgba(255,255,255,0.7)' });
 
       var bw = 88 * s;
@@ -1430,6 +1921,7 @@
   S.SquareScene = SquareScene;
   S.CutsceneScene = CutsceneScene;
   S.ShopScene = ShopScene;
+  S.StreetScene = StreetScene;
   S.RankingScene = RankingScene;
   S.GemScene = GemScene;
   S.ResetScene = ResetScene;
